@@ -128,12 +128,35 @@ async function refreshWidgets() {
       vaultEl.innerHTML = "";
       (v.notes || []).slice(0, 10).forEach((n) => {
         const el = document.createElement("div");
-        el.className = "item";
+        el.className = "item click";
         el.innerHTML = `<b>${n.title}</b><div></div>`;
         el.lastChild.textContent = n.path;
+        el.addEventListener("click", () => openNote(n.path));
         vaultEl.appendChild(el);
       });
     }
+    try {
+      const t = await fetch("/api/tasks").then((r) => r.json());
+      const box = $("tasks");
+      if (box) {
+        box.innerHTML = "";
+        (t.tasks || []).slice(0, 8).forEach((task) => {
+          const el = document.createElement("div");
+          el.className = "item click";
+          el.innerHTML = `<b>○</b><div></div>`;
+          el.lastChild.textContent = task.text;
+          el.addEventListener("click", async () => {
+            await fetch("/api/tasks/toggle", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ path: task.path, line: task.line }),
+            });
+            refreshWidgets();
+          });
+          box.appendChild(el);
+        });
+      }
+    } catch {}
   } catch {}
 }
 
@@ -376,6 +399,38 @@ $("save-keys").addEventListener("click", async () => {
   });
   $("modal").classList.remove("show");
   refreshStatus();
+});
+
+async function openNote(path) {
+  const res = await fetch(`/api/vault/note?path=${encodeURIComponent(path)}`);
+  const data = await res.json();
+  $("note-title").textContent = path;
+  $("note-body").textContent = data.text || data.error || "";
+  $("note-modal").classList.add("show");
+}
+
+$("close-note").addEventListener("click", () => $("note-modal").classList.remove("show"));
+$("btn-brief").addEventListener("click", async () => {
+  setStatus("compiling briefing");
+  const res = await fetch("/api/briefing", { method: "POST" });
+  const data = await res.json();
+  addMsg("assistant", data.text || "briefing done", "BRIEFING");
+  refreshWidgets();
+  setStatus("briefing written to daily note");
+});
+document.querySelectorAll("#chips button").forEach((btn) => {
+  btn.addEventListener("click", () => sendText(btn.dataset.q));
+});
+$("upload").addEventListener("change", async (e) => {
+  const file = e.target.files && e.target.files[0];
+  if (!file) return;
+  const fd = new FormData();
+  fd.append("file", file);
+  fd.append("dest", "inbox");
+  const res = await fetch("/api/workspace/upload", { method: "POST", body: fd });
+  const data = await res.json();
+  addMsg("assistant", `Stored ${data.path} (${data.bytes} bytes). Ask me to analyze it.`, "WORKSPACE");
+  e.target.value = "";
 });
 
 refreshStatus().catch(() => setStatus("backend offline"));

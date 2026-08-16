@@ -84,6 +84,18 @@ def init_vault() -> dict:
         "People/Rhett Kenagy.md",
         "---\ntype: person\nrole: owner\n---\n\n# Rhett Kenagy\n\nOwner of [[00 Home]]. GitHub: `rkenagy-ops`.\n",
     )
+    _write_if_missing(
+        "Skills/briefing.md",
+        "---\ntype: skill\n---\n\n# Briefing\n\n1. Pull watchlist quotes.\n2. Pull weather + headlines.\n3. List open vault tasks (`- [ ]`).\n4. Write into today's [[Daily]] note under Morning briefing.\n5. Do not trade.\n",
+    )
+    _write_if_missing(
+        "Skills/markets.md",
+        "---\ntype: skill\n---\n\n# Markets\n\nUse `market analyze` before any paper trade. State thesis, invalidation, and size. Confirm tokens for live/large.\n",
+    )
+    _write_if_missing(
+        "Inbox/Getting started.md",
+        "---\ntype: inbox\n---\n\n# Getting started\n\n- [ ] Open this vault in Obsidian\n- [ ] Add XAI_API_KEY in the HUD\n- [ ] Add a GitHub token\n- [ ] Ask Jarvis for a morning briefing\n",
+    )
     return {"vault": str(root), "folders": list(FOLDERS)}
 
 
@@ -195,6 +207,101 @@ def capture_memory(kind: str, content: str, tags: list[str] | None = None) -> di
     return write_note(rel, body)
 
 
+TASK_RE = re.compile(r"^(\s*)- \[([ xX])\] (.*)$")
+
+
+def list_tasks(*, open_only: bool = True, limit: int = 40) -> list[dict]:
+    init_vault()
+    tasks = []
+    root = vault()
+    for folder in ("Daily", "Inbox", "Projects", "Calendar", "People"):
+        base = root / folder
+        if not base.exists():
+            continue
+        for path in sorted(base.rglob("*.md")):
+            lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+            for i, line in enumerate(lines, start=1):
+                m = TASK_RE.match(line)
+                if not m:
+                    continue
+                done = m.group(2).lower() == "x"
+                if open_only and done:
+                    continue
+                tasks.append(
+                    {
+                        "path": path.relative_to(root).as_posix(),
+                        "line": i,
+                        "text": m.group(3).strip(),
+                        "done": done,
+                    }
+                )
+                if len(tasks) >= limit:
+                    return tasks
+    return tasks
+
+
+def toggle_task(rel: str, line: int, done: bool | None = None) -> dict:
+    path = resolve(rel)
+    if not path.is_file():
+        return {"error": "note not found"}
+    lines = path.read_text(encoding="utf-8").splitlines()
+    idx = int(line) - 1
+    if idx < 0 or idx >= len(lines):
+        return {"error": "line out of range"}
+    m = TASK_RE.match(lines[idx])
+    if not m:
+        return {"error": "that line is not a task"}
+    mark = "x" if (True if done is None else done) else " "
+    if done is None:
+        mark = " " if m.group(2).lower() == "x" else "x"
+    lines[idx] = f"{m.group(1)}- [{mark}] {m.group(3)}"
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return {"ok": True, "path": rel, "line": line, "done": mark == "x", "text": m.group(3)}
+
+
+def playbooks() -> list[dict]:
+    init_vault()
+    out = []
+    folder = vault() / "Skills"
+    if not folder.exists():
+        return out
+    for path in sorted(folder.glob("*.md")):
+        text = path.read_text(encoding="utf-8", errors="replace")
+        title = path.stem
+        for line in text.splitlines():
+            if line.startswith("# "):
+                title = line[2:].strip()
+                break
+        out.append({"name": path.stem, "title": title, "playbook": text[:1500], "path": f"Skills/{path.name}"})
+    return out
+
+
+def context_pack(query: str = "", *, max_chars: int = 4500) -> str:
+    init_vault()
+    parts = ["# OBSIDIAN VAULT"]
+    day = daily()
+    parts.append("## Today's note")
+    parts.append((day.get("text") or "")[:1200])
+    open_tasks = list_tasks(open_only=True, limit=12)
+    if open_tasks:
+        parts.append("## Open tasks")
+        for t in open_tasks:
+            parts.append(f"- ({t['path']}:{t['line']}) {t['text']}")
+    books = playbooks()
+    if books:
+        parts.append("## Vault playbooks")
+        for b in books[:8]:
+            parts.append(f"- {b['name']}: {b['title']}")
+    if query:
+        hits = search(query, limit=6).get("results") or []
+        if hits:
+            parts.append("## Vault hits for this request")
+            for h in hits:
+                parts.append(f"- {h['path']}: {h.get('snippet') or ''}")
+    text = "\n".join(parts)
+    return text[:max_chars]
+
+
 def dispatch(action: str, **kwargs) -> Any:
     init_vault()
     if action in {"list", "ls"}:
@@ -213,4 +320,13 @@ def dispatch(action: str, **kwargs) -> Any:
         return backlinks(kwargs.get("path") or kwargs.get("name") or "")
     if action == "capture":
         return capture_memory(kwargs.get("kind") or "note", kwargs.get("content") or "", kwargs.get("tags"))
+    if action == "tasks":
+        return {"tasks": list_tasks(open_only=str(kwargs.get("open_only", True)).lower() != "false")}
+    if action == "toggle_task":
+        done = kwargs.get("done")
+        if isinstance(done, str):
+            done = done.lower() in {"1", "true", "yes", "x"}
+        return toggle_task(kwargs.get("path") or "", int(kwargs.get("line") or 0), done)
+    if action == "playbooks":
+        return {"playbooks": playbooks()}
     return {"error": f"Unknown obsidian action {action}"}

@@ -160,6 +160,20 @@ def init() -> None:
                     now,
                 ),
             )
+        if not conn.execute("SELECT 1 FROM jobs WHERE name=?", ("morning-briefing",)).fetchone():
+            conn.execute(
+                "INSERT INTO jobs(id, name, prompt, every_sec, enabled, last_run, last_result, created_at) VALUES(?,?,?,?,?,?,?,?)",
+                (
+                    str(uuid.uuid4()),
+                    "morning-briefing",
+                    "Compile weather, watchlist, news, and open vault tasks into today's daily note.",
+                    21600,
+                    1,
+                    None,
+                    None,
+                    time.time(),
+                ),
+            )
 
 
 def remember(
@@ -539,6 +553,9 @@ def learn_from_turn(user_text: str, assistant_text: str, calls: list[dict] | Non
         "market_analyze": "markets",
         "paper_trade": "markets",
         "workspace": "data",
+        "obsidian": "memory",
+        "imagine": "data",
+        "integrate": "research",
         "analyze_file": "data",
         "workspace_read": "data",
         "fetch_url": "research",

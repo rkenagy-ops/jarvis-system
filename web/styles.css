@@ -116,6 +116,19 @@ body {
 .ticker.up { color: var(--ok); border-color: rgba(52,211,153,0.35); }
 .ticker.down { color: var(--danger); border-color: rgba(244,63,94,0.35); }
 .equity { margin-top: 8px; font-family: var(--mono); font-size: 11px; color: var(--gold); letter-spacing: 0.12em; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chips button {
+  background: transparent; color: var(--muted); border: 1px solid var(--line);
+  font-family: var(--mono); font-size: 10px; padding: 3px 8px; cursor: pointer;
+}
+.chips button:hover { color: var(--gold); border-color: var(--gold); }
+.note-body {
+  max-height: 50vh; overflow: auto; white-space: pre-wrap; font-family: var(--mono);
+  font-size: 12px; color: var(--ink); background: #080c13; padding: 10px; border: 1px solid var(--line);
+}
+.card.wide { width: min(720px, 94vw); }
+.feed .item.click { cursor: pointer; }
+.feed .item.click:hover { color: var(--gold); }
 
 .feed { font-family: var(--mono); font-size: 11px; color: var(--muted); line-height: 1.45; }
 .feed .item { padding: 7px 0; border-bottom: 1px solid rgba(255,255,255,0.04); }

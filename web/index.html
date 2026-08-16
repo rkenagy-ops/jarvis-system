@@ -20,6 +20,7 @@
         <div class="pill"><span id="xai-dot" class="dot off"></span><span id="xai-label">XAI</span></div>
         <div class="pill"><span id="gh-dot" class="dot off"></span><span id="gh-label">GITHUB</span></div>
         <div class="pill"><span id="net-dot" class="dot on"></span>ONLINE</div>
+        <button class="btn" id="btn-brief">BRIEFING</button>
         <button class="btn" id="btn-settings">KEYS</button>
         <button class="btn live" id="btn-live">LIVE VOICE</button>
       </div>
@@ -49,6 +50,8 @@
         <div class="feed" id="auto"></div>
         <h2>SKILLS</h2>
         <div class="feed" id="skills"></div>
+        <h2>TASKS</h2>
+        <div class="feed" id="tasks"></div>
         <h2>OBSIDIAN</h2>
         <div class="feed" id="vault"></div>
       </aside>
@@ -57,9 +60,17 @@
     <footer class="dock">
       <div class="transcript" id="transcript"></div>
       <form class="composer" id="form">
-        <textarea id="input" placeholder="Ask anything: markets, files, GitHub, news, weather, goals. Paper-trade with confirm."></textarea>
+        <div class="chips" id="chips">
+          <button type="button" data-q="Give me a morning briefing and write it to today's daily note.">Brief me</button>
+          <button type="button" data-q="Analyze the watchlist. Flag anything moving more than 1.5%.">Scan markets</button>
+          <button type="button" data-q="List open vault tasks and suggest what to do first.">Tasks</button>
+          <button type="button" data-q="Search the Obsidian vault for what we should remember about this project.">Search vault</button>
+        </div>
+        <textarea id="input" placeholder="Ask anything: markets, vault, GitHub, news, weather, goals. Paper-trade with confirm."></textarea>
         <div class="row">
           <button class="mic" id="mic" type="button" title="Hold to talk">MIC</button>
+          <label class="btn" for="upload">FILE</label>
+          <input id="upload" type="file" hidden />
           <button class="btn" type="submit">SEND</button>
         </div>
       </form>
@@ -90,6 +101,14 @@
         <button class="btn" id="save-keys">SAVE</button>
         <button class="btn" id="close-modal">CLOSE</button>
       </div>
+    </div>
+  </div>
+
+  <div class="modal" id="note-modal">
+    <div class="card wide">
+      <h3 id="note-title">NOTE</h3>
+      <pre id="note-body" class="note-body"></pre>
+      <button class="btn" id="close-note">CLOSE</button>
     </div>
   </div>
 

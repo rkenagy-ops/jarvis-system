@@ -171,6 +171,12 @@ def think(
         memory.add_message(session_id, "user", user_text)
 
     mind = memory.snapshot(session_id)
+    try:
+        from . import obsidian
+
+        mind = mind + "\n\n" + obsidian.context_pack(user_text)
+    except Exception:
+        pass
     if agent_id == "jarvis":
         system = conductor_system(mind)
     else:

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import uuid
+from pathlib import Path
+
 from fastapi import FastAPI, File, Form, UploadFile, WebSocket
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -57,6 +59,18 @@ class GoalIn(BaseModel):
     title: str
     detail: str = ""
     priority: float = 0.5
+
+
+class NoteIn(BaseModel):
+    path: str
+    content: str
+    mode: str = "replace"
+
+
+class TaskToggleIn(BaseModel):
+    path: str
+    line: int
+    done: bool | None = None
 
 
 class RememberIn(BaseModel):
@@ -226,6 +240,22 @@ def goals_add(body: GoalIn) -> dict:
     return memory.add_goal(body.title, body.detail, body.priority)
 
 
+@app.post("/api/briefing")
+def run_briefing() -> dict:
+    text = autonomy.briefing()
+    return {"ok": True, "text": text}
+
+
+@app.get("/api/tasks")
+def tasks_list() -> dict:
+    return {"tasks": obsidian.list_tasks(open_only=True)}
+
+
+@app.post("/api/tasks/toggle")
+def tasks_toggle(body: TaskToggleIn) -> dict:
+    return obsidian.toggle_task(body.path, body.line, body.done)
+
+
 @app.get("/api/vault")
 def vault_list(folder: str = "") -> dict:
     return obsidian.list_notes(folder)
@@ -234,6 +264,16 @@ def vault_list(folder: str = "") -> dict:
 @app.get("/api/vault/search")
 def vault_search(q: str) -> dict:
     return obsidian.search(q)
+
+
+@app.get("/api/vault/note")
+def vault_note(path: str) -> dict:
+    return obsidian.read_note(path)
+
+
+@app.post("/api/vault/note")
+def vault_write(body: NoteIn) -> dict:
+    return obsidian.write_note(body.path, body.content, mode=body.mode)
 
 
 @app.get("/api/vault/daily")
@@ -249,6 +289,17 @@ def opensource_status() -> dict:
 @app.get("/api/workspace")
 def workspace_list(path: str = ".") -> dict:
     return workspace.list_files(path)
+
+
+@app.post("/api/workspace/upload")
+async def workspace_upload(file: UploadFile = File(...), dest: str = Form("inbox")) -> dict:
+    name = Path(file.filename or "upload.bin").name
+    rel = f"{dest.rstrip('/')}/{name}"
+    data = await file.read()
+    path = workspace.resolve(rel)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(data)
+    return {"ok": True, "path": rel, "bytes": len(data)}
 
 
 @app.get("/api/widgets/weather")

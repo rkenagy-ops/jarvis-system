@@ -28,6 +28,19 @@ def test_crawl_rejects_file():
     assert "error" in opensource.crawl("file:///etc/passwd")
 
 
+def test_tasks_and_context(tmp_path, monkeypatch):
+    monkeypatch.setattr(obsidian.config, "VAULT_DIR", tmp_path / "vault")
+    obsidian.init_vault()
+    tasks = obsidian.list_tasks(open_only=True)
+    assert any("Obsidian" in t["text"] for t in tasks)
+    first = next(t for t in tasks if "XAI" in t["text"] or "Obsidian" in t["text"])
+    flipped = obsidian.toggle_task(first["path"], first["line"])
+    assert flipped["ok"]
+    pack = obsidian.context_pack("briefing")
+    assert "OBSIDIAN VAULT" in pack
+    assert "playbook" in pack.lower() or "Briefing" in pack or "briefing" in pack.lower()
+
+
 def test_calendar(tmp_path, monkeypatch):
     monkeypatch.setattr(obsidian.config, "VAULT_DIR", tmp_path / "vault")
     opensource.calendar_add("Review trades", "2026-08-20T09:00", "paper only")

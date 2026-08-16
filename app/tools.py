@@ -77,9 +77,12 @@ FUNCTION_TOOLS = [
     ),
     _fn(
         "obsidian",
-        "Obsidian vault (local markdown PKM). Actions: list, read, write, append, search, daily, backlinks, capture.",
+        "Obsidian vault (local markdown PKM). Actions: list, read, write, append, search, daily, backlinks, capture, tasks, toggle_task, playbooks.",
         {
-            "action": {"type": "string", "enum": ["list", "read", "write", "append", "search", "daily", "backlinks", "capture"]},
+            "action": {"type": "string", "enum": ["list", "read", "write", "append", "search", "daily", "backlinks", "capture", "tasks", "toggle_task", "playbooks"]},
+            "line": {"type": "integer"},
+            "done": {"type": "boolean"},
+            "open_only": {"type": "boolean"},
             "path": {"type": "string"},
             "content": {"type": "string"},
             "query": {"type": "string"},
@@ -146,6 +149,12 @@ FUNCTION_TOOLS = [
             "task": {"type": "string"},
         },
         ["agents", "task"],
+    ),
+    _fn(
+        "imagine",
+        "Generate an image with Grok Imagine and save it under workspace/images plus a vault Sources note.",
+        {"prompt": {"type": "string"}, "filename": {"type": "string"}},
+        ["prompt"],
     ),
 ]
 
@@ -235,6 +244,10 @@ def execute(name: str, arguments: dict[str, Any], *, session_id: str, agent_id: 
         return obsidian.dispatch(arguments.get("action") or "list", **{k: v for k, v in arguments.items() if k != "action"})
     if name == "integrate":
         return opensource.dispatch(arguments.get("action") or "status", **{k: v for k, v in arguments.items() if k != "action"})
+    if name == "imagine":
+        from . import xai as xai_mod
+
+        return xai_mod.imagine(arguments.get("prompt") or "", filename=arguments.get("filename"))
     if name == "market":
         return markets.dispatch(arguments.get("action") or "quote", **{k: v for k, v in arguments.items() if k != "action"})
     if name == "github":

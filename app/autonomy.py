@@ -4,7 +4,7 @@ import threading
 import time
 from typing import Any
 
-from . import config, markets, memory
+from . import config, markets, memory, obsidian, widgets
 
 _stop = threading.Event()
 _thread: threading.Thread | None = None
@@ -23,13 +23,65 @@ def run_job(job: dict[str, Any]) -> str:
                 movers.append(f"{q['symbol']} {pct:+.2f}% @ {q.get('price')}")
         summary = "Market pulse: " + (", ".join(movers) if movers else "no >1.5% movers on watchlist")
         memory.remember(summary, kind="pulse", tags=["market", "autonomy"], importance=0.55, source_agent="trader")
+        try:
+            obsidian.daily(append=f"## Market pulse\n{summary}")
+        except Exception:
+            pass
         memory.mark_job(job["id"], summary)
+        return summary
+    if name in {"morning-briefing", "briefing"} or "briefing" in (job.get("prompt") or "").lower():
+        summary = briefing()
+        memory.mark_job(job["id"], summary[:400])
         return summary
     # Generic jobs without a model key just log the prompt as a reminder.
     note = f"Autonomy job '{name}' is due: {job.get('prompt')}"
     memory.remember(note, kind="job", tags=["autonomy"], importance=0.4, source_agent="jarvis")
     memory.mark_job(job["id"], note[:400])
     return note
+
+
+def briefing() -> str:
+    quotes = []
+    try:
+        quotes = markets.watchlist()
+    except Exception:
+        pass
+    movers = []
+    for q in quotes:
+        if q.get("price") is None:
+            continue
+        pct = q.get("change_pct")
+        bit = f"{q['symbol']} {q['price']}"
+        if pct is not None:
+            bit += f" ({pct:+.2f}%)"
+        movers.append(bit)
+    wx = {}
+    try:
+        wx = widgets.weather()
+    except Exception:
+        pass
+    news = {}
+    try:
+        news = widgets.news()
+    except Exception:
+        pass
+    tasks = obsidian.list_tasks(open_only=True, limit=8)
+    headlines = [i.get("title") for i in (news.get("items") or [])[:4] if i.get("title")]
+    temp = ((wx.get("current") or {}).get("temperature_2m"))
+    lines = [
+        "## Morning briefing",
+        f"- Weather: {temp} C" if temp is not None else "- Weather: n/a",
+        "- Markets: " + (", ".join(movers[:8]) if movers else "n/a"),
+        "- News: " + ("; ".join(headlines) if headlines else "n/a"),
+        "- Open tasks: " + ("; ".join(t["text"] for t in tasks) if tasks else "none"),
+    ]
+    text = "\n".join(lines)
+    try:
+        obsidian.daily(append=text)
+    except Exception:
+        pass
+    memory.remember(text, kind="briefing", tags=["autonomy", "briefing"], importance=0.7, source_agent="jarvis")
+    return text
 
 
 def beat() -> list[str]:

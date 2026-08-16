@@ -88,6 +88,44 @@ def ephemeral_token(seconds: int = 300) -> dict[str, Any]:
     return resp.json()
 
 
+def imagine(prompt: str, filename: str | None = None) -> dict[str, Any]:
+    payload = {"model": "grok-imagine-image-2.0", "prompt": prompt, "n": 1}
+    with httpx.Client(timeout=90.0) as client:
+        resp = client.post(f"{config.XAI_BASE}/images/generations", headers=_headers(), json=payload)
+    if resp.status_code >= 400:
+        raise XAIError(f"imagine {resp.status_code}: {resp.text[:800]}")
+    data = resp.json()
+    item = (data.get("data") or [{}])[0]
+    url = item.get("url")
+    b64 = item.get("b64_json")
+    out_dir = config.WORKSPACE_DIR / "images"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    name = filename or f"imagine-{abs(hash(prompt)) % 10**8}.png"
+    if not name.lower().endswith((".png", ".jpg", ".jpeg", ".webp")):
+        name += ".png"
+    dest = out_dir / name
+    if url:
+        img = httpx.get(url, timeout=60.0)
+        img.raise_for_status()
+        dest.write_bytes(img.content)
+    elif b64:
+        import base64
+
+        dest.write_bytes(base64.b64decode(b64))
+    else:
+        return {"error": "No image payload", "raw": data}
+    try:
+        from . import obsidian
+
+        obsidian.write_note(
+            f"Sources/{dest.stem}.md",
+            f"---\ntype: image\n---\n\n# {prompt[:80]}\n\n![[{dest.as_posix()}]]\n\nPrompt: {prompt}\n",
+        )
+    except Exception:
+        pass
+    return {"ok": True, "path": str(dest), "prompt": prompt, "url": url}
+
+
 def extract_text(response: dict[str, Any]) -> str:
     if response.get("output_text"):
         return str(response["output_text"])
