@@ -7,7 +7,8 @@ if (-not (Test-Path ".\.venv\Scripts\python.exe")) {
 }
 
 & .\.venv\Scripts\python.exe -m pip install --upgrade pip
-& .\.venv\Scripts\python.exe -m pip install -r requirements.txt
+$req = if (Test-Path ".\requirements-core.txt") { ".\requirements-core.txt" } else { ".\requirements.txt" }
+& .\.venv\Scripts\python.exe -m pip install -r $req
 
 if (-not (Test-Path ".\.env")) {
   Copy-Item ".\.env.example" ".\.env"
