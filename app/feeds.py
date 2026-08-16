@@ -87,23 +87,34 @@ def snapshot(*, force: bool = False) -> dict[str, Any]:
     cached = _cache.get("data")
     if cached and not force and now - float(_cache.get("at") or 0) < TTL_SEC:
         return cached
-    news: list[dict] = []
-    with ThreadPoolExecutor(max_workers=5) as pool:
-        futs = [pool.submit(_pull_news, name, url) for name, url in NEWS_FEEDS.items()]
+    buckets: dict[str, list[dict]] = {name: [] for name in NEWS_FEEDS}
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        futs = {pool.submit(_pull_news, name, url): name for name, url in NEWS_FEEDS.items()}
         qfut = pool.submit(_quotes)
-        for fut in futs:
-            news.extend(fut.result() or [])
+        for fut, name in futs.items():
+            buckets[name] = fut.result() or []
         quotes = qfut.result()
     seen: set[str] = set()
-    unique = []
-    for item in news:
-        key = (item.get("title") or "").lower()
-        if not key or key in seen:
-            continue
-        seen.add(key)
-        unique.append(item)
-        if len(unique) >= 24:
+    unique: list[dict] = []
+    idx = 0
+    while len(unique) < 24:
+        progressed = False
+        for name in NEWS_FEEDS:
+            rows = buckets.get(name) or []
+            if idx >= len(rows):
+                continue
+            item = rows[idx]
+            key = (item.get("title") or "").lower()
+            progressed = True
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            unique.append(item)
+            if len(unique) >= 24:
+                break
+        if not progressed:
             break
+        idx += 1
     data = {
         "updated": datetime.now(timezone.utc).isoformat(),
         "ttl_sec": TTL_SEC,
