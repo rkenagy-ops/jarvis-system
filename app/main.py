@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response, StreamingRes
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import __version__, autonomy, config, github_client, markets, memory, obsidian, opensource, widgets, workspace, xai
+from . import __version__, autonomy, catalog, config, github_client, markets, memory, obsidian, opensource, widgets, workspace, xai
 from .agents import list_public
 from .brain import think, think_events
 from .voice_live import handle_live
@@ -283,7 +283,19 @@ def vault_daily() -> dict:
 
 @app.get("/api/opensource")
 def opensource_status() -> dict:
-    return opensource.status()
+    data = opensource.status()
+    data["catalog"] = catalog.list_sources()
+    return data
+
+
+@app.get("/api/catalog")
+def catalog_list() -> dict:
+    return {"sources": catalog.list_sources()}
+
+
+@app.get("/api/catalog/{source}")
+def catalog_call(source: str, q: str = "") -> dict:
+    return catalog.call(source, q)
 
 
 @app.get("/api/workspace")

@@ -7,7 +7,7 @@ from urllib.parse import urlparse
 
 import httpx
 
-from . import config, github_client, markets, memory, obsidian, opensource, widgets, workspace
+from . import catalog, config, github_client, markets, memory, obsidian, opensource, widgets, workspace
 from .agents import AGENTS
 
 BUILTIN_TOOLS = [
@@ -156,6 +156,15 @@ FUNCTION_TOOLS = [
         {"prompt": {"type": "string"}, "filename": {"type": "string"}},
         ["prompt"],
     ),
+    _fn(
+        "catalog",
+        "Call a free/open public API. Sources: " + ", ".join(catalog.SOURCES),
+        {
+            "source": {"type": "string", "enum": list(catalog.SOURCES)},
+            "query": {"type": "string", "description": "Search term, URL, symbol, CVE, domain, or country code"},
+        },
+        ["source"],
+    ),
 ]
 
 _MARKET_AGENTS = {"jarvis", "trader", "oracle", "analyst"}
@@ -248,6 +257,8 @@ def execute(name: str, arguments: dict[str, Any], *, session_id: str, agent_id: 
         from . import xai as xai_mod
 
         return xai_mod.imagine(arguments.get("prompt") or "", filename=arguments.get("filename"))
+    if name == "catalog":
+        return catalog.call(arguments.get("source") or "", arguments.get("query") or "")
     if name == "market":
         return markets.dispatch(arguments.get("action") or "quote", **{k: v for k, v in arguments.items() if k != "action"})
     if name == "github":

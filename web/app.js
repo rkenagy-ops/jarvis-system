@@ -136,6 +136,20 @@ async function refreshWidgets() {
       });
     }
     try {
+      const cat = await fetch("/api/catalog").then((r) => r.json());
+      const cbox = $("catalog");
+      if (cbox) {
+        cbox.innerHTML = "";
+        (cat.sources || []).slice(0, 16).forEach((s) => {
+          const el = document.createElement("div");
+          el.className = "item";
+          el.innerHTML = `<b>${s.id}</b><div></div>`;
+          el.lastChild.textContent = s.desc;
+          cbox.appendChild(el);
+        });
+      }
+    } catch {}
+    try {
       const t = await fetch("/api/tasks").then((r) => r.json());
       const box = $("tasks");
       if (box) {
