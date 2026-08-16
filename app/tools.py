@@ -167,6 +167,12 @@ FUNCTION_TOOLS = [
         ["source"],
     ),
     _fn(
+        "vault_rag",
+        "Semantic/FTS retrieval over the Obsidian vault chunks. Use before answering questions about prior notes, people, or projects.",
+        {"query": {"type": "string"}, "limit": {"type": "integer"}},
+        ["query"],
+    ),
+    _fn(
         "oss",
         "Pull open-source from GitHub: search, readme, ingest into vault, starter_pack, awesome lists, public_apis index, huggingface, youtube transcript.",
         {
@@ -279,6 +285,10 @@ def execute(name: str, arguments: dict[str, Any], *, session_id: str, agent_id: 
         return catalog.call(arguments.get("source") or "", arguments.get("query") or "")
     if name == "oss":
         return github_oss.dispatch(arguments.get("action") or "search", **{k: v for k, v in arguments.items() if k != "action"})
+    if name == "vault_rag":
+        from . import rag as rag_mod
+
+        return {"hits": rag_mod.retrieve(arguments.get("query") or "", int(arguments.get("limit") or 6))}
     if name == "market":
         return markets.dispatch(arguments.get("action") or "quote", **{k: v for k, v in arguments.items() if k != "action"})
     if name == "github":

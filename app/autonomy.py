@@ -33,14 +33,27 @@ def run_job(job: dict[str, Any]) -> str:
         summary = briefing()
         memory.mark_job(job["id"], summary[:400])
         return summary
-    # Generic jobs without a model key just log the prompt as a reminder.
+    from . import xai
+
+    if xai.probe().get("ok") and job.get("prompt"):
+        from .brain import think
+
+        result = think(job["prompt"], session_id=f"job-{job['id']}", persist_user=False)
+        summary = (result.get("text") or "")[:1500]
+        memory.remember(summary, kind="job", tags=["autonomy", name], importance=0.5, source_agent="jarvis")
+        try:
+            obsidian.daily(append=f"## Job {name}\n{summary}")
+        except Exception:
+            pass
+        memory.mark_job(job["id"], summary[:400])
+        return summary
     note = f"Autonomy job '{name}' is due: {job.get('prompt')}"
     memory.remember(note, kind="job", tags=["autonomy"], importance=0.4, source_agent="jarvis")
     memory.mark_job(job["id"], note[:400])
     return note
 
 
-def briefing() -> str:
+def briefing(*, use_grok: bool = True) -> str:
     quotes = []
     try:
         quotes = markets.watchlist()
@@ -75,7 +88,30 @@ def briefing() -> str:
         "- News: " + ("; ".join(headlines) if headlines else "n/a"),
         "- Open tasks: " + ("; ".join(t["text"] for t in tasks) if tasks else "none"),
     ]
-    text = "\n".join(lines)
+    raw = "\n".join(lines)
+    text = raw
+    if use_grok:
+        try:
+            from . import xai
+
+            if xai.probe().get("ok"):
+                resp = xai.responses_create(
+                    {
+                        "model": config.MODEL,
+                        "input": [
+                            {
+                                "role": "system",
+                                "content": "You are J.A.R.V.I.S. Write a tight morning brief for Rhett. Use the facts. Flag risk. No fluff. Markdown. 8-14 lines.",
+                            },
+                            {"role": "user", "content": raw},
+                        ],
+                    }
+                )
+                grok = xai.extract_text(resp)
+                if grok:
+                    text = "## Morning briefing\n" + grok
+        except Exception:
+            text = raw
     try:
         obsidian.daily(append=text)
     except Exception:

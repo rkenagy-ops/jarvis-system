@@ -145,7 +145,14 @@ def write_note(rel: str, content: str, *, mode: str = "replace") -> dict:
         path.write_text(existing.rstrip() + "\n\n" + content.strip() + "\n", encoding="utf-8")
     else:
         path.write_text(content if content.endswith("\n") else content + "\n", encoding="utf-8")
-    return {"ok": True, "path": path.relative_to(vault()).as_posix(), "bytes": path.stat().st_size}
+    rel_out = path.relative_to(vault()).as_posix()
+    try:
+        from . import rag
+
+        rag.index_note(rel_out, path.read_text(encoding="utf-8", errors="replace"))
+    except Exception:
+        pass
+    return {"ok": True, "path": rel_out, "bytes": path.stat().st_size}
 
 
 def daily(day: str | None = None, append: str | None = None) -> dict:

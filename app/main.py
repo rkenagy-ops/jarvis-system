@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response, StreamingRes
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import __version__, autonomy, catalog, config, github_client, github_oss, markets, memory, obsidian, opensource, widgets, workspace, xai
+from . import __version__, autonomy, catalog, config, github_client, github_oss, markets, memory, obsidian, opensource, rag, widgets, workspace, xai
 from .agents import list_public
 from .brain import think, think_events
 from .voice_live import handle_live
@@ -17,6 +17,11 @@ from .voice_live import handle_live
 memory.init()
 markets.init()
 obsidian.init_vault()
+rag.init()
+try:
+    rag.reindex_vault()
+except Exception:
+    pass
 autonomy.start()
 
 app = FastAPI(title="Super Jarvis", version=__version__)
@@ -283,6 +288,16 @@ def vault_list(folder: str = "") -> dict:
 @app.get("/api/vault/search")
 def vault_search(q: str) -> dict:
     return obsidian.search(q)
+
+
+@app.get("/api/rag")
+def rag_search(q: str) -> dict:
+    return {"query": q, "hits": rag.retrieve(q)}
+
+
+@app.post("/api/rag/reindex")
+def rag_reindex() -> dict:
+    return rag.reindex_vault()
 
 
 @app.get("/api/vault/note")

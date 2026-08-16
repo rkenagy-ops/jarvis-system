@@ -190,6 +190,14 @@ def think(
         mind = mind + "\n\n" + obsidian.context_pack(user_text)
     except Exception:
         pass
+    try:
+        from . import rag
+
+        pack = rag.pack(user_text)
+        if pack:
+            mind = mind + "\n\n" + pack
+    except Exception:
+        pass
 
     try:
         return _think_grok(
