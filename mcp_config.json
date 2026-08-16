@@ -1,0 +1,23 @@
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "./workspace"]
+    },
+    "browser-use": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-browser-use"]
+    },
+    "n8n": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-n8n"],
+      "env": {
+        "N8N_BASE_URL": "http://localhost:5678"
+      }
+    },
+    "crawl4ai": {
+      "command": "python",
+      "args": ["-m", "crawl4ai.mcp_server"]
+    }
+  }
+}
