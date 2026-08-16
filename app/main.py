@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 import uuid
 from pathlib import Path
 
@@ -9,7 +10,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response, StreamingRes
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import __version__, autonomy, catalog, config, github_client, github_oss, guard, markets, memory, obsidian, opensource, ops, rag, widgets, workspace, xai
+from . import __version__, autonomy, catalog, config, feeds, github_client, github_oss, guard, markets, memory, obsidian, opensource, ops, rag, widgets, workspace, xai
 from .agents import list_public
 from .brain import think, think_events
 from .voice_live import handle_live
@@ -321,7 +322,24 @@ async def live(ws: WebSocket, session_id: str = "live", voice: str | None = None
 
 @app.get("/api/markets")
 def markets_dash() -> dict:
-    return {"watchlist": markets.watchlist(), "account": markets.account()}
+    snap = feeds.snapshot()
+    return {"watchlist": snap.get("quotes") or markets.watchlist(), "account": markets.account(), "updated": snap.get("updated")}
+
+
+@app.get("/api/feeds")
+def api_feeds() -> dict:
+    return feeds.snapshot()
+
+
+@app.get("/api/feeds/stream")
+def api_feeds_stream() -> StreamingResponse:
+    def gen():
+        while True:
+            payload = json.dumps(feeds.snapshot(), default=str)
+            yield f"data: {payload}\n\n"
+            time.sleep(20)
+
+    return StreamingResponse(gen(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
 @app.get("/api/markets/quote")

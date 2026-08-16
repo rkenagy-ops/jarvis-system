@@ -76,9 +76,14 @@ def briefing(*, use_grok: bool = True) -> str:
         pass
     news = {}
     try:
-        news = widgets.news()
+        from . import feeds
+
+        news = {"items": [{"title": t} for t in feeds.headlines(6)]}
     except Exception:
-        pass
+        try:
+            news = widgets.news()
+        except Exception:
+            news = {}
     tasks = obsidian.list_tasks(open_only=True, limit=8)
     headlines = [i.get("title") for i in (news.get("items") or [])[:4] if i.get("title")]
     temp = ((wx.get("current") or {}).get("temperature_2m"))

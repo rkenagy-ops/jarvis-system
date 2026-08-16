@@ -108,6 +108,61 @@ async function refreshStatus() {
   refreshWidgets();
 }
 
+function renderQuotes(quotes) {
+  const box = $("tickers");
+  if (!box) return;
+  box.innerHTML = "";
+  (quotes || []).forEach((q) => {
+    if (!q.symbol || q.error) return;
+    const el = document.createElement("div");
+    const pct = q.change_pct;
+    el.className = `ticker ${pct > 0 ? "up" : pct < 0 ? "down" : ""}`;
+    el.innerHTML = `<div>${q.symbol}</div><div class="px">${q.price != null ? Number(q.price).toFixed(2) : "—"} ${pct != null ? `(${Number(pct).toFixed(2)}%)` : ""}</div>`;
+    box.appendChild(el);
+  });
+}
+
+function renderFeeds(data) {
+  if (!data) return;
+  renderQuotes(data.quotes || []);
+  const news = data.news || [];
+  const tape = $("tape-inner");
+  if (tape && news.length) {
+    tape.innerHTML = news.map((n) => {
+      const src = (n.source || "wire").toUpperCase();
+      const href = n.link || "#";
+      const title = (n.title || "").replace(/</g, "");
+      return `<a href="${href}" target="_blank" rel="noreferrer">[${src}] ${title}</a>`;
+    }).join("");
+  }
+  const box = $("newsfeed");
+  if (box) {
+    box.innerHTML = "";
+    news.slice(0, 10).forEach((n) => {
+      const el = document.createElement("div");
+      el.className = "item click";
+      el.innerHTML = `<b>${n.source || "wire"}</b><div></div>`;
+      el.lastChild.textContent = n.title || "";
+      if (n.link) el.addEventListener("click", () => window.open(n.link, "_blank", "noopener"));
+      box.appendChild(el);
+    });
+  }
+}
+
+function startLiveFeeds() {
+  if (state.feedEs) return;
+  const url = `/api/feeds/stream?token=${encodeURIComponent(state.token || "")}`;
+  try {
+    const es = new EventSource(url);
+    es.onmessage = (ev) => {
+      try { renderFeeds(JSON.parse(ev.data)); } catch {}
+    };
+    es.onerror = () => {};
+    state.feedEs = es;
+  } catch {}
+  fetch("/api/feeds").then((r) => r.json()).then(renderFeeds).catch(() => {});
+}
+
 async function refreshWidgets() {
   try {
     const [m, a, v] = await Promise.all([
@@ -115,18 +170,7 @@ async function refreshWidgets() {
       fetch("/api/autonomy").then((r) => r.json()),
       fetch("/api/vault").then((r) => r.json()).catch(() => ({ notes: [] })),
     ]);
-    const box = $("tickers");
-    if (box) {
-      box.innerHTML = "";
-      (m.watchlist || []).forEach((q) => {
-        if (!q.symbol || q.error) return;
-        const el = document.createElement("div");
-        const pct = q.change_pct;
-        el.className = `ticker ${pct > 0 ? "up" : pct < 0 ? "down" : ""}`;
-        el.innerHTML = `<div>${q.symbol}</div><div class="px">${q.price != null ? Number(q.price).toFixed(2) : "—"} ${pct != null ? `(${pct.toFixed(2)}%)` : ""}</div>`;
-        box.appendChild(el);
-      });
-    }
+    renderQuotes(m.watchlist || []);
     const acc = m.account || {};
     if ($("equity")) {
       $("equity").textContent = `${(acc.mode || "paper").toUpperCase()} EQ ${acc.equity != null ? Number(acc.equity).toFixed(2) : "—"}  CASH ${acc.cash != null ? Number(acc.cash).toFixed(2) : "—"}`;
@@ -694,6 +738,7 @@ $("studio-sched").addEventListener("click", () => saveDraft(true));
 bootstrapGuard()
   .then(() => refreshStatus())
   .then(() => refreshWidgets())
+  .then(() => startLiveFeeds())
   .catch(() => setStatus("backend offline"));
 setInterval(refreshWidgets, 60000);
-setStatus("systems ready — fortress on");
+setStatus("systems ready — live feeds on");

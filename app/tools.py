@@ -51,7 +51,12 @@ FUNCTION_TOOLS = [
     ),
     _fn("fetch_url", "Fetch a URL and extract text.", {"url": {"type": "string"}}, ["url"]),
     _fn("wiki", "Wikipedia summary.", {"query": {"type": "string"}}, ["query"]),
-    _fn("news_headlines", "Read an RSS feed (default BBC).", {"feed": {"type": "string"}}),
+    _fn("news_headlines", "Read an RSS feed (default BBC) or the live multi-source feed if feed=live.", {"feed": {"type": "string"}}),
+    _fn(
+        "feeds",
+        "Live Yahoo Finance quotes plus BBC/NPR/Yahoo/HN headlines. Cached ~20s.",
+        {"force": {"type": "boolean"}},
+    ),
     _fn("weather", "Current weather via Open-Meteo.", {"lat": {"type": "number"}, "lon": {"type": "number"}, "place": {"type": "string"}}),
     _fn("calc", "Exact arithmetic.", {"expression": {"type": "string"}}, ["expression"]),
     _fn("now", "Current UTC time.", {}),
@@ -331,7 +336,16 @@ def execute(name: str, arguments: dict[str, Any], *, session_id: str, agent_id: 
     if name == "wiki":
         return widgets.wiki(arguments.get("query") or "")
     if name == "news_headlines":
-        return widgets.news(arguments.get("feed") or "https://feeds.bbci.co.uk/news/rss.xml")
+        feed = arguments.get("feed") or "https://feeds.bbci.co.uk/news/rss.xml"
+        if str(feed).lower() in {"live", "feeds", "all"}:
+            from . import feeds as feeds_mod
+
+            return {"items": feeds_mod.snapshot().get("news") or []}
+        return widgets.news(feed)
+    if name == "feeds":
+        from . import feeds as feeds_mod
+
+        return feeds_mod.snapshot(force=bool(arguments.get("force")))
     if name == "weather":
         return widgets.dispatch("weather", **arguments)
     if name == "calc":

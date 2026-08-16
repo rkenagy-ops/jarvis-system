@@ -116,6 +116,27 @@ body {
 .ticker.up { color: var(--ok); border-color: rgba(52,211,153,0.35); }
 .ticker.down { color: var(--danger); border-color: rgba(244,63,94,0.35); }
 .equity { margin-top: 8px; font-family: var(--mono); font-size: 11px; color: var(--gold); letter-spacing: 0.12em; }
+.tape {
+  width: min(720px, 92%);
+  overflow: hidden;
+  margin-top: 12px;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  padding: 6px 0;
+  mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
+}
+.tape-inner {
+  display: inline-block;
+  white-space: nowrap;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--cyan);
+  letter-spacing: 0.04em;
+  animation: tape 80s linear infinite;
+}
+.tape-inner a { color: inherit; text-decoration: none; margin: 0 18px; }
+.tape-inner a:hover { color: var(--gold); }
+@keyframes tape { from { transform: translateX(8%); } to { transform: translateX(-70%); } }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .chips button {
   background: transparent; color: var(--muted); border: 1px solid var(--line);

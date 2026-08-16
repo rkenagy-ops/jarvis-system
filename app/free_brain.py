@@ -174,6 +174,15 @@ def handle(user_text: str, emit=None) -> dict[str, Any]:
         cur = w.get("current") or {}
         return {"text": f"Weather ({w.get('place')}): {cur.get('temperature_2m')} C, wind {cur.get('wind_speed_10m')}, humidity {cur.get('relative_humidity_2m')}%.", "calls": calls, "brain": "free"}
 
+    if "live feed" in low or "yahoo finance" in low or ("feeds" in low and "open" not in low):
+        from . import feeds as feeds_mod
+
+        snap = feeds_mod.snapshot()
+        lines = [f"- {q.get('symbol')} {q.get('price')} ({q.get('change_pct')})" for q in snap.get("quotes") or [] if q.get("price") is not None]
+        lines.append("")
+        lines.extend([f"- [{n.get('source')}] {n.get('title')}" for n in (snap.get("news") or [])[:8]])
+        return {"text": "Live feeds\n" + "\n".join(lines), "calls": [{"name": "feeds", "arguments": {}}], "brain": "free"}
+
     if "news" in low or "headlines" in low:
         use("news")
         n = widgets.news()

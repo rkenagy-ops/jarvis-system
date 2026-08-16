@@ -9,7 +9,7 @@ from typing import Any
 SKILLS: list[dict[str, Any]] = [
     {"id": "brief", "phrases": ("brief", "briefing", "morning", "plan my day"), "desc": "Morning briefing + plan the day from weather, tasks, calendar", "src": "ethanplusai/jarvis"},
     {"id": "weather", "phrases": ("weather",), "desc": "Current weather (Open-Meteo)", "src": "GauravSingh9356/J.A.R.V.I.S"},
-    {"id": "news", "phrases": ("news", "headlines"), "desc": "Live headlines", "src": "GauravSingh9356/J.A.R.V.I.S"},
+    {"id": "news", "phrases": ("news", "headlines", "live feed"), "desc": "Live BBC/NPR/Yahoo/HN + Yahoo Finance tape", "src": "GauravSingh9356/J.A.R.V.I.S"},
     {"id": "wiki", "phrases": ("wiki", "who is", "what is"), "desc": "Wikipedia person/topic lookup", "src": "kishanrajput23/Jarvis-Desktop-Voice-Assistant"},
     {"id": "time", "phrases": ("what time", "the time", "date", "utc"), "desc": "Local + UTC time", "src": "kishanrajput23/Jarvis-Desktop-Voice-Assistant"},
     {"id": "youtube", "phrases": ("youtube", "play "), "desc": "Play / search YouTube", "src": "GauravSingh9356/J.A.R.V.I.S"},
@@ -31,7 +31,7 @@ SKILLS: list[dict[str, Any]] = [
     {"id": "room", "phrases": ("what do you think", "room"), "desc": "Answer from rolling room context", "src": "isair/jarvis"},
     {"id": "redact", "phrases": (), "desc": "Secrets redacted before disk", "src": "isair/jarvis"},
     {"id": "wake", "phrases": ("jarvis",), "desc": "Wake word anywhere in the sentence", "src": "isair/jarvis"},
-    {"id": "markets", "phrases": ("watchlist", "quote", "buy", "sell"), "desc": "Quotes + paper trades", "src": "super-jarvis"},
+    {"id": "markets", "phrases": ("watchlist", "quote", "buy", "sell", "yahoo"), "desc": "Yahoo Finance quotes + paper trades", "src": "super-jarvis"},
     {"id": "vault", "phrases": ("vault", "obsidian"), "desc": "Obsidian PKM + RAG", "src": "super-jarvis"},
     {"id": "oss", "phrases": ("github", "ingest", "open source"), "desc": "Search and ingest GitHub OSS", "src": "super-jarvis"},
 ]
