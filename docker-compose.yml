@@ -6,10 +6,12 @@
 version: "3.9"
 
 services:
+  # Optional extras. Super Jarvis does not need these to run.
+  # Ports are loopback-only so `compose up` cannot punch fortress.
   litellm:
     image: ghcr.io/berriai/litellm:main-latest
     ports:
-      - "4000:4000"
+      - "127.0.0.1:4000:4000"
     environment:
       - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY}
     volumes:
@@ -19,7 +21,7 @@ services:
   n8n:
     image: n8nio/n8n:latest
     ports:
-      - "5678:5678"
+      - "127.0.0.1:5678:5678"
     environment:
       - N8N_BASIC_AUTH_ACTIVE=true
       - N8N_BASIC_AUTH_USER=${N8N_USER}
@@ -30,19 +32,19 @@ services:
   whisper:
     image: onerahmet/openai-whisper-asr-webservice:latest
     ports:
-      - "9000:9000"
+      - "127.0.0.1:9000:9000"
     environment:
       - ASR_MODEL=base
 
   piper:
     image: rhasspy/wyoming-piper:latest
     ports:
-      - "10200:10200"
+      - "127.0.0.1:10200:10200"
 
   stirling:
     image: stirlingtools/stirling-pdf:latest
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
 
 volumes:
   n8n_data:

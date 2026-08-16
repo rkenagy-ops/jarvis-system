@@ -90,11 +90,25 @@ def briefing(*, use_grok: bool = True) -> str:
         "- Open tasks: " + ("; ".join(t["text"] for t in tasks) if tasks else "none"),
     ]
     try:
+        goals = memory.list_goals("open")
+        if goals:
+            lines.append("- Goals: " + "; ".join(g.get("title") or "" for g in goals[:5]))
+    except Exception:
+        pass
+    try:
         from . import reminders
 
         due = reminders.list_items(open_only=True, limit=5)
         if due:
             lines.append("- Coming up: " + "; ".join(f"{r['title']} @ {r['when'][:16]}" for r in due))
+    except Exception:
+        pass
+    try:
+        from . import daily as daily_mod
+
+        yest = daily_mod.yesterday_excerpt()
+        if yest:
+            lines.append("- Yesterday: " + " ".join((yest.get("excerpt") or "").split())[:220])
     except Exception:
         pass
     raw = "\n".join(lines)

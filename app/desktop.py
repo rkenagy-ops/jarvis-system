@@ -379,4 +379,12 @@ def dispatch(action: str, **kwargs) -> Any:
         return capabilities()
     if action == "situation":
         return {"text": situation()}
+    if action in {"vault", "open_vault"}:
+        from . import daily as daily_mod
+
+        return daily_mod.open_vault()
+    if action == "daily":
+        from . import daily as daily_mod
+
+        return daily_mod.pack()
     return {"error": f"Unknown desktop action {action}"}

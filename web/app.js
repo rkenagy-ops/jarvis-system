@@ -132,6 +132,28 @@ async function refreshWidgets() {
       $("equity").textContent = `${(acc.mode || "paper").toUpperCase()} EQ ${acc.equity != null ? Number(acc.equity).toFixed(2) : "—"}  CASH ${acc.cash != null ? Number(acc.cash).toFixed(2) : "—"}`;
     }
     try {
+      const today = await fetch("/api/daily").then((r) => r.json());
+      const tbox = $("today");
+      if (tbox) {
+        tbox.innerHTML = "";
+        const bits = [
+          ["hello", today.greeting],
+          ["vault", today.vault],
+          ["obsidian", today.obsidian_installed ? "installed" : "not installed — VAULT still opens the folder"],
+        ];
+        (today.goals || []).slice(0, 3).forEach((g) => bits.push(["goal", g.title]));
+        (today.tasks || []).slice(0, 3).forEach((task) => bits.push(["task", task.text]));
+        bits.forEach(([k, v]) => {
+          if (!v) return;
+          const el = document.createElement("div");
+          el.className = "item";
+          el.innerHTML = `<b>${k}</b><div></div>`;
+          el.lastChild.textContent = v;
+          tbox.appendChild(el);
+        });
+      }
+    } catch {}
+    try {
       const room = await fetch("/api/room").then((r) => r.json());
       const rbox = $("room");
       if (rbox) {
@@ -560,6 +582,12 @@ function toggleWake() {
   $("btn-wake").classList.add("on");
   setStatus("say jarvis");
 }
+$("btn-vault").addEventListener("click", async () => {
+  setStatus("opening vault");
+  const res = await fetch("/api/daily/vault", { method: "POST" });
+  const data = await res.json();
+  setStatus(data.ok ? `vault ${data.via}` : (data.error || "vault failed"));
+});
 $("btn-wake").addEventListener("click", toggleWake);
 $("btn-live").addEventListener("click", toggleLive);
 $("btn-settings").addEventListener("click", () => $("modal").classList.add("show"));

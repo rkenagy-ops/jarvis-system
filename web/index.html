@@ -23,6 +23,7 @@
         <div class="pill"><span id="net-dot" class="dot on"></span><span id="net-label">ONLINE</span></div>
         <div class="pill"><span id="lock-dot" class="dot on"></span><span id="lock-label">LOCAL</span></div>
         <button class="btn" id="btn-studio">STUDIO</button>
+        <button class="btn" id="btn-vault">VAULT</button>
         <button class="btn" id="btn-brief">BRIEFING</button>
         <button class="btn" id="btn-settings">KEYS</button>
         <button class="btn" id="btn-wake">WAKE</button>
@@ -48,6 +49,8 @@
         <div class="equity" id="equity">PAPER —</div>
       </section>
       <aside class="rail right">
+        <h2>TODAY</h2>
+        <div class="feed" id="today"></div>
         <h2>UNLOCKED MIND</h2>
         <div class="feed" id="mind"></div>
         <h2>ROOM</h2>
@@ -71,6 +74,7 @@
       <div class="transcript" id="transcript"></div>
       <form class="composer" id="form">
         <div class="chips" id="chips">
+          <button type="button" data-q="Start my day. Use the daily pack and write a briefing to today's note.">Start my day</button>
           <button type="button" data-q="Give me a morning briefing and write it to today's daily note.">Brief me</button>
           <button type="button" data-q="Analyze the watchlist. Flag anything moving more than 1.5%.">Scan markets</button>
           <button type="button" data-q="List open vault tasks and suggest what to do first.">Tasks</button>

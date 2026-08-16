@@ -24,6 +24,12 @@ try:
 except Exception:
     pass
 autonomy.start()
+try:
+    from . import daily as daily_mod
+
+    daily_mod.seed_owner()
+except Exception:
+    pass
 
 app = FastAPI(title="Super Jarvis", version=__version__, docs_url=None, redoc_url=None, openapi_url=None)
 app.mount("/static", StaticFiles(directory=config.WEB_DIR), name="static")
@@ -357,6 +363,27 @@ def goals_add(body: GoalIn) -> dict:
 def run_briefing() -> dict:
     text = autonomy.briefing()
     return {"ok": True, "text": text}
+
+
+@app.get("/api/daily")
+def api_daily() -> dict:
+    from . import daily as daily_mod
+
+    return daily_mod.pack()
+
+
+@app.post("/api/daily/seed")
+def api_daily_seed() -> dict:
+    from . import daily as daily_mod
+
+    return daily_mod.seed_owner()
+
+
+@app.post("/api/daily/vault")
+def api_daily_vault() -> dict:
+    from . import daily as daily_mod
+
+    return daily_mod.open_vault()
 
 
 @app.get("/api/tasks")

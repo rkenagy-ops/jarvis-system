@@ -62,6 +62,15 @@ def handle(user_text: str, emit=None) -> dict[str, Any]:
 
         return {"text": room.context(), "calls": [{"name": "room", "arguments": {}}], "brain": "free"}
 
+    if "start my day" in low or "daily pack" in low or "daily driver" in low:
+        from . import daily as daily_mod
+
+        return {"text": _fmt(daily_mod.pack()), "calls": [{"name": "desktop", "arguments": {"action": "daily"}}], "brain": "free"}
+    if "open vault" in low or "open obsidian" in low:
+        from . import daily as daily_mod
+
+        return {"text": _fmt(daily_mod.open_vault()), "calls": [{"name": "desktop", "arguments": {"action": "vault"}}], "brain": "free"}
+
     if "plan my day" in low or "plan the day" in low:
         from . import desktop
 
