@@ -1,6 +1,8 @@
 .venv/
 venv/
-workspace/
+workspace/*
+!workspace/README.md
+!workspace/sample_portfolio.csv
 __pycache__/
 *.py[cod]
 *.egg-info/

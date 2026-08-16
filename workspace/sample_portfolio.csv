@@ -1,0 +1,6 @@
+symbol,qty,avg_price,sector
+AAPL,20,180.5,tech
+MSFT,10,390.0,tech
+NVDA,8,110.0,tech
+SPY,15,520.0,index
+TSLA,12,175.0,auto
