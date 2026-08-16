@@ -124,6 +124,17 @@ class RoomHearIn(BaseModel):
     text: str
 
 
+class ReminderIn(BaseModel):
+    title: str
+    minutes: int = 0
+    when: str = ""
+    kind: str = "reminder"
+
+
+class ReminderIdIn(BaseModel):
+    id: str
+
+
 @app.get("/")
 def index() -> FileResponse:
     return FileResponse(config.WEB_DIR / "index.html")
@@ -469,6 +480,29 @@ def api_room_hear(body: RoomHearIn) -> dict:
     from . import room
 
     return room.hear(body.who, body.text)
+
+
+@app.get("/api/reminders")
+def api_reminders() -> dict:
+    from . import reminders
+
+    return reminders.snapshot()
+
+
+@app.post("/api/reminders")
+def api_reminders_add(body: ReminderIn) -> dict:
+    from . import desktop
+
+    if body.kind == "timer" or (body.minutes and not body.when):
+        return desktop.timer(body.minutes or 5, body.title)
+    return desktop.remind(body.title, body.when, body.minutes)
+
+
+@app.post("/api/reminders/dismiss")
+def api_reminders_dismiss(body: ReminderIdIn) -> dict:
+    from . import reminders
+
+    return {"ok": reminders.dismiss(body.id)}
 
 
 @app.get("/api/widgets/now")

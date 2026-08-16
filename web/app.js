@@ -99,6 +99,48 @@ async function refreshWidgets() {
     if ($("equity")) {
       $("equity").textContent = `${(acc.mode || "paper").toUpperCase()} EQ ${acc.equity != null ? Number(acc.equity).toFixed(2) : "—"}  CASH ${acc.cash != null ? Number(acc.cash).toFixed(2) : "—"}`;
     }
+    try {
+      const room = await fetch("/api/room").then((r) => r.json());
+      const rbox = $("room");
+      if (rbox) {
+        rbox.innerHTML = "";
+        (room.lines || []).slice(-8).forEach((line) => {
+          const el = document.createElement("div");
+          el.className = "item";
+          el.innerHTML = `<b>${line.who || "room"}</b><div></div>`;
+          el.lastChild.textContent = line.text || "";
+          rbox.appendChild(el);
+        });
+        if (!(room.lines || []).length) {
+          rbox.innerHTML = `<div class="item"><b>quiet</b><div>WAKE to fill the room</div></div>`;
+        }
+      }
+    } catch {}
+    try {
+      const due = await fetch("/api/reminders").then((r) => r.json());
+      const dbox = $("due");
+      if (dbox) {
+        dbox.innerHTML = "";
+        (due.open || []).slice(0, 8).forEach((item) => {
+          const el = document.createElement("div");
+          el.className = "item click";
+          el.innerHTML = `<b>${item.kind || "due"}</b><div></div>`;
+          el.lastChild.textContent = `${item.title} — ${String(item.when || "").slice(11, 16)} UTC`;
+          el.addEventListener("click", async () => {
+            await fetch("/api/reminders/dismiss", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ id: item.id }),
+            });
+            refreshWidgets();
+          });
+          dbox.appendChild(el);
+        });
+        if (!(due.open || []).length) {
+          dbox.innerHTML = `<div class="item"><b>clear</b><div>no open timers</div></div>`;
+        }
+      }
+    } catch {}
     const auto = $("auto");
     if (auto) {
       auto.innerHTML = "";

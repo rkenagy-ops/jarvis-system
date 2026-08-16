@@ -248,7 +248,7 @@ def note(text: str) -> dict:
 
 
 def remind(title: str, when: str = "", minutes: int = 0) -> dict:
-    from . import opensource
+    from . import opensource, reminders
 
     stamp = when.strip()
     if minutes:
@@ -259,12 +259,41 @@ def remind(title: str, when: str = "", minutes: int = 0) -> dict:
             stamp = (datetime.now(timezone.utc) + timedelta(days=1)).replace(
                 hour=9, minute=0, second=0, microsecond=0
             ).isoformat()
+    live = reminders.add(title or "Reminder", stamp, minutes=0, kind="reminder")
     item = opensource.calendar_add(title or "Reminder", stamp, "Jarvis reminder")
     try:
         notify("Reminder set", title or "Reminder")
     except Exception:
         pass
-    return {"ok": True, "when": stamp, "event": item}
+    return {"ok": True, "when": stamp, "event": item, "reminder": live}
+
+
+def timer(minutes: int = 5, title: str = "") -> dict:
+    from . import reminders
+
+    mins = max(1, int(minutes or 5))
+    item = reminders.timer(mins, title or f"{mins} minute timer")
+    try:
+        notify("Timer set", item["title"])
+    except Exception:
+        pass
+    return {"ok": True, "minutes": mins, "reminder": item}
+
+
+def find(query: str) -> dict:
+    from . import workspace
+
+    vault = {}
+    try:
+        vault = obsidian.search(query)
+    except Exception as exc:
+        vault = {"error": str(exc)}
+    files = {}
+    try:
+        files = workspace.find(query)
+    except Exception as exc:
+        files = {"error": str(exc)}
+    return {"query": query, "vault": vault, "workspace": files}
 
 
 def plan_day() -> dict:
@@ -285,12 +314,20 @@ def plan_day() -> dict:
         weather = widgets.weather()
     except Exception as exc:
         weather = {"error": str(exc)}
+    coming = []
+    try:
+        from . import reminders
+
+        coming = reminders.list_items(open_only=True, limit=6)
+    except Exception:
+        pass
     return {
         "greeting": skills.greeting(),
         "now": widgets.now(),
         "weather": weather,
         "tasks": tasks,
         "calendar": cal,
+        "reminders": coming,
     }
 
 
@@ -332,6 +369,10 @@ def dispatch(action: str, **kwargs) -> Any:
             kwargs.get("when") or "",
             int(kwargs.get("minutes") or 0),
         )
+    if action == "timer":
+        return timer(int(kwargs.get("minutes") or 5), kwargs.get("title") or kwargs.get("query") or "")
+    if action == "find":
+        return find(kwargs.get("query") or "")
     if action in {"plan", "plan_day"}:
         return plan_day()
     if action in {"skills", "capabilities"}:

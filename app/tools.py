@@ -57,8 +57,8 @@ FUNCTION_TOOLS = [
     _fn("now", "Current UTC time.", {}),
     _fn(
         "workspace",
-        "Sandboxed files in ./workspace. Actions: list, read, write, analyze.",
-        {"action": {"type": "string", "enum": ["list", "read", "write", "analyze"]}, "path": {"type": "string"}, "content": {"type": "string"}},
+        "Sandboxed files in ./workspace. Actions: list, read, write, analyze, find.",
+        {"action": {"type": "string", "enum": ["list", "read", "write", "analyze", "find"]}, "path": {"type": "string"}, "content": {"type": "string"}, "query": {"type": "string"}},
         ["action"],
     ),
     _fn(
@@ -174,14 +174,14 @@ FUNCTION_TOOLS = [
     ),
     _fn(
         "desktop",
-        "PC/room assistant: open URL/app, YouTube, maps, google, notify, sysinfo, screenshot, clipboard, joke, note, remind, plan_day, email_draft, situation, skills.",
+        "PC/room assistant: open URL/app, YouTube, maps, google, notify, sysinfo, screenshot, clipboard, joke, note, remind, timer, find, plan_day, email_draft, situation, skills.",
         {
             "action": {
                 "type": "string",
                 "enum": [
                     "open", "app", "youtube", "maps", "google", "notify", "sysinfo",
                     "email_draft", "screenshot", "clipboard", "joke", "note", "remind",
-                    "plan_day", "skills", "situation",
+                    "timer", "find", "plan_day", "skills", "situation",
                 ],
             },
             "url": {"type": "string"},

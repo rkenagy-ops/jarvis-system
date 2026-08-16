@@ -88,6 +88,14 @@ def briefing(*, use_grok: bool = True) -> str:
         "- News: " + ("; ".join(headlines) if headlines else "n/a"),
         "- Open tasks: " + ("; ".join(t["text"] for t in tasks) if tasks else "none"),
     ]
+    try:
+        from . import reminders
+
+        due = reminders.list_items(open_only=True, limit=5)
+        if due:
+            lines.append("- Coming up: " + "; ".join(f"{r['title']} @ {r['when'][:16]}" for r in due))
+    except Exception:
+        pass
     raw = "\n".join(lines)
     text = raw
     if use_grok:
@@ -120,10 +128,34 @@ def briefing(*, use_grok: bool = True) -> str:
     return text
 
 
+def ensure_defaults() -> list[dict]:
+    """Seed the jobs that make Jarvis live without a click."""
+    have = {j.get("name") for j in memory.list_jobs()}
+    seeded = []
+    specs = [
+        ("morning-briefing", "Write the morning briefing to today's daily note.", 86400),
+        ("watchlist-scan", "Scan the watchlist for 1.5% movers.", 1800),
+    ]
+    for name, prompt, every in specs:
+        if name in have:
+            continue
+        job = memory.add_job(name, prompt, every)
+        memory.mark_job(job["id"], "seeded — waiting first interval")
+        seeded.append(job)
+    return seeded
+
+
 def beat() -> list[str]:
     if not config.AUTONOMY_ENABLED:
         return []
     results = []
+    try:
+        from . import reminders
+
+        for item in reminders.fire_due():
+            results.append(f"fired {item.get('kind')}: {item.get('title')}")
+    except Exception as exc:
+        results.append(f"reminder-error {exc}")
     try:
         from . import ops
 
@@ -151,6 +183,10 @@ def _loop() -> None:
 def start() -> None:
     global _thread
     markets.init()
+    try:
+        ensure_defaults()
+    except Exception:
+        pass
     if _thread and _thread.is_alive():
         return
     _stop.clear()
@@ -163,10 +199,18 @@ def stop() -> None:
 
 
 def snapshot() -> dict[str, Any]:
+    due = []
+    try:
+        from . import reminders
+
+        due = reminders.snapshot()
+    except Exception:
+        due = {}
     return {
         "enabled": config.AUTONOMY_ENABLED,
         "jobs": memory.list_jobs(),
         "goals": memory.list_goals("open"),
         "skills": memory.list_skills(),
         "account": markets.account(),
+        "reminders": due,
     }

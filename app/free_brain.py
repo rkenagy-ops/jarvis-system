@@ -91,6 +91,34 @@ def handle(user_text: str, emit=None) -> dict[str, Any]:
         q = re.sub(r".*(google|search google)\s+", "", low, count=1).strip() or text
         return {"text": str(desktop.google(q)), "calls": [{"name": "desktop", "arguments": {"action": "google"}}], "brain": "free"}
 
+    if re.search(r"\b(timer|set a timer)\b", low):
+        from . import desktop
+
+        mins = 5
+        m = re.search(r"\b(\d+)\s*(min|minute|minutes|sec|second|seconds)\b", low)
+        if m:
+            mins = int(m.group(1))
+            if m.group(2).startswith("sec"):
+                mins = max(1, (mins + 59) // 60)
+        return {"text": _fmt(desktop.timer(mins)), "calls": [{"name": "desktop", "arguments": {"action": "timer"}}], "brain": "free"}
+
+    if low.startswith("define ") or re.search(r"what does .+ mean", low):
+        q = re.sub(r"^(define|what does)\s+", "", low)
+        q = re.sub(r"\s+mean\??$", "", q).strip() or text
+        use("catalog", source="dictionary", query=q)
+        return {"text": _fmt(catalog.call("dictionary", q)), "calls": calls, "brain": "free"}
+
+    if "translate" in low:
+        q = re.sub(r"^translate\s+", "", text, flags=re.I).strip() or text
+        use("catalog", source="translate", query=q)
+        return {"text": _fmt(catalog.call("translate", q)), "calls": calls, "brain": "free"}
+
+    if low.startswith("find ") or "find file" in low:
+        from . import desktop
+
+        q = re.sub(r".*(find file|find)\s+", "", text, count=1, flags=re.I).strip() or text
+        return {"text": _fmt(desktop.find(q)), "calls": [{"name": "desktop", "arguments": {"action": "find"}}], "brain": "free"}
+
     if re.search(r"\bremind me\b", low) or low.startswith("remind "):
         from . import desktop
 

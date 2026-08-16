@@ -133,6 +133,40 @@ def open_library(query: str) -> dict:
     return {"source": "open_library", "results": docs}
 
 
+_LANG = {
+    "spanish": "es", "french": "fr", "german": "de", "italian": "it", "portuguese": "pt",
+    "chinese": "zh", "japanese": "ja", "korean": "ko", "arabic": "ar", "hindi": "hi",
+    "russian": "ru", "dutch": "nl", "swedish": "sv", "english": "en",
+}
+
+
+def translate(query: str) -> dict:
+    text = (query or "").strip()
+    dest = "es"
+    low = text.lower()
+    m = re.search(r"\bto\s+([a-z]{2,12})\b", low)
+    if m:
+        token = m.group(1)
+        dest = _LANG.get(token, token if len(token) == 2 else "es")
+        text = re.sub(r"\bto\s+[a-z]{2,12}\b", "", text, flags=re.I).strip()
+    if "|" in text:
+        text, dest = [p.strip() for p in text.split("|", 1)]
+    if not text:
+        return {"error": "nothing to translate"}
+    data = _get(
+        "https://api.mymemory.translated.net/get",
+        params={"q": text[:500], "langpair": f"en|{dest}"},
+    )
+    resp = data.get("responseData") or {}
+    return {
+        "source": "mymemory",
+        "from": "en",
+        "to": dest,
+        "text": text,
+        "translated": resp.get("translatedText"),
+    }
+
+
 def dictionary(query: str) -> dict:
     data = _get(f"https://api.dictionaryapi.dev/api/v2/entries/en/{quote(query)}")
     if isinstance(data, dict) and data.get("title"):
@@ -436,6 +470,7 @@ SOURCES: dict[str, tuple[str, Callable[..., dict]]] = {
     "gutenberg": ("Project Gutenberg books", gutenberg),
     "open_library": ("Open Library catalog", open_library),
     "dictionary": ("English definitions", dictionary),
+    "translate": ("Free translation (MyMemory)", translate),
     "wikidata": ("Wikidata entities", wikidata),
     "jina": ("Clean webpage extract (Jina Reader)", jina_read),
     "duckduckgo": ("Instant answers", duckduckgo),

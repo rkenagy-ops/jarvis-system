@@ -119,6 +119,22 @@ def _profile_rows(rows: list[dict], rel: str) -> dict:
     return {"path": rel, "rows": len(rows), "columns": cols, "profile": profiles, "head": rows[:5]}
 
 
+def find(query: str, limit: int = 20) -> dict:
+    q = (query or "").lower().strip()
+    if not q:
+        return {"error": "empty query", "hits": []}
+    hits = []
+    root = _root()
+    for path in root.rglob("*"):
+        if not path.is_file():
+            continue
+        if q in path.name.lower():
+            hits.append({"path": str(path.relative_to(root)), "bytes": path.stat().st_size})
+        if len(hits) >= limit:
+            break
+    return {"query": query, "hits": hits}
+
+
 def dispatch(action: str, **kwargs) -> Any:
     try:
         if action == "list":
@@ -129,6 +145,8 @@ def dispatch(action: str, **kwargs) -> Any:
             return write_file(kwargs.get("path") or "", kwargs.get("content") or "")
         if action == "analyze":
             return analyze_file(kwargs.get("path") or "")
+        if action == "find":
+            return find(kwargs.get("query") or kwargs.get("path") or "", int(kwargs.get("limit") or 20))
         return {"error": f"Unknown workspace action {action}"}
     except Exception as exc:
         return {"error": str(exc)}
