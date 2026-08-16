@@ -4,7 +4,9 @@ type: inbox
 
 # Getting started
 
-- [ ] Open this vault in Obsidian (File → Open folder as vault → jarvis-system/vault)
 - [x] Add XAI_API_KEY
 - [x] Connect GitHub (rkenagy-ops via gh)
-- [ ] Ask Jarvis for a morning briefing (HUD BRIEFING button)
+- [x] Fortress on (loopback + token)
+- [ ] Open this vault in Obsidian (HUD **VAULT** button)
+- [ ] Hit **BRIEFING** once for real
+- [ ] Add one real task to today's daily note
