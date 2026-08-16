@@ -51,6 +51,30 @@ STARTER_PACK = [
     "encode/httpx",
 ]
 
+BRAIN_PACK = [
+    "microsoft/markitdown",
+    "adbar/trafilatura",
+    "unclecode/crawl4ai",
+    "browser-use/browser-use",
+    "mem0ai/mem0",
+    "lancedb/lancedb",
+    "chroma-core/chroma",
+    "langchain-ai/langchain",
+    "run-llama/llama_index",
+    "infiniflow/ragflow",
+    "modelcontextprotocol/servers",
+    "BerriAI/litellm",
+    "xai-org/xai-sdk-python",
+    "xai-org/xai-cookbook",
+    "huggingface/huggingface_hub",
+    "ggerganov/llama.cpp",
+    "ollama/ollama",
+    "jsvine/pdfplumber",
+    "explosion/spaCy",
+    "nomic-ai/gpt4all",
+]
+
+
 AWESOME = {
     "public-apis": "public-apis/public-apis",
     "selfhosted": "awesome-selfhosted/awesome-selfhosted",
@@ -99,6 +123,17 @@ GitHub: {meta.get('html_url')}
     path = f"Sources/github/{owner}-{name}.md"
     written = obsidian.write_note(path, body)
     return {"ok": True, "vault": written.get("path"), "repo": f"{owner}/{name}", "url": meta.get("html_url")}
+
+
+def brain_pack(limit: int = 10) -> dict:
+    ingested = []
+    errors = []
+    for repo in BRAIN_PACK[: max(1, min(int(limit), len(BRAIN_PACK)))]:
+        try:
+            ingested.append(ingest(repo))
+        except Exception as exc:
+            errors.append({"repo": repo, "error": str(exc)})
+    return {"ingested": ingested, "errors": errors, "count": len(ingested), "pack": "brain"}
 
 
 def starter_pack(limit: int = 12) -> dict:
@@ -198,6 +233,8 @@ def dispatch(action: str, **kwargs) -> Any:
         return ingest(kwargs.get("repo") or "")
     if action in {"starter", "starter_pack"}:
         return starter_pack(int(kwargs.get("limit") or 12))
+    if action in {"brain", "brain_pack"}:
+        return brain_pack(int(kwargs.get("limit") or 10))
     if action == "awesome":
         return awesome(kwargs.get("name") or "public-apis", kwargs.get("query") or "", int(kwargs.get("limit") or 15))
     if action == "public_apis":
@@ -206,4 +243,4 @@ def dispatch(action: str, **kwargs) -> Any:
         return huggingface(kwargs.get("query") or "", kwargs.get("kind") or "models")
     if action == "youtube":
         return youtube_transcript(kwargs.get("url") or kwargs.get("query") or "")
-    return {"error": f"Unknown oss action {action}", "actions": ["search", "readme", "ingest", "starter_pack", "awesome", "public_apis", "huggingface", "youtube"]}
+    return {"error": f"Unknown oss action {action}", "actions": ["search", "readme", "ingest", "starter_pack", "brain_pack", "awesome", "public_apis", "huggingface", "youtube"]}

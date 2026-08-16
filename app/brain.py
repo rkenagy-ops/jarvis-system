@@ -198,6 +198,12 @@ def think(
             mind = mind + "\n\n" + pack
     except Exception:
         pass
+    try:
+        from . import graph, router
+
+        mind = mind + "\n\n" + router.hint(user_text) + "\n\n" + graph.pack(user_text)
+    except Exception:
+        pass
 
     try:
         return _think_grok(
