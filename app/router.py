@@ -13,6 +13,7 @@ RULES: list[tuple[tuple[str, ...], list[str]]] = [
     (("image", "logo", "thumbnail", "imagine"), ["designer"]),
     (("schedule", "calendar", "week of content"), ["scheduler", "social", "scribe"]),
     (("research", "arxiv", "news", "what is"), ["oracle"]),
+    (("youtube", "maps", "open website", "notify", "email", "screenshot", "reminder", "plan my day"), ["scribe"]),
 ]
 
 

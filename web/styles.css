@@ -49,7 +49,7 @@ body {
   padding: 6px 10px; border-radius: 4px; cursor: pointer; font-family: var(--mono); font-size: 11px;
 }
 .btn:hover { border-color: var(--gold); background: rgba(212,176,86,0.08); }
-.btn.live.on { color: var(--bg); background: var(--cyan); border-color: var(--cyan); }
+.btn.live.on, .btn.on { color: var(--bg); background: var(--cyan); border-color: var(--cyan); }
 
 .stage {
   display: grid; grid-template-columns: 260px 1fr 300px; min-height: 0;

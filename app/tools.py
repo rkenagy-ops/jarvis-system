@@ -173,6 +173,32 @@ FUNCTION_TOOLS = [
         ["query"],
     ),
     _fn(
+        "desktop",
+        "PC/room assistant: open URL/app, YouTube, maps, google, notify, sysinfo, screenshot, clipboard, joke, note, remind, plan_day, email_draft, situation, skills.",
+        {
+            "action": {
+                "type": "string",
+                "enum": [
+                    "open", "app", "youtube", "maps", "google", "notify", "sysinfo",
+                    "email_draft", "screenshot", "clipboard", "joke", "note", "remind",
+                    "plan_day", "skills", "situation",
+                ],
+            },
+            "url": {"type": "string"},
+            "app": {"type": "string"},
+            "query": {"type": "string"},
+            "title": {"type": "string"},
+            "body": {"type": "string"},
+            "to": {"type": "string"},
+            "subject": {"type": "string"},
+            "when": {"type": "string"},
+            "minutes": {"type": "integer"},
+            "mode": {"type": "string"},
+            "name": {"type": "string"},
+        },
+        ["action"],
+    ),
+    _fn(
         "extract",
         "Ingest a URL or local file into the vault as markdown (trafilatura/Jina/markitdown/pypdf).",
         {"action": {"type": "string", "enum": ["url", "file"]}, "url": {"type": "string"}, "path": {"type": "string"}},
@@ -210,7 +236,7 @@ FUNCTION_TOOLS = [
         {
             "action": {
                 "type": "string",
-                "enum": ["search", "readme", "ingest", "starter_pack", "brain_pack", "awesome", "public_apis", "huggingface", "youtube"],
+                "enum": ["search", "readme", "ingest", "starter_pack", "brain_pack", "jarvis_pack", "awesome", "public_apis", "huggingface", "youtube"],
             },
             "query": {"type": "string"},
             "repo": {"type": "string", "description": "owner/repo"},
@@ -321,6 +347,10 @@ def execute(name: str, arguments: dict[str, Any], *, session_id: str, agent_id: 
         return catalog.call(arguments.get("source") or "", arguments.get("query") or "")
     if name == "oss":
         return github_oss.dispatch(arguments.get("action") or "search", **{k: v for k, v in arguments.items() if k != "action"})
+    if name == "desktop":
+        from . import desktop as desktop_mod
+
+        return desktop_mod.dispatch(arguments.get("action") or "situation", **{k: v for k, v in arguments.items() if k != "action"})
     if name == "extract":
         from . import extract as extract_mod
 

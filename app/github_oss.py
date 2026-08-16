@@ -125,6 +125,37 @@ GitHub: {meta.get('html_url')}
     return {"ok": True, "vault": written.get("path"), "repo": f"{owner}/{name}", "url": meta.get("html_url")}
 
 
+JARVIS_PACK = [
+    "isair/jarvis",
+    "GauravSingh9356/J.A.R.V.I.S",
+    "kishanrajput23/Jarvis-Desktop-Voice-Assistant",
+    "ethanplusai/jarvis",
+    "llm-guy/jarvis",
+    "Dipeshpal/Jarvis_AI",
+    "gia-guar/JARVIS-ChatGPT",
+    "AnubhavChaturvedi-GitHub/jarvis-ai-assistant",
+    "Priler/jarvis",
+    "swapagarwal/JARVIS-on-Messenger",
+    "Gladiator07/JARVIS",
+    "AlexandreSajus/JARVIS",
+    "Melissa-AI/Melissa-Core",
+    "BolisettySujith/J.A.R.V.I.S",
+    "akshayaggarwal99/jarvis-ai-assistant",
+    "projectswithdigambar/jarvis",
+]
+
+
+def jarvis_pack(limit: int = 16) -> dict:
+    ingested = []
+    errors = []
+    for repo in JARVIS_PACK[: max(1, min(int(limit), len(JARVIS_PACK)))]:
+        try:
+            ingested.append(ingest(repo))
+        except Exception as exc:
+            errors.append({"repo": repo, "error": str(exc)})
+    return {"ingested": ingested, "errors": errors, "count": len(ingested), "pack": "jarvis"}
+
+
 def brain_pack(limit: int = 10) -> dict:
     ingested = []
     errors = []
@@ -235,6 +266,8 @@ def dispatch(action: str, **kwargs) -> Any:
         return starter_pack(int(kwargs.get("limit") or 12))
     if action in {"brain", "brain_pack"}:
         return brain_pack(int(kwargs.get("limit") or 10))
+    if action in {"jarvis", "jarvis_pack"}:
+        return jarvis_pack(int(kwargs.get("limit") or 16))
     if action == "awesome":
         return awesome(kwargs.get("name") or "public-apis", kwargs.get("query") or "", int(kwargs.get("limit") or 15))
     if action == "public_apis":
@@ -243,4 +276,4 @@ def dispatch(action: str, **kwargs) -> Any:
         return huggingface(kwargs.get("query") or "", kwargs.get("kind") or "models")
     if action == "youtube":
         return youtube_transcript(kwargs.get("url") or kwargs.get("query") or "")
-    return {"error": f"Unknown oss action {action}", "actions": ["search", "readme", "ingest", "starter_pack", "brain_pack", "awesome", "public_apis", "huggingface", "youtube"]}
+    return {"error": f"Unknown oss action {action}", "actions": ["search", "readme", "ingest", "starter_pack", "brain_pack", "jarvis_pack", "awesome", "public_apis", "huggingface", "youtube"]}

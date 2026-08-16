@@ -20,3 +20,11 @@ def test_oss_tool_on_jarvis():
 def test_oss_unknown_action():
     out = github_oss.dispatch("nope")
     assert "error" in out
+    assert "jarvis_pack" in out["actions"]
+
+
+def test_jarvis_pack_covers_the_field():
+    assert "isair/jarvis" in github_oss.JARVIS_PACK
+    assert "swapagarwal/JARVIS-on-Messenger" in github_oss.JARVIS_PACK
+    assert "Melissa-AI/Melissa-Core" in github_oss.JARVIS_PACK
+    assert len(github_oss.JARVIS_PACK) >= 16

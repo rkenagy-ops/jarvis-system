@@ -186,10 +186,13 @@ def remember(
     metadata: dict | None = None,
 ) -> dict:
     now = time.time()
+    from .redact import redact
+
+    content = redact(content.strip())
     item = {
         "id": str(uuid.uuid4()),
         "kind": kind,
-        "content": content.strip(),
+        "content": content,
         "tags": json.dumps(tags or []),
         "importance": max(0.0, min(1.0, importance)),
         "source_agent": source_agent,
@@ -276,11 +279,21 @@ def search(query: str, *, limit: int = 12) -> list[dict]:
 
 
 def add_message(session_id: str, role: str, content: str, agent: str | None = None) -> None:
+    from .redact import redact
+
+    content = redact(content)
     with _db() as conn:
         conn.execute(
             "INSERT INTO messages(id, session_id, role, content, agent, created_at) VALUES(?,?,?,?,?,?)",
             (str(uuid.uuid4()), session_id, role, content, agent, time.time()),
         )
+    try:
+        from . import room
+
+        who = "owner" if role == "user" else (agent or "jarvis")
+        room.hear(who, content)
+    except Exception:
+        pass
 
 
 def recent_messages(session_id: str, limit: int = 24) -> list[dict]:

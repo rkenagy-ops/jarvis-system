@@ -25,7 +25,16 @@ _OPS = {
 
 def now() -> dict:
     utc = datetime.now(timezone.utc)
-    return {"utc": utc.isoformat(), "unix": utc.timestamp(), "weekday": utc.strftime("%A")}
+    local = datetime.now().astimezone()
+    return {
+        "utc": utc.isoformat(),
+        "local": local.isoformat(),
+        "tz": local.tzname(),
+        "hour_local": local.hour,
+        "unix": utc.timestamp(),
+        "weekday": utc.strftime("%A"),
+        "local_weekday": local.strftime("%A"),
+    }
 
 
 def calc(expr: str) -> dict:

@@ -119,6 +119,11 @@ class ProductIn(BaseModel):
     description: str = ""
 
 
+class RoomHearIn(BaseModel):
+    who: str = "room"
+    text: str
+
+
 @app.get("/")
 def index() -> FileResponse:
     return FileResponse(config.WEB_DIR / "index.html")
@@ -443,6 +448,27 @@ def widget_weather() -> dict:
 @app.get("/api/widgets/news")
 def widget_news() -> dict:
     return widgets.news()
+
+
+@app.get("/api/skills")
+def api_skills() -> dict:
+    from . import desktop, skills
+
+    return {"skills": skills.catalog(), "help": skills.help_text(), "apps": desktop.ALLOWED_APPS}
+
+
+@app.get("/api/room")
+def api_room() -> dict:
+    from . import room
+
+    return {"context": room.context(), "lines": room.lines()}
+
+
+@app.post("/api/room/hear")
+def api_room_hear(body: RoomHearIn) -> dict:
+    from . import room
+
+    return room.hear(body.who, body.text)
 
 
 @app.get("/api/widgets/now")

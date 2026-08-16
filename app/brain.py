@@ -185,6 +185,18 @@ def think(
 
     mind = memory.snapshot(session_id)
     try:
+        from . import desktop
+
+        mind = desktop.situation() + "\n\n" + mind
+    except Exception:
+        pass
+    try:
+        from . import room
+
+        mind = room.context() + "\n\n" + mind
+    except Exception:
+        pass
+    try:
         from . import obsidian
 
         mind = mind + "\n\n" + obsidian.context_pack(user_text)

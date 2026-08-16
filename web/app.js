@@ -445,6 +445,48 @@ $("mic").addEventListener("mouseup", stopHoldToTalk);
 $("mic").addEventListener("mouseleave", stopHoldToTalk);
 $("mic").addEventListener("touchstart", (e) => { e.preventDefault(); startHoldToTalk(); });
 $("mic").addEventListener("touchend", (e) => { e.preventDefault(); stopHoldToTalk(); });
+function toggleWake() {
+  const Rec = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!Rec) {
+    setStatus("wake needs chrome speech recognition");
+    return;
+  }
+  if (state.wake) {
+    state.wake = false;
+    try { state.wakeRec.stop(); } catch {}
+    $("btn-wake").classList.remove("on");
+    setStatus("wake word off");
+    return;
+  }
+  const rec = new Rec();
+  rec.continuous = true;
+  rec.interimResults = false;
+  rec.lang = "en-US";
+  rec.onresult = (e) => {
+    const said = e.results[e.results.length - 1][0].transcript || "";
+    const low = said.toLowerCase();
+    fetch("/api/room/hear", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ who: "room", text: said }),
+    }).catch(() => {});
+    if (!/\bjarvis\b/.test(low)) return;
+    const rest = said.replace(/jarvis[,:]?\s*/i, "").trim();
+    setStatus("wake heard");
+    $("orb").classList.add("listen");
+    if (rest) sendText(rest);
+    else setStatus("listening after jarvis");
+  };
+  rec.onend = () => {
+    if (state.wake) try { rec.start(); } catch {}
+  };
+  rec.start();
+  state.wake = true;
+  state.wakeRec = rec;
+  $("btn-wake").classList.add("on");
+  setStatus("say jarvis");
+}
+$("btn-wake").addEventListener("click", toggleWake);
 $("btn-live").addEventListener("click", toggleLive);
 $("btn-settings").addEventListener("click", () => $("modal").classList.add("show"));
 $("close-modal").addEventListener("click", () => $("modal").classList.remove("show"));

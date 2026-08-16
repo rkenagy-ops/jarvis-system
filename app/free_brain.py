@@ -48,20 +48,87 @@ def handle(user_text: str, emit=None) -> dict[str, Any]:
         emit({"type": "status", "text": "free brain — open APIs online"})
         emit({"type": "agent_start", "agent": "jarvis"})
 
-    if re.search(r"\b(hi|hello|hey|good (morning|evening)|who are you)\b", low):
+    if re.search(r"\b(hi|hello|hey|good (morning|afternoon|evening)|who are you)\b", low):
+        from . import skills as skills_mod
+
         out = (
-            "J.A.R.V.I.S. online in **free mode**. Grok is saved and will take over when the xAI team has credits. "
+            f"{skills_mod.greeting()} **Free mode** — Grok takes over when the xAI team has credits. "
             "I can still brief you, quote markets, search the vault, pull GitHub OSS, weather, news, wiki, SEC, arXiv, and the rest of the catalog."
         )
         return {"text": out, "calls": calls, "brain": "free"}
 
-    if "brief" in low or "morning" in low:
+    if "what do you think" in low or (low.startswith("jarvis") and "think" in low):
+        from . import room
+
+        return {"text": room.context(), "calls": [{"name": "room", "arguments": {}}], "brain": "free"}
+
+    if "plan my day" in low or "plan the day" in low:
+        from . import desktop
+
+        plan = desktop.plan_day()
+        return {"text": _fmt(plan), "calls": [{"name": "desktop", "arguments": {"action": "plan_day"}}], "brain": "free"}
+
+    if "brief" in low or ("morning" in low and "good" not in low):
         use("briefing")
         result = autonomy.briefing()
         if emit:
             emit({"type": "tool_result", "name": "briefing", "result": result})
         return {"text": result + "\n\n(Free mode — written to today's daily note.)", "calls": calls, "brain": "free"}
 
+    if re.search(r"\bjoke\b", low) or "make me laugh" in low:
+        from . import desktop
+
+        return {"text": desktop.joke()["joke"], "calls": [{"name": "desktop", "arguments": {"action": "joke"}}], "brain": "free"}
+
+    if "screenshot" in low or "capture the screen" in low:
+        from . import desktop
+
+        return {"text": _fmt(desktop.screenshot()), "calls": [{"name": "desktop", "arguments": {"action": "screenshot"}}], "brain": "free"}
+
+    if low.startswith("google ") or "search google" in low:
+        from . import desktop
+
+        q = re.sub(r".*(google|search google)\s+", "", low, count=1).strip() or text
+        return {"text": str(desktop.google(q)), "calls": [{"name": "desktop", "arguments": {"action": "google"}}], "brain": "free"}
+
+    if re.search(r"\bremind me\b", low) or low.startswith("remind "):
+        from . import desktop
+
+        title = re.sub(r".*remind(?: me)?(?: to)?\s+", "", text, count=1, flags=re.I).strip() or text
+        mins = 0
+        m = re.search(r"\bin (\d+)\s*(min|minute|minutes)\b", low)
+        if m:
+            mins = int(m.group(1))
+        return {"text": _fmt(desktop.remind(title, minutes=mins)), "calls": [{"name": "desktop", "arguments": {"action": "remind"}}], "brain": "free"}
+
+    if "take a note" in low or "save a note" in low:
+        from . import desktop
+
+        body = re.sub(r".*(take a note|save a note)[:\s]*", "", text, count=1, flags=re.I).strip() or text
+        return {"text": _fmt(desktop.note(body)), "calls": [{"name": "desktop", "arguments": {"action": "note"}}], "brain": "free"}
+
+    if low.startswith("open ") and not low.startswith("open source"):
+        from . import desktop
+
+        target = text[5:].strip()
+        if target.startswith("http"):
+            result = desktop.open_url(target)
+        else:
+            result = desktop.open_app(target.split()[0] if target else "")
+            if result.get("error") and target:
+                result = desktop.google(target)
+        return {"text": _fmt(result), "calls": [{"name": "desktop", "arguments": {"action": "open"}}], "brain": "free"}
+
+    if "youtube" in low or "play " in low:
+        q = re.sub(r".*(youtube|play)\s+", "", low, count=1).strip() or text
+        from . import desktop
+
+        return {"text": str(desktop.youtube(q)), "calls": [{"name": "desktop", "arguments": {"action": "youtube"}}], "brain": "free"}
+    if "map" in low or "where is" in low or "navigate" in low:
+        from . import desktop
+
+        q = re.sub(r".*(map|where is|navigate to)\s+", "", low, count=1).strip() or text
+        return {"text": str(desktop.maps(q))[:800], "calls": [{"name": "desktop", "arguments": {"action": "maps"}}], "brain": "free"}
     if "weather" in low:
         use("weather")
         w = widgets.weather()
@@ -193,16 +260,10 @@ def handle(user_text: str, emit=None) -> dict[str, Any]:
     if any(w in low for w in ("time", "date", "utc")):
         return {"text": _fmt(widgets.now()), "calls": calls, "brain": "free"}
 
-    if low in {"help", "?", "what can you do"}:
-        return {
-            "text": (
-                "Free mode tools: briefing, weather, news, watchlist, quote/analyze SYMBOL, paper buy/sell, "
-                "vault search, tasks, GitHub OSS search/ingest, catalog (arxiv, SEC, wiki, CVE, FX…), calc. "
-                "Grok returns automatically after credits are on the xAI team."
-            ),
-            "calls": calls,
-            "brain": "free",
-        }
+    if low in {"help", "?", "what can you do", "capabilities"} or "what can you do" in low:
+        from . import skills as skills_mod
+
+        return {"text": skills_mod.help_text() + "\n\nGrok returns automatically after credits are on the xAI team.", "calls": calls, "brain": "free"}
 
     use("catalog", source="duckduckgo", query=text)
     ddg = catalog.call("duckduckgo", text)
