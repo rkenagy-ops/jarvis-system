@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>J.A.R.V.I.S.</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <h1>J.A.R.V.I.S.</h1>
+        <span>SUPER INTELLIGENCE</span>
+      </div>
+      <div class="meta">
+        <div class="pill"><span id="xai-dot" class="dot off"></span><span id="xai-label">XAI</span></div>
+        <div class="pill"><span id="gh-dot" class="dot off"></span><span id="gh-label">GITHUB</span></div>
+        <div class="pill"><span id="net-dot" class="dot on"></span>ONLINE</div>
+        <button class="btn" id="btn-settings">KEYS</button>
+        <button class="btn live" id="btn-live">LIVE VOICE</button>
+      </div>
+    </header>
+
+    <main class="stage">
+      <aside class="rail">
+        <h2>SWARM</h2>
+        <div id="agents"></div>
+      </aside>
+      <section class="core">
+        <div class="hud" id="hud">
+          <div class="ring"></div>
+          <div class="ring"></div>
+          <div class="ring"></div>
+          <div class="ring"></div>
+          <div class="orb" id="orb"></div>
+        </div>
+        <div class="status-line" id="status">SYSTEMS STANDBY</div>
+      </section>
+      <aside class="rail right">
+        <h2>UNLOCKED MIND</h2>
+        <div class="feed" id="mind"></div>
+      </aside>
+    </main>
+
+    <footer class="dock">
+      <div class="transcript" id="transcript"></div>
+      <form class="composer" id="form">
+        <textarea id="input" placeholder="Speak or type a mission. Jarvis can search the web, X, GitHub, and spawn the swarm."></textarea>
+        <div class="row">
+          <button class="mic" id="mic" type="button" title="Hold to talk">MIC</button>
+          <button class="btn" type="submit">SEND</button>
+        </div>
+      </form>
+    </footer>
+  </div>
+
+  <div class="modal" id="modal">
+    <div class="card">
+      <h3>CONNECT SYSTEMS</h3>
+      <p class="hint">
+        SpaceXAI key from <a href="https://console.x.ai" target="_blank" rel="noreferrer">console.x.ai</a>.
+        GitHub token from
+        <a href="https://github.com/settings/tokens" target="_blank" rel="noreferrer">github.com/settings/tokens</a>
+        with <code>repo</code> and <code>read:user</code>.
+      </p>
+      <label>XAI_API_KEY</label>
+      <input id="key-xai" type="password" autocomplete="off" />
+      <label>GITHUB_TOKEN</label>
+      <input id="key-gh" type="password" autocomplete="off" />
+      <label>GITHUB_USERNAME (optional)</label>
+      <input id="key-user" />
+      <label>VOICE</label>
+      <select id="key-voice">
+        <option>orion</option><option>eve</option><option>atlas</option><option>ara</option>
+        <option>leo</option><option>luna</option><option>rex</option><option>iris</option>
+      </select>
+      <div class="row" style="margin-top:14px">
+        <button class="btn" id="save-keys">SAVE</button>
+        <button class="btn" id="close-modal">CLOSE</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

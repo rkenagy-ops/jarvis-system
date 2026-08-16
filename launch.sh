@@ -1,16 +1,13 @@
 #!/usr/bin/env bash
 set -e
-
+cd "$(dirname "$0")"
 if [ ! -f .env ]; then
-  echo "No .env found. Copy .env.example to .env and fill in your keys first."
-  exit 1
+  cp .env.example .env
+  echo "Created .env — add XAI_API_KEY and GITHUB_TOKEN."
 fi
-
-echo "Starting support services (litellm, n8n, whisper, piper)..."
-docker compose up -d
-
-echo "Installing python dependencies..."
+if [ ! -d .venv ]; then
+  python3 -m venv .venv
+fi
+. .venv/bin/activate
 pip install -r requirements.txt
-
-echo "Starting the Jarvis orchestrator..."
-python orchestrator.py
+python -m app

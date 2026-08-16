@@ -1,27 +1,65 @@
-jarvis-system
+# jarvis-system
 
-Integrated multi-agent, Jarvis-style assistant scaffold. This repo wires together several open-source projects into one system that Claude Code can drive.
+Super Jarvis for [rkenagy-ops](https://github.com/rkenagy-ops). Multi-agent swarm, unlocked shared memory, live web/X, GitHub on this account, and voice.
 
-Architecture
+Repo: https://github.com/rkenagy-ops/jarvis-system
 
-The brain is the Kimi-K3 model, served via vllm and exposed through litellm as a unified LLM gateway so any agent can call it, or fall back to a hosted model, through one API. Multi-agent orchestration uses CrewAI by default, with autogen-import available as an alternative; agents are defined in orchestrator.py. The tool layer comes from MCP servers in mcp-servers-import, which give Claude Code and the agents standardized access to tools such as browser-use, crawl4ai, filesystem access, and n8n workflows. Memory runs on Supabase, using Postgres plus pgvector for structured facts and semantic RAG memory. Voice I/O comes from whisper-cpp-import for speech to text and piper-tts-import for text to speech. Skills include trading, using ccxt, freqtrade, hummingbot, nautilus_trader, FinRL, lumibot, vectorbt, backtrader, py-clob-client, and TradingAgents, plus calendar via cal.diy, documents via Stirling-PDF, media via jellyfin and immich, social via postiz-app, and automation via n8n.
+## Quick start
 
-Directory layout
+```powershell
+cd C:\Users\Rhett\jarvis-system
+copy .env.example .env
+# put XAI_API_KEY and GITHUB_TOKEN in .env
+.\start.ps1
+```
 
-README.md is this file. docker-compose.yml starts litellm, n8n, the whisper server, and the piper server. requirements.txt lists python dependencies for the orchestrator. .env.example should be copied to .env with your own keys; never commit real secrets. mcp_config.json tells Claude Code which MCP tool servers to load. orchestrator.py holds the CrewAI multi-agent setup, the core Jarvis loop. skills/trading/README.md explains how the trading repos plug in as one skill. launch.sh and launch.bat are one command start scripts.
+Open http://127.0.0.1:8787 and paste keys under **KEYS** if needed.
 
-Prerequisites
+- SpaceXAI key: https://console.x.ai
+- GitHub PAT (`repo`, `read:user`): https://github.com/settings/tokens
 
-You will need Docker and Docker Compose, Python 3.10 or newer, the Claude Code CLI installed and signed in, an Anthropic API key, and optionally your own vllm plus Kimi-K3 deployment if you want a self-hosted brain. Add API keys for any tools you want active, such as n8n or trading exchanges, to your own .env file; never share or commit them.
+## What runs
 
-Setup
+| Piece | Role |
+|---|---|
+| **J.A.R.V.I.S.** | Conductor |
+| **ORACLE** | Live web + X research |
+| **FORGE** | Code |
+| **SENTINEL** | This GitHub account |
+| **ARCHIVIST** | Long-term memory |
+| **CRITIC** | Adversarial insight |
+| **STRATEGIST** | Plans |
+| **TRADER** | Paper analysis only — no live orders without confirm |
 
-Clone this repository to your machine, then copy .env.example to .env and fill in your own keys. Run docker compose up -d to start the supporting services. Install python dependencies with pip install -r requirements.txt. Point Claude Code at mcp_config.json so it can see the MCP tool servers. Finally, run python orchestrator.py to start the agent crew.
+Voice: hold **MIC**, or **LIVE VOICE** for realtime speech-to-speech.
 
-Trading skill safety
+## Layout
 
-The trading skill in skills/trading is intentionally stubbed so that it requires explicit manual confirmation before placing any real order. It never executes live trades on its own.
+```
+app/                 Super Jarvis backend (SpaceXAI, memory, GitHub, voice)
+web/                 HUD
+tests/               pytest
+orchestrator.py      Optional CrewAI CLI loop
+docker-compose.yml   Optional litellm / n8n / whisper / piper
+mcp_config.json      MCP servers for Claude Code / Grok
+skills/trading/      Trading skill (confirmation required)
+```
 
-Status
+## Optional stack
 
-This is a working scaffold, not a finished production system. Review every config file, use paper trading or test accounts first, and only connect real credentials once you understand what each piece does.
+```powershell
+docker compose up -d
+python orchestrator.py
+```
+
+CrewAI will use SpaceXAI when `XAI_API_KEY` is set, otherwise the local LiteLLM / Kimi gateway.
+
+## Trading safety
+
+`skills/trading` is stubbed. Paper mode is the default. No live order, transfer, or account change without an explicit human confirmation of that specific action.
+
+## Tests
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest -q
+```
