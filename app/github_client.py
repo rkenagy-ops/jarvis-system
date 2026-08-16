@@ -1,24 +1,42 @@
 from __future__ import annotations
 
 import base64
+import os
+import shutil
+import subprocess
 from typing import Any
 
 import httpx
 
 from . import config
 
-UA = "SuperJarvis/1.0"
+UA = "SuperJarvis/2.3 (+https://github.com/rkenagy-ops/jarvis-system)"
 
 
 class GitHubError(RuntimeError):
     pass
 
 
+def resolve_token() -> str:
+    token = config.GITHUB_TOKEN or os.getenv("GH_TOKEN") or os.getenv("GITHUB_TOKEN") or ""
+    if token:
+        return token.strip()
+    gh = shutil.which("gh") or r"C:\Program Files\GitHub CLI\gh.exe"
+    if gh and os.path.exists(gh):
+        try:
+            out = subprocess.check_output([gh, "auth", "token"], text=True, timeout=8, stderr=subprocess.DEVNULL)
+            return (out or "").strip()
+        except Exception:
+            return ""
+    return ""
+
+
 def _headers() -> dict[str, str]:
-    if not config.GITHUB_TOKEN:
-        raise GitHubError("GITHUB_TOKEN is not set. Add a GitHub personal access token in Settings.")
+    token = resolve_token()
+    if not token:
+        raise GitHubError("No GitHub token. Run gh auth login or set GITHUB_TOKEN.")
     return {
-        "Authorization": f"Bearer {config.GITHUB_TOKEN}",
+        "Authorization": f"Bearer {token}",
         "Accept": "application/vnd.github+json",
         "X-GitHub-Api-Version": "2022-11-28",
         "User-Agent": UA,
@@ -201,6 +219,31 @@ def list_commits(owner: str, repo: str, limit: int = 10) -> list[dict]:
     ]
 
 
+def search_repos(query: str, limit: int = 10) -> list[dict]:
+    data = _request("GET", "/search/repositories", params={"q": query, "per_page": min(limit, 20), "sort": "stars"})
+    return [
+        {
+            "full_name": r.get("full_name"),
+            "description": r.get("description"),
+            "html_url": r.get("html_url"),
+            "stars": r.get("stargazers_count"),
+            "language": r.get("language"),
+            "topics": r.get("topics") or [],
+        }
+        for r in data.get("items") or []
+    ]
+
+
+def get_readme(owner: str, repo: str) -> dict:
+    data = _request("GET", f"/repos/{owner}/{repo}/readme")
+    text = ""
+    if data.get("encoding") == "base64" and data.get("content"):
+        text = base64.b64decode(data["content"]).decode("utf-8", errors="replace")
+    if len(text) > 20000:
+        text = text[:20000] + "\n...[truncated]"
+    return {"repo": f"{owner}/{repo}", "path": data.get("path"), "html_url": data.get("html_url"), "text": text}
+
+
 def create_repo(name: str, description: str = "", private: bool = True) -> dict:
     data = _request(
         "POST",
@@ -224,6 +267,8 @@ def dispatch(action: str, **kwargs) -> Any:
         "search_issues": lambda: search_issues(kwargs["query"], int(kwargs.get("limit") or 10)),
         "list_commits": lambda: list_commits(kwargs["owner"], kwargs["repo"], int(kwargs.get("limit") or 10)),
         "create_repo": lambda: create_repo(kwargs["name"], kwargs.get("description") or "", bool(kwargs.get("private", True))),
+        "search_repos": lambda: search_repos(kwargs.get("query") or "", int(kwargs.get("limit") or 10)),
+        "readme": lambda: get_readme(kwargs.get("owner") or "", kwargs.get("repo") or ""),
     }
     if action not in actions:
         raise GitHubError(f"Unknown GitHub action: {action}")

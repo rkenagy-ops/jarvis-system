@@ -557,6 +557,7 @@ def learn_from_turn(user_text: str, assistant_text: str, calls: list[dict] | Non
         "imagine": "data",
         "integrate": "research",
         "catalog": "research",
+        "oss": "github",
         "analyze_file": "data",
         "workspace_read": "data",
         "fetch_url": "research",

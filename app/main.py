@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response, StreamingRes
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import __version__, autonomy, catalog, config, github_client, markets, memory, obsidian, opensource, widgets, workspace, xai
+from . import __version__, autonomy, catalog, config, github_client, github_oss, markets, memory, obsidian, opensource, widgets, workspace, xai
 from .agents import list_public
 from .brain import think, think_events
 from .voice_live import handle_live
@@ -286,6 +286,21 @@ def opensource_status() -> dict:
     data = opensource.status()
     data["catalog"] = catalog.list_sources()
     return data
+
+
+@app.get("/api/oss")
+def oss_index() -> dict:
+    return {"starter_pack": github_oss.STARTER_PACK, "awesome": list(github_oss.AWESOME)}
+
+
+@app.get("/api/oss/search")
+def oss_search(q: str, limit: int = 8) -> dict:
+    return github_oss.search(q, limit)
+
+
+@app.post("/api/oss/ingest")
+def oss_ingest(repo: str) -> dict:
+    return github_oss.ingest(repo)
 
 
 @app.get("/api/catalog")

@@ -7,7 +7,7 @@ from urllib.parse import urlparse
 
 import httpx
 
-from . import catalog, config, github_client, markets, memory, obsidian, opensource, widgets, workspace
+from . import catalog, config, github_client, github_oss, markets, memory, obsidian, opensource, widgets, workspace
 from .agents import AGENTS
 
 BUILTIN_TOOLS = [
@@ -121,6 +121,7 @@ FUNCTION_TOOLS = [
                 "enum": [
                     "whoami", "list_repos", "get_repo", "list_issues", "create_issue", "comment_issue",
                     "list_pulls", "get_file", "search_code", "search_issues", "list_commits", "create_repo",
+                    "search_repos", "readme",
                 ],
             },
             "owner": {"type": "string"},
@@ -164,6 +165,23 @@ FUNCTION_TOOLS = [
             "query": {"type": "string", "description": "Search term, URL, symbol, CVE, domain, or country code"},
         },
         ["source"],
+    ),
+    _fn(
+        "oss",
+        "Pull open-source from GitHub: search, readme, ingest into vault, starter_pack, awesome lists, public_apis index, huggingface, youtube transcript.",
+        {
+            "action": {
+                "type": "string",
+                "enum": ["search", "readme", "ingest", "starter_pack", "awesome", "public_apis", "huggingface", "youtube"],
+            },
+            "query": {"type": "string"},
+            "repo": {"type": "string", "description": "owner/repo"},
+            "name": {"type": "string", "description": "awesome list key: public-apis|selfhosted|python|awesome"},
+            "url": {"type": "string"},
+            "limit": {"type": "integer"},
+            "kind": {"type": "string"},
+        },
+        ["action"],
     ),
 ]
 
@@ -259,6 +277,8 @@ def execute(name: str, arguments: dict[str, Any], *, session_id: str, agent_id: 
         return xai_mod.imagine(arguments.get("prompt") or "", filename=arguments.get("filename"))
     if name == "catalog":
         return catalog.call(arguments.get("source") or "", arguments.get("query") or "")
+    if name == "oss":
+        return github_oss.dispatch(arguments.get("action") or "search", **{k: v for k, v in arguments.items() if k != "action"})
     if name == "market":
         return markets.dispatch(arguments.get("action") or "quote", **{k: v for k, v in arguments.items() if k != "action"})
     if name == "github":

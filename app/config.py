@@ -18,6 +18,22 @@ def _clean(value: str | None) -> str:
     return (value or "").strip().strip('"').strip("'")
 
 
+def _gh_logged_in() -> bool:
+    if _clean(os.getenv("GH_TOKEN")) or _clean(os.getenv("GITHUB_TOKEN")):
+        return True
+    try:
+        import shutil
+        import subprocess
+
+        gh = shutil.which("gh") or r"C:\Program Files\GitHub CLI\gh.exe"
+        if not gh:
+            return False
+        subprocess.check_output([gh, "auth", "token"], timeout=5, stderr=subprocess.DEVNULL)
+        return True
+    except Exception:
+        return False
+
+
 VAULT_DIR = Path(_clean(os.getenv("OBSIDIAN_VAULT")) or str(ROOT / "vault"))
 DATA_DIR.mkdir(exist_ok=True)
 WORKSPACE_DIR.mkdir(exist_ok=True)
@@ -87,7 +103,7 @@ def save_env(updates: dict[str, str]) -> None:
 def status() -> dict:
     return {
         "xai_configured": bool(XAI_API_KEY),
-        "github_configured": bool(GITHUB_TOKEN),
+        "github_configured": bool(GITHUB_TOKEN) or _gh_logged_in(),
         "github_username": GITHUB_USERNAME or None,
         "owner": OWNER_NAME,
         "voice": VOICE,
