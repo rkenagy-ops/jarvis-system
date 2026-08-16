@@ -65,8 +65,64 @@ async function refreshStatus() {
   });
 
   const mem = data.memory || {};
+  $("mind").innerHTML = "";
   (mem.recent_insights || []).forEach((i) => addMind("insight", i.agent, i.claim));
   (mem.facts_list || []).slice(0, 6).forEach((f) => addMind("fact", f.key, f.value));
+  refreshWidgets();
+}
+
+async function refreshWidgets() {
+  try {
+    const [m, a] = await Promise.all([
+      fetch("/api/markets").then((r) => r.json()),
+      fetch("/api/autonomy").then((r) => r.json()),
+    ]);
+    const box = $("tickers");
+    if (box) {
+      box.innerHTML = "";
+      (m.watchlist || []).forEach((q) => {
+        if (!q.symbol || q.error) return;
+        const el = document.createElement("div");
+        const pct = q.change_pct;
+        el.className = `ticker ${pct > 0 ? "up" : pct < 0 ? "down" : ""}`;
+        el.innerHTML = `<div>${q.symbol}</div><div class="px">${q.price != null ? Number(q.price).toFixed(2) : "—"} ${pct != null ? `(${pct.toFixed(2)}%)` : ""}</div>`;
+        box.appendChild(el);
+      });
+    }
+    const acc = m.account || {};
+    if ($("equity")) {
+      $("equity").textContent = `${(acc.mode || "paper").toUpperCase()} EQ ${acc.equity != null ? Number(acc.equity).toFixed(2) : "—"}  CASH ${acc.cash != null ? Number(acc.cash).toFixed(2) : "—"}`;
+    }
+    const auto = $("auto");
+    if (auto) {
+      auto.innerHTML = "";
+      (a.jobs || []).forEach((j) => {
+        const el = document.createElement("div");
+        el.className = "item";
+        el.innerHTML = `<b>${j.name}</b><div></div>`;
+        el.lastChild.textContent = `${j.enabled ? "ON" : "OFF"} / ${j.every_sec}s — ${j.last_result || "pending"}`;
+        auto.appendChild(el);
+      });
+      (a.goals || []).forEach((g) => {
+        const el = document.createElement("div");
+        el.className = "item insight";
+        el.innerHTML = `<b>GOAL</b><div></div>`;
+        el.lastChild.textContent = g.title;
+        auto.appendChild(el);
+      });
+    }
+    const sk = $("skills");
+    if (sk) {
+      sk.innerHTML = "";
+      (a.skills || []).forEach((s) => {
+        const el = document.createElement("div");
+        el.className = "item";
+        el.innerHTML = `<b>${s.name}</b><div></div>`;
+        el.lastChild.textContent = `${s.uses} uses — ${s.playbook}`;
+        sk.appendChild(el);
+      });
+    }
+  } catch {}
 }
 
 function handleEvent(ev) {
@@ -311,4 +367,5 @@ $("save-keys").addEventListener("click", async () => {
 });
 
 refreshStatus().catch(() => setStatus("backend offline"));
+setInterval(refreshWidgets, 60000);
 setStatus("systems ready — good evening");

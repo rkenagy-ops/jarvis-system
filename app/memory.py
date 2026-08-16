@@ -77,6 +77,41 @@ def init() -> None:
             );
             CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id, created_at);
             CREATE INDEX IF NOT EXISTS idx_insights_session ON insights(session_id, created_at);
+            CREATE TABLE IF NOT EXISTS skills (
+                id TEXT PRIMARY KEY,
+                name TEXT UNIQUE NOT NULL,
+                playbook TEXT NOT NULL,
+                uses INTEGER NOT NULL DEFAULT 0,
+                last_used REAL NOT NULL,
+                created_at REAL NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS goals (
+                id TEXT PRIMARY KEY,
+                title TEXT NOT NULL,
+                detail TEXT,
+                status TEXT NOT NULL DEFAULT 'open',
+                priority REAL NOT NULL DEFAULT 0.5,
+                created_at REAL NOT NULL,
+                updated_at REAL NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS jobs (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                prompt TEXT NOT NULL,
+                every_sec INTEGER NOT NULL,
+                enabled INTEGER NOT NULL DEFAULT 1,
+                last_run REAL,
+                last_result TEXT,
+                created_at REAL NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS pending_actions (
+                id TEXT PRIMARY KEY,
+                kind TEXT NOT NULL,
+                payload TEXT NOT NULL,
+                created_at REAL NOT NULL,
+                expires_at REAL NOT NULL,
+                used INTEGER NOT NULL DEFAULT 0
+            );
             """
         )
         conn.executescript(
@@ -95,6 +130,35 @@ def init() -> None:
             conn.execute(
                 "INSERT INTO facts(key, value, confidence, source_agent, updated_at) VALUES(?,?,?,?,?)",
                 ("owner.name", config.OWNER_NAME, 0.99, "system", time.time()),
+            )
+        if not conn.execute("SELECT 1 FROM skills LIMIT 1").fetchone():
+            now = time.time()
+            seeds = [
+                ("research", "Search web + X, fetch primary sources, separate fact/rumor, cite."),
+                ("github", "Use github tool against rkenagy-ops. Never invent repo state."),
+                ("markets", "Pull quotes/history, compute indicators, paper-trade only unless confirm token is used."),
+                ("data", "Load workspace files, profile columns, summarize risk and anomalies."),
+                ("memory", "Write durable facts and skills after every useful lesson."),
+            ]
+            for name, playbook in seeds:
+                conn.execute(
+                    "INSERT INTO skills(id, name, playbook, uses, last_used, created_at) VALUES(?,?,?,?,?,?)",
+                    (str(uuid.uuid4()), name, playbook, 0, now, now),
+                )
+        if not conn.execute("SELECT 1 FROM jobs LIMIT 1").fetchone():
+            now = time.time()
+            conn.execute(
+                "INSERT INTO jobs(id, name, prompt, every_sec, enabled, last_run, last_result, created_at) VALUES(?,?,?,?,?,?,?,?)",
+                (
+                    str(uuid.uuid4()),
+                    "watchlist-scan",
+                    "Scan the watchlist. Note movers > 1.5% on the day. Write a short market pulse to memory. Do not trade.",
+                    900,
+                    1,
+                    None,
+                    None,
+                    now,
+                ),
             )
 
 
@@ -269,11 +333,21 @@ def snapshot(session_id: str, *, max_chars: int = 18000) -> str:
     mems = search("", limit=40)
     insights = recent_insights(session_id, limit=16)
     history = recent_messages(session_id, limit=18)
+    skills = list_skills()
+    goals = list_goals("open")
     parts = ["# SHARED MIND — full unlocked memory (all agents read this)"]
     if facts:
         parts.append("## Durable facts")
         for f in facts[:80]:
             parts.append(f"- {f['key']}: {f['value']} (conf {f['confidence']:.2f})")
+    if skills:
+        parts.append("## Growing skills")
+        for s in skills[:16]:
+            parts.append(f"- {s['name']} (uses {s['uses']}): {s['playbook']}")
+    if goals:
+        parts.append("## Open goals")
+        for g in goals[:12]:
+            parts.append(f"- [{g['priority']:.1f}] {g['title']}: {g.get('detail') or ''}")
     if mems:
         parts.append("## Long-term memories")
         for m in mems:
@@ -293,6 +367,193 @@ def snapshot(session_id: str, *, max_chars: int = 18000) -> str:
     return text
 
 
+def upsert_skill(name: str, playbook: str) -> dict:
+    now = time.time()
+    name = name.strip().lower()
+    with _db() as conn:
+        row = conn.execute("SELECT * FROM skills WHERE name=?", (name,)).fetchone()
+        if row:
+            conn.execute(
+                "UPDATE skills SET playbook=?, uses=uses+1, last_used=? WHERE name=?",
+                (playbook, now, name),
+            )
+        else:
+            conn.execute(
+                "INSERT INTO skills(id, name, playbook, uses, last_used, created_at) VALUES(?,?,?,?,?,?)",
+                (str(uuid.uuid4()), name, playbook, 1, now, now),
+            )
+    return {"name": name, "playbook": playbook}
+
+
+def bump_skill(name: str) -> None:
+    with _db() as conn:
+        conn.execute(
+            "UPDATE skills SET uses=uses+1, last_used=? WHERE name=?",
+            (time.time(), name.strip().lower()),
+        )
+
+
+def list_skills() -> list[dict]:
+    with _db() as conn:
+        return [dict(r) for r in conn.execute("SELECT * FROM skills ORDER BY uses DESC, last_used DESC").fetchall()]
+
+
+def add_goal(title: str, detail: str = "", priority: float = 0.5) -> dict:
+    now = time.time()
+    item = {
+        "id": str(uuid.uuid4()),
+        "title": title.strip(),
+        "detail": detail.strip(),
+        "status": "open",
+        "priority": priority,
+        "created_at": now,
+        "updated_at": now,
+    }
+    with _db() as conn:
+        conn.execute(
+            """INSERT INTO goals(id, title, detail, status, priority, created_at, updated_at)
+               VALUES(:id,:title,:detail,:status,:priority,:created_at,:updated_at)""",
+            item,
+        )
+    remember(f"Goal: {title} — {detail}", kind="goal", tags=["goal"], importance=0.7, source_agent="jarvis")
+    return item
+
+
+def update_goal(goal_id: str, status: str) -> bool:
+    with _db() as conn:
+        cur = conn.execute(
+            "UPDATE goals SET status=?, updated_at=? WHERE id=?",
+            (status, time.time(), goal_id),
+        )
+        return cur.rowcount > 0
+
+
+def list_goals(status: str | None = "open") -> list[dict]:
+    with _db() as conn:
+        if status:
+            rows = conn.execute("SELECT * FROM goals WHERE status=? ORDER BY priority DESC, updated_at DESC", (status,)).fetchall()
+        else:
+            rows = conn.execute("SELECT * FROM goals ORDER BY updated_at DESC LIMIT 30").fetchall()
+    return [dict(r) for r in rows]
+
+
+def add_job(name: str, prompt: str, every_sec: int = 1800, enabled: bool = True) -> dict:
+    item = {
+        "id": str(uuid.uuid4()),
+        "name": name,
+        "prompt": prompt,
+        "every_sec": int(every_sec),
+        "enabled": 1 if enabled else 0,
+        "last_run": None,
+        "last_result": None,
+        "created_at": time.time(),
+    }
+    with _db() as conn:
+        conn.execute(
+            """INSERT INTO jobs(id, name, prompt, every_sec, enabled, last_run, last_result, created_at)
+               VALUES(:id,:name,:prompt,:every_sec,:enabled,:last_run,:last_result,:created_at)""",
+            item,
+        )
+    return item
+
+
+def list_jobs() -> list[dict]:
+    with _db() as conn:
+        return [dict(r) for r in conn.execute("SELECT * FROM jobs ORDER BY name").fetchall()]
+
+
+def due_jobs() -> list[dict]:
+    now = time.time()
+    with _db() as conn:
+        rows = conn.execute("SELECT * FROM jobs WHERE enabled=1").fetchall()
+    out = []
+    for r in rows:
+        job = dict(r)
+        last = job.get("last_run") or 0
+        if now - last >= int(job["every_sec"]):
+            out.append(job)
+    return out
+
+
+def mark_job(job_id: str, result: str) -> None:
+    with _db() as conn:
+        conn.execute(
+            "UPDATE jobs SET last_run=?, last_result=? WHERE id=?",
+            (time.time(), result[:2000], job_id),
+        )
+
+
+def set_job_enabled(job_id: str, enabled: bool) -> bool:
+    with _db() as conn:
+        cur = conn.execute("UPDATE jobs SET enabled=? WHERE id=?", (1 if enabled else 0, job_id))
+        return cur.rowcount > 0
+
+
+def create_pending(kind: str, payload: dict, ttl_sec: int = 300) -> dict:
+    now = time.time()
+    item = {
+        "id": uuid.uuid4().hex[:12],
+        "kind": kind,
+        "payload": json.dumps(payload),
+        "created_at": now,
+        "expires_at": now + ttl_sec,
+        "used": 0,
+    }
+    with _db() as conn:
+        conn.execute(
+            """INSERT INTO pending_actions(id, kind, payload, created_at, expires_at, used)
+               VALUES(:id,:kind,:payload,:created_at,:expires_at,:used)""",
+            item,
+        )
+    return {"confirm_token": item["id"], "expires_in_sec": ttl_sec, "kind": kind, "payload": payload}
+
+
+def consume_pending(token: str) -> dict | None:
+    now = time.time()
+    with _db() as conn:
+        row = conn.execute("SELECT * FROM pending_actions WHERE id=?", (token,)).fetchone()
+        if not row:
+            return None
+        item = dict(row)
+        if item["used"] or item["expires_at"] < now:
+            return None
+        conn.execute("UPDATE pending_actions SET used=1 WHERE id=?", (token,))
+    item["payload"] = json.loads(item["payload"])
+    return item
+
+
+def learn_from_turn(user_text: str, assistant_text: str, calls: list[dict] | None = None) -> None:
+    calls = calls or []
+    names = [c.get("name") for c in calls if c.get("name")]
+    mapping = {
+        "github": "github",
+        "market": "markets",
+        "market_quote": "markets",
+        "market_history": "markets",
+        "market_analyze": "markets",
+        "paper_trade": "markets",
+        "workspace": "data",
+        "analyze_file": "data",
+        "workspace_read": "data",
+        "fetch_url": "research",
+        "wiki": "research",
+        "news_headlines": "research",
+    }
+    for n in names:
+        if n in mapping:
+            bump_skill(mapping[n])
+    snippet = (user_text or "")[:240]
+    reply = (assistant_text or "")[:400]
+    if snippet and reply:
+        remember(
+            f"Q: {snippet}\nA: {reply}",
+            kind="episode",
+            tags=["episode"] + names[:4],
+            importance=0.45,
+            source_agent="archivist",
+        )
+
+
 def dashboard() -> dict[str, Any]:
     with _db() as conn:
         mem_count = conn.execute("SELECT COUNT(*) FROM memories").fetchone()[0]
@@ -307,4 +568,7 @@ def dashboard() -> dict[str, Any]:
         "recent_memories": search("", limit=8),
         "facts_list": get_facts()[:20],
         "recent_insights": recent_insights(limit=10),
+        "skills": list_skills(),
+        "goals": list_goals("open"),
+        "jobs": list_jobs(),
     }

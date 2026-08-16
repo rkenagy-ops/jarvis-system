@@ -228,6 +228,8 @@ def think(
 
     final = last_text or ("I finished the tool work." if all_calls else "I'm here. What should we do?")
     memory.add_message(session_id, "assistant", final, agent=agent_id)
+    if persist_user and agent_id == "jarvis":
+        memory.learn_from_turn(user_text, final, all_calls)
     if emit:
         emit({"type": "done", "agent": agent_id, "text": final, "citations": citations, "calls": all_calls})
     return {"text": final, "agent": agent_id, "citations": citations, "calls": all_calls}

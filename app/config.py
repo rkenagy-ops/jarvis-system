@@ -8,11 +8,13 @@ from dotenv import load_dotenv
 ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = ROOT / "data"
 WEB_DIR = ROOT / "web"
+WORKSPACE_DIR = ROOT / "workspace"
 ENV_PATH = ROOT / ".env"
 
 load_dotenv(ENV_PATH)
 
 DATA_DIR.mkdir(exist_ok=True)
+WORKSPACE_DIR.mkdir(exist_ok=True)
 
 
 def _clean(value: str | None) -> str:
@@ -27,6 +29,11 @@ VOICE = _clean(os.getenv("JARVIS_VOICE")) or "orion"
 MODEL = _clean(os.getenv("JARVIS_MODEL")) or "grok-4.6"
 HOST = _clean(os.getenv("JARVIS_HOST")) or "127.0.0.1"
 PORT = int(_clean(os.getenv("JARVIS_PORT")) or "8787")
+TRADING_MODE = (_clean(os.getenv("TRADING_MODE")) or "paper").lower()
+TRADING_REQUIRE_CONFIRMATION = (_clean(os.getenv("TRADING_REQUIRE_CONFIRMATION")) or "true").lower() == "true"
+PAPER_CASH = float(_clean(os.getenv("PAPER_CASH")) or "100000")
+WATCHLIST = [s.strip().upper() for s in (_clean(os.getenv("JARVIS_WATCHLIST")) or "SPY,QQQ,AAPL,MSFT,NVDA,TSLA,BTC-USD").split(",") if s.strip()]
+AUTONOMY_ENABLED = (_clean(os.getenv("JARVIS_AUTONOMY")) or "true").lower() == "true"
 
 XAI_BASE = "https://api.x.ai/v1"
 XAI_REALTIME = "wss://api.x.ai/v1/realtime"
@@ -36,13 +43,15 @@ DB_PATH = DATA_DIR / "jarvis.db"
 
 def reload_env() -> None:
     load_dotenv(ENV_PATH, override=True)
-    global XAI_API_KEY, GITHUB_TOKEN, GITHUB_USERNAME, OWNER_NAME, VOICE, MODEL
+    global XAI_API_KEY, GITHUB_TOKEN, GITHUB_USERNAME, OWNER_NAME, VOICE, MODEL, TRADING_MODE, AUTONOMY_ENABLED
     XAI_API_KEY = _clean(os.getenv("XAI_API_KEY"))
     GITHUB_TOKEN = _clean(os.getenv("GITHUB_TOKEN"))
     GITHUB_USERNAME = _clean(os.getenv("GITHUB_USERNAME")) or "rkenagy-ops"
     OWNER_NAME = _clean(os.getenv("JARVIS_OWNER_NAME")) or "Rhett"
     VOICE = _clean(os.getenv("JARVIS_VOICE")) or "orion"
     MODEL = _clean(os.getenv("JARVIS_MODEL")) or "grok-4.6"
+    TRADING_MODE = (_clean(os.getenv("TRADING_MODE")) or "paper").lower()
+    AUTONOMY_ENABLED = (_clean(os.getenv("JARVIS_AUTONOMY")) or "true").lower() == "true"
 
 
 def save_env(updates: dict[str, str]) -> None:
@@ -72,4 +81,8 @@ def status() -> dict:
         "voice": VOICE,
         "model": MODEL,
         "online": True,
+        "trading_mode": TRADING_MODE,
+        "autonomy": AUTONOMY_ENABLED,
+        "watchlist": WATCHLIST,
+        "workspace": str(WORKSPACE_DIR),
     }

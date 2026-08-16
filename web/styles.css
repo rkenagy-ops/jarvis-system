@@ -104,6 +104,18 @@ body {
   margin-top: 18px; font-family: var(--mono); font-size: 11px; letter-spacing: 0.16em;
   color: var(--cyan); min-height: 16px; text-align: center;
 }
+.widgets {
+  display: flex; flex-wrap: wrap; gap: 8px; justify-content: center;
+  max-width: 640px; margin-top: 14px;
+}
+.ticker {
+  font-family: var(--mono); font-size: 11px; border: 1px solid var(--line);
+  padding: 4px 8px; min-width: 88px; text-align: center;
+}
+.ticker .px { color: var(--ink); }
+.ticker.up { color: var(--ok); border-color: rgba(52,211,153,0.35); }
+.ticker.down { color: var(--danger); border-color: rgba(244,63,94,0.35); }
+.equity { margin-top: 8px; font-family: var(--mono); font-size: 11px; color: var(--gold); letter-spacing: 0.12em; }
 
 .feed { font-family: var(--mono); font-size: 11px; color: var(--muted); line-height: 1.45; }
 .feed .item { padding: 7px 0; border-bottom: 1px solid rgba(255,255,255,0.04); }

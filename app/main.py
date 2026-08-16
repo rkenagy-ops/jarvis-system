@@ -7,12 +7,14 @@ from fastapi.responses import FileResponse, JSONResponse, Response, StreamingRes
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import __version__, config, github_client, memory, xai
+from . import __version__, autonomy, config, github_client, markets, memory, widgets, workspace, xai
 from .agents import list_public
 from .brain import think, think_events
 from .voice_live import handle_live
 
 memory.init()
+markets.init()
+autonomy.start()
 
 app = FastAPI(title="Super Jarvis", version=__version__)
 app.mount("/static", StaticFiles(directory=config.WEB_DIR), name="static")
@@ -30,6 +32,30 @@ class SettingsIn(BaseModel):
     github_username: str | None = None
     voice: str | None = None
     owner_name: str | None = None
+    trading_mode: str | None = None
+
+
+class TradeIn(BaseModel):
+    symbol: str
+    side: str
+    qty: float
+    confirm_token: str | None = None
+
+
+class ConfirmIn(BaseModel):
+    token: str
+
+
+class JobIn(BaseModel):
+    name: str
+    prompt: str
+    every_sec: int = 1800
+
+
+class GoalIn(BaseModel):
+    title: str
+    detail: str = ""
+    priority: float = 0.5
 
 
 class RememberIn(BaseModel):
@@ -82,6 +108,8 @@ def save_settings(body: SettingsIn) -> dict:
         updates["JARVIS_VOICE"] = body.voice
     if body.owner_name:
         updates["JARVIS_OWNER_NAME"] = body.owner_name
+    if body.trading_mode in {"paper", "live"}:
+        updates["TRADING_MODE"] = body.trading_mode
     if updates:
         config.save_env(updates)
     if config.GITHUB_TOKEN and not config.GITHUB_USERNAME:
@@ -155,6 +183,66 @@ def voice_session() -> dict:
 @app.websocket("/ws/live")
 async def live(ws: WebSocket, session_id: str = "live", voice: str | None = None) -> None:
     await handle_live(ws, session_id, voice)
+
+
+@app.get("/api/markets")
+def markets_dash() -> dict:
+    return {"watchlist": markets.watchlist(), "account": markets.account()}
+
+
+@app.get("/api/markets/quote")
+def markets_quote(symbol: str) -> dict:
+    return markets.quote(symbol)
+
+
+@app.get("/api/markets/analyze")
+def markets_analyze(symbol: str, range: str = "6mo") -> dict:
+    return markets.analyze(symbol, range)
+
+
+@app.post("/api/markets/trade")
+def markets_trade(body: TradeIn) -> dict:
+    return markets.paper_trade(body.symbol, body.side, body.qty, confirm_token=body.confirm_token)
+
+
+@app.post("/api/markets/confirm")
+def markets_confirm(body: ConfirmIn) -> dict:
+    return markets.confirm_trade(body.token)
+
+
+@app.get("/api/autonomy")
+def autonomy_dash() -> dict:
+    return autonomy.snapshot()
+
+
+@app.post("/api/autonomy/job")
+def autonomy_job(body: JobIn) -> dict:
+    return memory.add_job(body.name, body.prompt, body.every_sec)
+
+
+@app.post("/api/goals")
+def goals_add(body: GoalIn) -> dict:
+    return memory.add_goal(body.title, body.detail, body.priority)
+
+
+@app.get("/api/workspace")
+def workspace_list(path: str = ".") -> dict:
+    return workspace.list_files(path)
+
+
+@app.get("/api/widgets/weather")
+def widget_weather() -> dict:
+    return widgets.weather()
+
+
+@app.get("/api/widgets/news")
+def widget_news() -> dict:
+    return widgets.news()
+
+
+@app.get("/api/widgets/now")
+def widget_now() -> dict:
+    return widgets.now()
 
 
 @app.get("/api/github/me")

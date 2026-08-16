@@ -29,9 +29,12 @@ Open http://127.0.0.1:8787 and paste keys under **KEYS** if needed.
 | **ARCHIVIST** | Long-term memory |
 | **CRITIC** | Adversarial insight |
 | **STRATEGIST** | Plans |
-| **TRADER** | Paper analysis only — no live orders without confirm |
+| **TRADER** | Live quotes, RSI/MACD, paper broker (confirm for live/large) |
+| **ANALYST** | Workspace files + data profiles |
 
 Voice: hold **MIC**, or **LIVE VOICE** for realtime speech-to-speech.
+
+Autonomy: a background loop scans the watchlist, writes market pulses to memory, and runs jobs you schedule. Skills grow from what you actually use. Drop CSVs in `workspace/` and ask Analyst to profile them.
 
 ## Layout
 

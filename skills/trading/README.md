@@ -1,19 +1,26 @@
-Trading skill
+# Trading skill
 
-This folder documents how the trading repositories plug into jarvis-system as one optional skill for the Trading Skill Agent defined in orchestrator.py.
+Live desk is `app/markets.py`, exposed as the `market` tool and `/api/markets*`.
 
-Repositories used
+## What is wired
 
-ccxt provides a common interface to many crypto exchanges for data and order placement. freqtrade and hummingbot are full trading bot frameworks for strategy execution and market making. nautilus_trader and backtrader provide event-driven backtesting and live trading infrastructure. vectorbt is used for fast vectorized backtesting and research. FinRL and TradingAgents provide reinforcement learning and LLM-native multi-agent trading research frameworks. lumibot offers a simpler strategy and backtesting API. py-clob-client connects to Polymarket's central limit order book.
+- Quotes and daily history: Yahoo Finance (public), CoinGecko fallback for BTC/ETH/SOL
+- Analysis: SMA20/50, RSI14, MACD, 20-day realized vol, 20-day high/low, trend
+- Watchlist pulse every 15 minutes via autonomy (`watchlist-scan`)
+- Paper broker in SQLite: cash, positions, fills
+- Confirm tokens for live mode and large paper tickets (>= $25k)
 
-How it plugs in
+## Safety
 
-The Trading Skill Agent can use these libraries for analysis, backtesting, and generating recommendations. It should default to TRADING_MODE=paper from your .env file for anything resembling live execution.
+`TRADING_MODE=paper` is the default. Live mode never silently fills a brokerage order. It issues a `confirm_token`. `confirm_trade` still records a **paper** fill until a real broker (Alpaca, etc.) is connected. No path places an exchange order by itself.
 
-Safety requirement
+`TRADING_REQUIRE_CONFIRMATION` should stay `true`.
 
-This skill must never place a real order, transfer funds, or change exchange account settings without a human explicitly confirming that specific action in the moment. The confirm_action helper in orchestrator.py exists for exactly this purpose; any code path that reaches a live exchange call must go through it, and TRADING_REQUIRE_CONFIRMATION should stay set to true unless you have deliberately decided otherwise and understand the risk.
+## Owner usage
 
-Suggested first step
+Ask Jarvis: "Analyze NVDA and paper-buy 5 if RSI < 70."  
+Or hit `POST /api/markets/trade` then `POST /api/markets/confirm` with the token.
 
-Wire up one exchange in paper trading mode through ccxt, have the Trading Skill Agent produce a written recommendation, and manually review several of its recommendations before ever letting it touch a funded account.
+## Optional research stack
+
+The original libraries (ccxt, freqtrade, vectorbt, backtrader, FinRL, lumibot, nautilus_trader) remain optional research tools. They are not auto-imported. Do not attach funded keys until you have reviewed paper results.
