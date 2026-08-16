@@ -12,7 +12,12 @@ _thread: threading.Thread | None = None
 
 def run_job(job: dict[str, Any]) -> str:
     name = job.get("name") or ""
-    if name == "watchlist-scan" or "watchlist" in (job.get("prompt") or "").lower():
+    prompt = (job.get("prompt") or "").lower()
+    if name in {"morning-briefing", "briefing"} or "briefing" in prompt:
+        summary = briefing()
+        memory.mark_job(job["id"], summary[:400])
+        return summary
+    if name == "watchlist-scan" or prompt.strip().startswith("scan the watchlist"):
         quotes = markets.watchlist()
         movers = []
         for q in quotes:
@@ -28,10 +33,6 @@ def run_job(job: dict[str, Any]) -> str:
         except Exception:
             pass
         memory.mark_job(job["id"], summary)
-        return summary
-    if name in {"morning-briefing", "briefing"} or "briefing" in (job.get("prompt") or "").lower():
-        summary = briefing()
-        memory.mark_job(job["id"], summary[:400])
         return summary
     from . import xai
 

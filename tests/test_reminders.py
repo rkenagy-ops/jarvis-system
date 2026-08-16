@@ -43,3 +43,19 @@ def test_ensure_defaults(tmp_path, monkeypatch):
 
 def test_skill_timer():
     assert skills.match("set a timer for 5 minutes")["id"] == "timer"
+
+
+def test_briefing_job_not_treated_as_watchlist(monkeypatch):
+    called = {"brief": False}
+
+    monkeypatch.setattr(autonomy, "briefing", lambda **k: called.__setitem__("brief", True) or "BRIEF")
+    monkeypatch.setattr(memory, "mark_job", lambda *a, **k: None)
+    out = autonomy.run_job(
+        {
+            "id": "x",
+            "name": "morning-briefing",
+            "prompt": "Compile weather, watchlist, news, and open vault tasks.",
+        }
+    )
+    assert called["brief"] is True
+    assert out == "BRIEF"
