@@ -101,13 +101,15 @@ def retrieve(query: str, limit: int = 6) -> list[dict]:
     q = (query or "").strip()
     if not q:
         return []
+    tokens = TOKEN.findall(q.lower())
+    fts_q = " OR ".join(tokens) if tokens else q
     hits: list[dict] = []
     with _lock:
         conn = _conn()
         try:
             rows = conn.execute(
                 "SELECT path, heading, text FROM vault_fts WHERE vault_fts MATCH ? LIMIT ?",
-                (q, limit),
+                (fts_q, limit),
             ).fetchall()
         except sqlite3.OperationalError:
             rows = []
