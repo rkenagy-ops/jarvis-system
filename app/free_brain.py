@@ -207,7 +207,10 @@ def handle(user_text: str, emit=None) -> dict[str, Any]:
     use("catalog", source="duckduckgo", query=text)
     ddg = catalog.call("duckduckgo", text)
     use("wiki", query=text)
-    wiki = widgets.wiki(text)
+    try:
+        wiki = widgets.wiki(text)
+    except Exception as exc:
+        wiki = {"error": str(exc)}
     vault = obsidian.search(text)
     if emit:
         emit({"type": "tool_result", "name": "catalog", "result": ddg})

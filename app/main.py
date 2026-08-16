@@ -85,6 +85,12 @@ def index() -> FileResponse:
     return FileResponse(config.WEB_DIR / "index.html")
 
 
+@app.post("/api/brain/refresh")
+def brain_refresh() -> dict:
+    probe = xai.probe(force=True)
+    return {"brain": "grok" if probe.get("ok") else "free", "reason": probe.get("reason")}
+
+
 @app.get("/api/health")
 def health() -> dict:
     probe = xai.probe()
