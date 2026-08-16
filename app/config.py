@@ -13,12 +13,15 @@ ENV_PATH = ROOT / ".env"
 
 load_dotenv(ENV_PATH)
 
-DATA_DIR.mkdir(exist_ok=True)
-WORKSPACE_DIR.mkdir(exist_ok=True)
-
 
 def _clean(value: str | None) -> str:
     return (value or "").strip().strip('"').strip("'")
+
+
+VAULT_DIR = Path(_clean(os.getenv("OBSIDIAN_VAULT")) or str(ROOT / "vault"))
+DATA_DIR.mkdir(exist_ok=True)
+WORKSPACE_DIR.mkdir(exist_ok=True)
+VAULT_DIR.mkdir(exist_ok=True)
 
 
 XAI_API_KEY = _clean(os.getenv("XAI_API_KEY"))
@@ -34,6 +37,15 @@ TRADING_REQUIRE_CONFIRMATION = (_clean(os.getenv("TRADING_REQUIRE_CONFIRMATION")
 PAPER_CASH = float(_clean(os.getenv("PAPER_CASH")) or "100000")
 WATCHLIST = [s.strip().upper() for s in (_clean(os.getenv("JARVIS_WATCHLIST")) or "SPY,QQQ,AAPL,MSFT,NVDA,TSLA,BTC-USD").split(",") if s.strip()]
 AUTONOMY_ENABLED = (_clean(os.getenv("JARVIS_AUTONOMY")) or "true").lower() == "true"
+OBSIDIAN_API_URL = _clean(os.getenv("OBSIDIAN_API_URL"))
+OBSIDIAN_API_KEY = _clean(os.getenv("OBSIDIAN_API_KEY"))
+N8N_WEBHOOK_URL = _clean(os.getenv("N8N_WEBHOOK_URL"))
+JELLYFIN_URL = _clean(os.getenv("JELLYFIN_URL"))
+JELLYFIN_API_KEY = _clean(os.getenv("JELLYFIN_API_KEY"))
+IMMICH_URL = _clean(os.getenv("IMMICH_URL"))
+IMMICH_API_KEY = _clean(os.getenv("IMMICH_API_KEY"))
+POSTIZ_URL = _clean(os.getenv("POSTIZ_URL"))
+STIRLING_URL = _clean(os.getenv("STIRLING_URL"))
 
 XAI_BASE = "https://api.x.ai/v1"
 XAI_REALTIME = "wss://api.x.ai/v1/realtime"
@@ -85,4 +97,7 @@ def status() -> dict:
         "autonomy": AUTONOMY_ENABLED,
         "watchlist": WATCHLIST,
         "workspace": str(WORKSPACE_DIR),
+        "vault": str(VAULT_DIR),
+        "obsidian_api": bool(OBSIDIAN_API_URL),
+        "n8n": bool(N8N_WEBHOOK_URL),
     }

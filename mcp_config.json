@@ -7,13 +7,17 @@
         "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_TOKEN}"
       }
     },
-    "filesystem": {
+    "obsidian-vault": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "./vault"]
+    },
+    "workspace": {
       "command": "npx",
       "args": ["-y", "@modelcontextprotocol/server-filesystem", "./workspace"]
     },
-    "browser-use": {
+    "filesystem": {
       "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-browser-use"]
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "./workspace"]
     },
     "n8n": {
       "command": "npx",
@@ -21,10 +25,6 @@
       "env": {
         "N8N_BASE_URL": "http://localhost:5678"
       }
-    },
-    "crawl4ai": {
-      "command": "python",
-      "args": ["-m", "crawl4ai.mcp_server"]
     }
   }
 }

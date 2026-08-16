@@ -7,7 +7,7 @@ from urllib.parse import urlparse
 
 import httpx
 
-from . import config, github_client, markets, memory, widgets, workspace
+from . import config, github_client, markets, memory, obsidian, opensource, widgets, workspace
 from .agents import AGENTS
 
 BUILTIN_TOOLS = [
@@ -76,6 +76,40 @@ FUNCTION_TOOLS = [
         ["action"],
     ),
     _fn(
+        "obsidian",
+        "Obsidian vault (local markdown PKM). Actions: list, read, write, append, search, daily, backlinks, capture.",
+        {
+            "action": {"type": "string", "enum": ["list", "read", "write", "append", "search", "daily", "backlinks", "capture"]},
+            "path": {"type": "string"},
+            "content": {"type": "string"},
+            "query": {"type": "string"},
+            "date": {"type": "string"},
+            "kind": {"type": "string"},
+            "mode": {"type": "string"},
+            "limit": {"type": "integer"},
+            "tags": {"type": "array", "items": {"type": "string"}},
+        },
+        ["action"],
+    ),
+    _fn(
+        "integrate",
+        "Open-source adapters from the GitHub scaffold: crawl, pdf, calendar_add, calendar_list, n8n, jellyfin, immich, postiz, status.",
+        {
+            "action": {
+                "type": "string",
+                "enum": ["crawl", "pdf", "calendar_add", "calendar_list", "n8n", "jellyfin", "immich", "postiz", "status"],
+            },
+            "url": {"type": "string"},
+            "path": {"type": "string"},
+            "title": {"type": "string"},
+            "when": {"type": "string"},
+            "detail": {"type": "string"},
+            "payload": {"type": "string"},
+            "max_pages": {"type": "integer"},
+        },
+        ["action"],
+    ),
+    _fn(
         "github",
         "Operate on the owner's GitHub account (rkenagy-ops).",
         {
@@ -136,6 +170,8 @@ def tools_for(agent_id: str, *, allow_spawn: bool = False) -> list[dict]:
             continue
         if name == "workspace" and agent_id not in _FILE_AGENTS:
             continue
+        if name == "obsidian" and agent_id not in {"jarvis", "archivist", "strategist", "analyst", "trader"}:
+            continue
         out.append(fn)
     return out
 
@@ -195,6 +231,10 @@ def execute(name: str, arguments: dict[str, Any], *, session_id: str, agent_id: 
         return widgets.now()
     if name == "workspace":
         return workspace.dispatch(arguments.get("action") or "list", **{k: v for k, v in arguments.items() if k != "action"})
+    if name == "obsidian":
+        return obsidian.dispatch(arguments.get("action") or "list", **{k: v for k, v in arguments.items() if k != "action"})
+    if name == "integrate":
+        return opensource.dispatch(arguments.get("action") or "status", **{k: v for k, v in arguments.items() if k != "action"})
     if name == "market":
         return markets.dispatch(arguments.get("action") or "quote", **{k: v for k, v in arguments.items() if k != "action"})
     if name == "github":

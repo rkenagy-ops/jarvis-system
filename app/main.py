@@ -7,13 +7,14 @@ from fastapi.responses import FileResponse, JSONResponse, Response, StreamingRes
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import __version__, autonomy, config, github_client, markets, memory, widgets, workspace, xai
+from . import __version__, autonomy, config, github_client, markets, memory, obsidian, opensource, widgets, workspace, xai
 from .agents import list_public
 from .brain import think, think_events
 from .voice_live import handle_live
 
 memory.init()
 markets.init()
+obsidian.init_vault()
 autonomy.start()
 
 app = FastAPI(title="Super Jarvis", version=__version__)
@@ -223,6 +224,26 @@ def autonomy_job(body: JobIn) -> dict:
 @app.post("/api/goals")
 def goals_add(body: GoalIn) -> dict:
     return memory.add_goal(body.title, body.detail, body.priority)
+
+
+@app.get("/api/vault")
+def vault_list(folder: str = "") -> dict:
+    return obsidian.list_notes(folder)
+
+
+@app.get("/api/vault/search")
+def vault_search(q: str) -> dict:
+    return obsidian.search(q)
+
+
+@app.get("/api/vault/daily")
+def vault_daily() -> dict:
+    return obsidian.daily()
+
+
+@app.get("/api/opensource")
+def opensource_status() -> dict:
+    return opensource.status()
 
 
 @app.get("/api/workspace")

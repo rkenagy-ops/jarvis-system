@@ -39,5 +39,10 @@ services:
     ports:
       - "10200:10200"
 
+  stirling:
+    image: stirlingtools/stirling-pdf:latest
+    ports:
+      - "8080:8080"
+
 volumes:
   n8n_data:

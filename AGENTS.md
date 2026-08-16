@@ -8,4 +8,6 @@ Local multi-agent OS for Rhett. Python FastAPI + SpaceXAI (xAI) + GitHub.
 - GitHub access is the owner's PAT (`GITHUB_TOKEN`), not a hardcoded account.
 - Agents share one SQLite mind in `data/jarvis.db`. Do not silo memory.
 - Trading defaults to paper. Live fills require a confirm token. Do not add silent live brokerage.
+- Knowledge source of truth is the Obsidian vault in `vault/`. Keep wikilinks and frontmatter.
+- Claude/Anthropic/Supabase/Kimi are optional. Do not make them required again.
 - Do not add jailbreak / safety-bypass features.

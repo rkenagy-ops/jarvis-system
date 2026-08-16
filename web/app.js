@@ -73,9 +73,10 @@ async function refreshStatus() {
 
 async function refreshWidgets() {
   try {
-    const [m, a] = await Promise.all([
+    const [m, a, v] = await Promise.all([
       fetch("/api/markets").then((r) => r.json()),
       fetch("/api/autonomy").then((r) => r.json()),
+      fetch("/api/vault").then((r) => r.json()).catch(() => ({ notes: [] })),
     ]);
     const box = $("tickers");
     if (box) {
@@ -120,6 +121,17 @@ async function refreshWidgets() {
         el.innerHTML = `<b>${s.name}</b><div></div>`;
         el.lastChild.textContent = `${s.uses} uses — ${s.playbook}`;
         sk.appendChild(el);
+      });
+    }
+    const vaultEl = $("vault");
+    if (vaultEl) {
+      vaultEl.innerHTML = "";
+      (v.notes || []).slice(0, 10).forEach((n) => {
+        const el = document.createElement("div");
+        el.className = "item";
+        el.innerHTML = `<b>${n.title}</b><div></div>`;
+        el.lastChild.textContent = n.path;
+        vaultEl.appendChild(el);
       });
     }
   } catch {}

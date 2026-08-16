@@ -191,6 +191,12 @@ def remember(
         )
     item["tags"] = tags or []
     item["metadata"] = metadata or {}
+    try:
+        from . import obsidian
+
+        obsidian.capture_memory(kind, content, tags or [kind])
+    except Exception:
+        pass
     return item
 
 
