@@ -5,7 +5,7 @@ from collections.abc import Callable, Iterator
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
 
-from . import config, memory, tools, xai
+from . import config, free_brain, memory, tools, xai
 from .agents import AGENTS, conductor_system, get, specialist_system
 
 EventFn = Callable[[dict[str, Any]], None]
@@ -170,6 +170,19 @@ def think(
     if persist_user:
         memory.add_message(session_id, "user", user_text)
 
+    probe = xai.probe()
+    if not probe.get("ok"):
+        if emit:
+            emit({"type": "status", "text": f"grok offline ({probe.get('reason')}) — free APIs"})
+        result = free_brain.handle(user_text, emit=emit)
+        final = result.get("text") or "Free brain had nothing to add."
+        memory.add_message(session_id, "assistant", final, agent=agent_id)
+        if persist_user and agent_id == "jarvis":
+            memory.learn_from_turn(user_text, final, result.get("calls") or [])
+        if emit:
+            emit({"type": "done", "agent": agent_id, "text": final, "citations": [], "calls": result.get("calls") or [], "brain": "free"})
+        return {"text": final, "agent": agent_id, "citations": [], "calls": result.get("calls") or [], "brain": "free"}
+
     mind = memory.snapshot(session_id)
     try:
         from . import obsidian
@@ -177,6 +190,41 @@ def think(
         mind = mind + "\n\n" + obsidian.context_pack(user_text)
     except Exception:
         pass
+
+    try:
+        return _think_grok(
+            user_text,
+            session_id=session_id,
+            agent_id=agent_id,
+            allow_spawn=allow_spawn,
+            persist_user=persist_user,
+            emit=emit,
+            max_rounds=max_rounds,
+            mind=mind,
+        )
+    except xai.XAIError as exc:
+        if emit:
+            emit({"type": "status", "text": f"grok error — free APIs ({exc})"})
+        xai._probe.update(ok=False, reason="credits_or_auth", checked=__import__("time").time())
+        result = free_brain.handle(user_text, emit=emit)
+        final = result.get("text") or str(exc)
+        memory.add_message(session_id, "assistant", final, agent=agent_id)
+        if emit:
+            emit({"type": "done", "agent": agent_id, "text": final, "citations": [], "calls": result.get("calls") or [], "brain": "free"})
+        return {"text": final, "agent": agent_id, "citations": [], "calls": result.get("calls") or [], "brain": "free"}
+
+
+def _think_grok(
+    user_text: str,
+    *,
+    session_id: str,
+    agent_id: str,
+    allow_spawn: bool,
+    persist_user: bool,
+    emit: EventFn | None,
+    max_rounds: int,
+    mind: str,
+) -> dict[str, Any]:
     if agent_id == "jarvis":
         system = conductor_system(mind)
     else:
@@ -238,7 +286,7 @@ def think(
         memory.learn_from_turn(user_text, final, all_calls)
     if emit:
         emit({"type": "done", "agent": agent_id, "text": final, "citations": citations, "calls": all_calls})
-    return {"text": final, "agent": agent_id, "citations": citations, "calls": all_calls}
+    return {"text": final, "agent": agent_id, "citations": citations, "calls": all_calls, "brain": "grok"}
 
 
 def think_events(user_text: str, session_id: str, agent_id: str = "jarvis") -> Iterator[dict[str, Any]]:

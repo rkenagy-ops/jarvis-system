@@ -9,6 +9,7 @@ const state = {
   ws: null,
   audioCtx: null,
   playTime: 0,
+  useBrowserVoice: true,
 };
 
 localStorage.setItem("jarvis.session", state.sessionId);
@@ -47,7 +48,11 @@ async function refreshStatus() {
   const data = await res.json();
   $("xai-dot").className = `dot ${data.xai_configured ? "on" : "off"}`;
   $("gh-dot").className = `dot ${data.github_configured ? "on" : "off"}`;
-  $("xai-label").textContent = data.xai_configured ? "XAI READY" : "XAI MISSING";
+  $("xai-label").textContent = data.xai_configured ? "XAI KEY" : "XAI MISSING";
+  const grok = data.brain === "grok";
+  $("brain-dot").className = `dot ${grok ? "on" : "warn"}`;
+  $("brain-label").textContent = grok ? "GROK" : "FREE APIS";
+  state.useBrowserVoice = !grok;
   const gh = data.github && data.github.login;
   $("gh-label").textContent = gh ? `GH ${gh}` : data.github_configured ? "GITHUB" : "GH MISSING";
   if (!data.xai_configured) $("modal").classList.add("show");
@@ -251,13 +256,28 @@ async function sendText(text, { speak = true } = {}) {
   $("orb").classList.remove("talk");
 }
 
+function browserSpeak(text) {
+  if (!window.speechSynthesis) return;
+  const u = new SpeechSynthesisUtterance(text.slice(0, 800));
+  u.rate = 1.02;
+  speechSynthesis.cancel();
+  speechSynthesis.speak(u);
+}
+
 async function maybeSpeak(text) {
   if (state.live || !text) return;
+  if (state.useBrowserVoice) {
+    browserSpeak(text);
+    return;
+  }
   try {
     const body = new FormData();
     body.append("text", text.slice(0, 1200));
     const res = await fetch("/api/voice/tts", { method: "POST", body });
-    if (!res.ok) return;
+    if (!res.ok) {
+      browserSpeak(text);
+      return;
+    }
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
     const audio = new Audio(url);
@@ -267,6 +287,29 @@ async function maybeSpeak(text) {
 }
 
 async function startHoldToTalk() {
+  const Rec = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (state.useBrowserVoice && Rec) {
+    const rec = new Rec();
+    rec.lang = "en-US";
+    rec.onresult = (e) => {
+      const said = e.results[0][0].transcript;
+      $("orb").classList.remove("listen");
+      $("mic").classList.remove("rec");
+      if (said) sendText(said);
+    };
+    rec.onerror = () => {
+      $("orb").classList.remove("listen");
+      $("mic").classList.remove("rec");
+      setStatus("browser mic error");
+    };
+    rec.start();
+    state.rec = true;
+    $("orb").classList.add("listen");
+    $("mic").classList.add("rec");
+    setStatus("listening (browser)");
+    state.browserRec = rec;
+    return;
+  }
   state.media = await navigator.mediaDevices.getUserMedia({ audio: true });
   state.chunks = [];
   const rec = new MediaRecorder(state.media);
@@ -293,6 +336,11 @@ async function startHoldToTalk() {
 }
 
 function stopHoldToTalk() {
+  if (state.browserRec && state.rec) {
+    try { state.browserRec.stop(); } catch {}
+    state.rec = false;
+    return;
+  }
   if (state.recorder && state.rec) {
     state.rec = false;
     state.recorder.stop();

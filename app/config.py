@@ -116,4 +116,5 @@ def status() -> dict:
         "vault": str(VAULT_DIR),
         "obsidian_api": bool(OBSIDIAN_API_URL),
         "n8n": bool(N8N_WEBHOOK_URL),
+        "brain": "grok" if XAI_API_KEY else "free",
     }

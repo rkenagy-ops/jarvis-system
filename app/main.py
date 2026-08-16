@@ -87,7 +87,14 @@ def index() -> FileResponse:
 
 @app.get("/api/health")
 def health() -> dict:
-    return {"ok": True, "version": __version__, **config.status()}
+    probe = xai.probe()
+    return {
+        "ok": True,
+        "version": __version__,
+        **config.status(),
+        "brain": "grok" if probe.get("ok") else "free",
+        "brain_reason": probe.get("reason"),
+    }
 
 
 @app.get("/api/status")
@@ -98,8 +105,11 @@ def status() -> dict:
             github = github_client.whoami()
         except Exception as exc:
             github = {"error": str(exc)}
+    probe = xai.probe()
     return {
         **config.status(),
+        "brain": "grok" if probe.get("ok") else "free",
+        "brain_reason": probe.get("reason"),
         "github": github,
         "agents": list_public(),
         "memory": memory.dashboard(),
@@ -160,7 +170,10 @@ def memory_search(q: str = "", limit: int = 12) -> dict:
 @app.post("/api/chat")
 def chat(body: ChatIn) -> dict:
     session_id = body.session_id or str(uuid.uuid4())
-    result = think(body.message, session_id=session_id, agent_id=body.agent or "jarvis")
+    try:
+        result = think(body.message, session_id=session_id, agent_id=body.agent or "jarvis")
+    except Exception as exc:
+        return {"text": f"I hit a problem: {exc}", "session_id": session_id, "brain": "free", "error": str(exc)}
     result["session_id"] = session_id
     return result
 

@@ -6,11 +6,42 @@ from typing import Any
 
 import httpx
 
+import time
+
 from . import config
 
 
 class XAIError(RuntimeError):
     pass
+
+
+_probe: dict[str, Any] = {"ok": None, "reason": "untested", "checked": 0.0}
+
+
+def probe(*, force: bool = False) -> dict[str, Any]:
+    now = time.time()
+    if not force and _probe["ok"] is not None and now - _probe["checked"] < 90:
+        return _probe
+    if not config.XAI_API_KEY:
+        _probe.update(ok=False, reason="no_key", checked=now)
+        return _probe
+    try:
+        with httpx.Client(timeout=20.0) as client:
+            resp = client.post(
+                f"{config.XAI_BASE}/responses",
+                headers=_headers(),
+                json={"model": config.MODEL, "input": "ok"},
+            )
+        if resp.status_code == 200:
+            _probe.update(ok=True, reason="ready", checked=now)
+        elif resp.status_code in {401, 403}:
+            _probe.update(ok=False, reason="credits_or_auth", checked=now)
+        else:
+            # Unknown — let Grok try; free fallback still catches errors.
+            _probe.update(ok=True, reason=f"http_{resp.status_code}", checked=now)
+    except Exception:
+        _probe.update(ok=False, reason="network", checked=now)
+    return _probe
 
 
 def _headers() -> dict[str, str]:
