@@ -170,6 +170,18 @@ def think(
     if persist_user:
         memory.add_message(session_id, "user", user_text)
 
+    if config.OFFLINE:
+        if emit:
+            emit({"type": "status", "text": "offline mode — free APIs only"})
+        result = free_brain.handle(user_text, emit=emit)
+        final = result.get("text") or "Offline brain had nothing to add."
+        memory.add_message(session_id, "assistant", final, agent=agent_id)
+        if persist_user and agent_id == "jarvis":
+            memory.learn_from_turn(user_text, final, result.get("calls") or [])
+        if emit:
+            emit({"type": "done", "agent": agent_id, "text": final, "citations": [], "calls": result.get("calls") or [], "brain": "offline"})
+        return {"text": final, "agent": agent_id, "citations": [], "calls": result.get("calls") or [], "brain": "offline"}
+
     probe = xai.probe()
     if not probe.get("ok"):
         if emit:

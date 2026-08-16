@@ -33,6 +33,8 @@ def test_tools_for_specialist_no_spawn():
 def test_fetch_url_rejects_bad_scheme():
     assert "error" in tools.fetch_url("file:///etc/passwd")
     assert "error" in tools.fetch_url("not-a-url")
+    assert "error" in tools.fetch_url("http://127.0.0.1:8787/api/settings")
+    assert "error" in tools.fetch_url("http://169.254.169.254/latest/meta-data/")
 
 
 def test_memory_roundtrip(tmp_path, monkeypatch):

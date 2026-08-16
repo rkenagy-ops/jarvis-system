@@ -18,9 +18,13 @@ UA = {"User-Agent": "SuperJarvis/2.0 (+https://github.com/rkenagy-ops/jarvis-sys
 
 
 def crawl(url: str, max_pages: int = 5) -> dict:
+    from . import guard
+
     parsed = urlparse(url)
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
         return {"error": "Only http(s) URLs"}
+    if not guard.allow_url(url):
+        return {"error": "Blocked private/loopback URL"}
     max_pages = max(1, min(int(max_pages or 5), 8))
     seen: set[str] = set()
     queue = [url]

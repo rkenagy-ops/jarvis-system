@@ -48,6 +48,10 @@ VOICE = _clean(os.getenv("JARVIS_VOICE")) or "orion"
 MODEL = _clean(os.getenv("JARVIS_MODEL")) or "grok-4.6"
 HOST = _clean(os.getenv("JARVIS_HOST")) or "127.0.0.1"
 PORT = int(_clean(os.getenv("JARVIS_PORT")) or "8787")
+JARVIS_TOKEN = _clean(os.getenv("JARVIS_TOKEN"))
+JARVIS_ALLOW_LAN = (_clean(os.getenv("JARVIS_ALLOW_LAN")) or "false").lower() == "true"
+JARVIS_PUBLIC_HOST = _clean(os.getenv("JARVIS_PUBLIC_HOST"))
+OFFLINE = (_clean(os.getenv("JARVIS_OFFLINE")) or "false").lower() == "true"
 TRADING_MODE = (_clean(os.getenv("TRADING_MODE")) or "paper").lower()
 TRADING_REQUIRE_CONFIRMATION = (_clean(os.getenv("TRADING_REQUIRE_CONFIRMATION")) or "true").lower() == "true"
 PAPER_CASH = float(_clean(os.getenv("PAPER_CASH")) or "100000")
@@ -78,6 +82,7 @@ def reload_env() -> None:
     load_dotenv(ENV_PATH, override=True)
     global XAI_API_KEY, GITHUB_TOKEN, GITHUB_USERNAME, OWNER_NAME, VOICE, MODEL, TRADING_MODE, AUTONOMY_ENABLED
     global WORDPRESS_URL, WORDPRESS_USER, WORDPRESS_APP_PASSWORD, X_BEARER_TOKEN, POSTIZ_URL
+    global JARVIS_TOKEN, JARVIS_ALLOW_LAN, JARVIS_PUBLIC_HOST, OFFLINE, HOST, PORT
     XAI_API_KEY = _clean(os.getenv("XAI_API_KEY"))
     GITHUB_TOKEN = _clean(os.getenv("GITHUB_TOKEN"))
     GITHUB_USERNAME = _clean(os.getenv("GITHUB_USERNAME")) or "rkenagy-ops"
@@ -91,6 +96,12 @@ def reload_env() -> None:
     WORDPRESS_APP_PASSWORD = _clean(os.getenv("WORDPRESS_APP_PASSWORD"))
     X_BEARER_TOKEN = _clean(os.getenv("X_BEARER_TOKEN"))
     POSTIZ_URL = _clean(os.getenv("POSTIZ_URL"))
+    JARVIS_TOKEN = _clean(os.getenv("JARVIS_TOKEN"))
+    JARVIS_ALLOW_LAN = (_clean(os.getenv("JARVIS_ALLOW_LAN")) or "false").lower() == "true"
+    JARVIS_PUBLIC_HOST = _clean(os.getenv("JARVIS_PUBLIC_HOST"))
+    OFFLINE = (_clean(os.getenv("JARVIS_OFFLINE")) or "false").lower() == "true"
+    HOST = _clean(os.getenv("JARVIS_HOST")) or "127.0.0.1"
+    PORT = int(_clean(os.getenv("JARVIS_PORT")) or "8787")
 
 
 def save_env(updates: dict[str, str]) -> None:
@@ -119,7 +130,7 @@ def status() -> dict:
         "owner": OWNER_NAME,
         "voice": VOICE,
         "model": MODEL,
-        "online": True,
+        "online": not OFFLINE,
         "trading_mode": TRADING_MODE,
         "autonomy": AUTONOMY_ENABLED,
         "watchlist": WATCHLIST,
@@ -127,5 +138,6 @@ def status() -> dict:
         "vault": str(VAULT_DIR),
         "obsidian_api": bool(OBSIDIAN_API_URL),
         "n8n": bool(N8N_WEBHOOK_URL),
-        "brain": "grok" if XAI_API_KEY else "free",
+        "brain": "offline" if OFFLINE else ("grok" if XAI_API_KEY else "free"),
+        "offline": OFFLINE,
     }

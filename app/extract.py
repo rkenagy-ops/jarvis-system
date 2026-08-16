@@ -10,6 +10,10 @@ from . import catalog, config, obsidian, opensource
 
 
 def from_url(url: str) -> dict:
+    from . import guard
+
+    if not guard.allow_url(url):
+        return {"error": "Blocked private/loopback URL", "url": url}
     text = ""
     via = ""
     try:

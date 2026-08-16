@@ -13,6 +13,29 @@ const state = {
 };
 
 localStorage.setItem("jarvis.session", state.sessionId);
+state.token = localStorage.getItem("jarvis.token") || "";
+const _fetch = window.fetch.bind(window);
+window.fetch = (input, init = {}) => {
+  const url = typeof input === "string" ? input : (input && input.url) || "";
+  if (typeof url === "string" && url.startsWith("/api/") && state.token) {
+    const headers = new Headers(init.headers || (input && input.headers) || {});
+    headers.set("X-Jarvis-Token", state.token);
+    init = Object.assign({}, init, { headers });
+  }
+  return _fetch(input, init);
+};
+
+async function bootstrapGuard() {
+  try {
+    const res = await _fetch("/api/guard/bootstrap");
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data.token) {
+      state.token = data.token;
+      localStorage.setItem("jarvis.token", data.token);
+    }
+  } catch {}
+}
 
 function setStatus(text) {
   $("status").textContent = text.toUpperCase();
@@ -56,6 +79,15 @@ async function refreshStatus() {
   const gh = data.github && data.github.login;
   $("gh-label").textContent = gh ? `GH ${gh}` : data.github_configured ? "GITHUB" : "GH MISSING";
   if (!data.xai_configured) $("modal").classList.add("show");
+  const fort = data.fortress || {};
+  if ($("lock-label")) {
+    $("lock-dot").className = `dot ${fort.loopback_only ? "on" : "warn"}`;
+    $("lock-label").textContent = fort.loopback_only ? "LOCAL" : "LAN";
+  }
+  if ($("net-label")) {
+    $("net-dot").className = `dot ${data.online === false ? "off" : "on"}`;
+    $("net-label").textContent = data.online === false ? "OFFLINE" : "OUTBOUND";
+  }
 
   const box = $("agents");
   box.innerHTML = "";
@@ -436,7 +468,7 @@ async function toggleLive() {
     return;
   }
   const proto = location.protocol === "https:" ? "wss" : "ws";
-  const ws = new WebSocket(`${proto}://${location.host}/ws/live?session_id=${state.sessionId}`);
+  const ws = new WebSocket(`${proto}://${location.host}/ws/live?session_id=${state.sessionId}&token=${encodeURIComponent(state.token || "")}`);
   state.ws = ws;
   ws.onopen = async () => {
     state.live = true;
@@ -631,6 +663,9 @@ async function saveDraft(schedule) {
 $("studio-save").addEventListener("click", () => saveDraft(false));
 $("studio-sched").addEventListener("click", () => saveDraft(true));
 
-refreshStatus().catch(() => setStatus("backend offline"));
+bootstrapGuard()
+  .then(() => refreshStatus())
+  .then(() => refreshWidgets())
+  .catch(() => setStatus("backend offline"));
 setInterval(refreshWidgets, 60000);
-setStatus("systems ready — good evening");
+setStatus("systems ready — fortress on");

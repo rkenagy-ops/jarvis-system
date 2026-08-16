@@ -281,12 +281,17 @@ def tools_for(agent_id: str, *, allow_spawn: bool = False) -> list[dict]:
 
 
 def fetch_url(url: str) -> dict:
+    from . import guard
+
     parsed = urlparse(url)
     if parsed.scheme not in ("http", "https") or not parsed.netloc:
         return {"error": "Only http(s) URLs are allowed."}
-    headers = {"User-Agent": "SuperJarvis/1.2 (+local assistant)"}
-    with httpx.Client(timeout=25.0, follow_redirects=True, headers=headers) as client:
-        resp = client.get(url)
+    if not guard.allow_url(url):
+        return {"error": "Blocked private/loopback URL"}
+    try:
+        resp = guard.fetch_public(url, headers={"User-Agent": "SuperJarvis/3.1 (+local assistant)"})
+    except Exception as exc:
+        return {"error": str(exc)}
     text = resp.text
     text = re.sub(r"(?is)<(script|style|noscript).*?>.*?</\1>", " ", text)
     text = re.sub(r"(?is)<[^>]+>", " ", text)

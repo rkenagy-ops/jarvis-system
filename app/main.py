@@ -4,12 +4,12 @@ import json
 import uuid
 from pathlib import Path
 
-from fastapi import FastAPI, File, Form, UploadFile, WebSocket
+from fastapi import FastAPI, File, Form, Request, UploadFile, WebSocket
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import __version__, autonomy, catalog, config, github_client, github_oss, markets, memory, obsidian, opensource, ops, rag, widgets, workspace, xai
+from . import __version__, autonomy, catalog, config, github_client, github_oss, guard, markets, memory, obsidian, opensource, ops, rag, widgets, workspace, xai
 from .agents import list_public
 from .brain import think, think_events
 from .voice_live import handle_live
@@ -25,8 +25,31 @@ except Exception:
     pass
 autonomy.start()
 
-app = FastAPI(title="Super Jarvis", version=__version__)
+app = FastAPI(title="Super Jarvis", version=__version__, docs_url=None, redoc_url=None, openapi_url=None)
 app.mount("/static", StaticFiles(directory=config.WEB_DIR), name="static")
+
+_OPEN_PATHS = {"/", "/favicon.ico", "/api/health", "/api/guard/bootstrap"}
+
+
+@app.middleware("http")
+async def fortress(request: Request, call_next):
+    path = request.url.path
+    if path.startswith("/static"):
+        return await call_next(request)
+    if not guard.host_ok(request.headers.get("host") or ""):
+        return JSONResponse({"error": "bad host"}, status_code=403)
+    if path == "/api/guard/bootstrap":
+        client = request.client.host if request.client else ""
+        if not guard.is_loopback_ip(client):
+            return JSONResponse({"error": "bootstrap only from this machine"}, status_code=403)
+        return await call_next(request)
+    if path in _OPEN_PATHS:
+        return await call_next(request)
+    if path.startswith("/api/"):
+        given = request.headers.get("x-jarvis-token") or request.query_params.get("token")
+        if not guard.token_ok(given):
+            return JSONResponse({"error": "jarvis locked"}, status_code=401)
+    return await call_next(request)
 
 
 class ChatIn(BaseModel):
@@ -153,8 +176,9 @@ def health() -> dict:
         "ok": True,
         "version": __version__,
         **config.status(),
-        "brain": "grok" if probe.get("ok") else "free",
-        "brain_reason": probe.get("reason"),
+        "brain": "offline" if config.OFFLINE else ("grok" if probe.get("ok") else "free"),
+        "brain_reason": "offline" if config.OFFLINE else probe.get("reason"),
+        "fortress": guard.posture(),
     }
 
 
@@ -174,6 +198,8 @@ def status() -> dict:
         "github": github,
         "agents": list_public(),
         "memory": memory.dashboard(),
+        "fortress": guard.posture(),
+        "online": not config.OFFLINE,
         "voices": [
             "orion", "eve", "atlas", "ara", "leo", "luna", "rex", "iris",
             "helios", "celeste", "sirius", "aurora", "zenith",
@@ -280,7 +306,10 @@ def voice_session() -> dict:
 
 
 @app.websocket("/ws/live")
-async def live(ws: WebSocket, session_id: str = "live", voice: str | None = None) -> None:
+async def live(ws: WebSocket, session_id: str = "live", voice: str | None = None, token: str | None = None) -> None:
+    if not guard.token_ok(token):
+        await ws.close(code=4401)
+        return
     await handle_live(ws, session_id, voice)
 
 
@@ -523,10 +552,17 @@ def favicon() -> Response:
     return Response(status_code=204)
 
 
+@app.get("/api/guard/bootstrap")
+def guard_bootstrap() -> dict:
+    return {"token": guard.token(), "fortress": guard.posture()}
+
+
 def run() -> None:
     import uvicorn
 
-    uvicorn.run("app.main:app", host=config.HOST, port=config.PORT, reload=False)
+    guard.persist_token()
+    host = guard.bind_host()
+    uvicorn.run("app.main:app", host=host, port=config.PORT, reload=False)
 
 
 if __name__ == "__main__":
