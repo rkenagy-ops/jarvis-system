@@ -8,7 +8,10 @@ from typing import Any
 
 from . import config
 
-FOLDERS = ("Daily", "People", "Projects", "Markets", "Inbox", "Skills", "Memory", "Calendar", "Templates", "Sources")
+FOLDERS = (
+    "Daily", "People", "Projects", "Markets", "Inbox", "Skills", "Memory",
+    "Calendar", "Templates", "Sources", "Content", "Blog", "Social", "Shop",
+)
 WIKI = re.compile(r"\[\[([^\]|#]+)(?:#[^\]|]+)?(?:\|[^\]]+)?\]\]")
 TAG = re.compile(r"(?<!\w)#([A-Za-z][\w/-]*)")
 FM = re.compile(r"^---\n(.*?)\n---\n?", re.S)

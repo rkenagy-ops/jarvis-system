@@ -119,7 +119,7 @@ def _run_model(
 
 
 def _handle_spawn(task: str, agent_ids: list[str], session_id: str, emit: EventFn | None) -> list[dict[str, Any]]:
-    chosen = [a for a in agent_ids if a in AGENTS and a != "jarvis"][:4]
+    chosen = [a for a in agent_ids if a in AGENTS and a != "jarvis"][:6]
     if not chosen:
         return [{"error": "No valid specialists requested."}]
     if emit:

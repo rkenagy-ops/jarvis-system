@@ -21,6 +21,7 @@
         <div class="pill"><span id="brain-dot" class="dot warn"></span><span id="brain-label">BRAIN</span></div>
         <div class="pill"><span id="gh-dot" class="dot off"></span><span id="gh-label">GITHUB</span></div>
         <div class="pill"><span id="net-dot" class="dot on"></span>ONLINE</div>
+        <button class="btn" id="btn-studio">STUDIO</button>
         <button class="btn" id="btn-brief">BRIEFING</button>
         <button class="btn" id="btn-settings">KEYS</button>
         <button class="btn live" id="btn-live">LIVE VOICE</button>
@@ -71,6 +72,7 @@
           <button type="button" data-q="Use the catalog: arxiv, SEC EDGAR, and fear_greed. Summarize anything that matters this week.">Open APIs</button>
           <button type="button" data-q="Use oss search on GitHub for the best open-source assistant tools, then ingest public-apis/public-apis and awesome-selfhosted/awesome-selfhosted into the vault.">GitHub OSS</button>
           <button type="button" data-q="Search the vault with RAG for what we already know about markets, tasks, and this project. Summarize.">Ask vault</button>
+          <button type="button" data-q="Spawn scribe, social, and scheduler. Draft a week of social posts plus one blog for our brands. Save drafts in the content studio. Do not publish live.">Content week</button>
         </div>
         <textarea id="input" placeholder="Ask anything: markets, vault, GitHub, news, weather, goals. Paper-trade with confirm."></textarea>
         <div class="row">
@@ -98,6 +100,12 @@
       <input id="key-gh" type="password" autocomplete="off" />
       <label>GITHUB_USERNAME (optional)</label>
       <input id="key-user" />
+      <label>WORDPRESS_URL (optional)</label>
+      <input id="key-wp" placeholder="https://yoursite.com" />
+      <label>X_BEARER_TOKEN (optional, live tweets)</label>
+      <input id="key-x" type="password" autocomplete="off" />
+      <label>POSTIZ_URL (optional social queue)</label>
+      <input id="key-postiz" placeholder="http://localhost:5000" />
       <label>VOICE</label>
       <select id="key-voice">
         <option>orion</option><option>eve</option><option>atlas</option><option>ara</option>
@@ -107,6 +115,31 @@
         <button class="btn" id="save-keys">SAVE</button>
         <button class="btn" id="close-modal">CLOSE</button>
       </div>
+    </div>
+  </div>
+
+  <div class="modal" id="studio-modal">
+    <div class="card wide">
+      <h3>CONTENT STUDIO</h3>
+      <label>Title</label>
+      <input id="studio-title" />
+      <label>Kind</label>
+      <select id="studio-kind">
+        <option>post</option><option>blog</option><option>caption</option><option>email</option><option>listing</option>
+      </select>
+      <label>Platforms (comma)</label>
+      <input id="studio-plats" value="x,instagram,linkedin,blog" />
+      <label>Markdown / rich draft</label>
+      <textarea id="studio-body" rows="8" placeholder="**Hook**&#10;&#10;Body...&#10;&#10;CTA"></textarea>
+      <div class="note-body" id="studio-preview"></div>
+      <label>Schedule (ISO)</label>
+      <input id="studio-when" placeholder="2026-08-17T15:00:00" />
+      <div class="row" style="margin-top:12px">
+        <button class="btn" id="studio-save">SAVE DRAFT</button>
+        <button class="btn" id="studio-sched">SAVE + SCHEDULE</button>
+        <button class="btn" id="close-studio">CLOSE</button>
+      </div>
+      <div class="feed" id="studio-queue"></div>
     </div>
   </div>
 

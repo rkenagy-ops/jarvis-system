@@ -457,6 +457,9 @@ $("save-keys").addEventListener("click", async () => {
       github_token: $("key-gh").value || undefined,
       github_username: $("key-user").value || undefined,
       voice: $("key-voice").value,
+      wordpress_url: $("key-wp") && $("key-wp").value || undefined,
+      x_bearer_token: $("key-x") && $("key-x").value || undefined,
+      postiz_url: $("key-postiz") && $("key-postiz").value || undefined,
     }),
   });
   $("modal").classList.remove("show");
@@ -494,6 +497,55 @@ $("upload").addEventListener("change", async (e) => {
   addMsg("assistant", `Stored ${data.path} (${data.bytes} bytes). Ask me to analyze it.`, "WORKSPACE");
   e.target.value = "";
 });
+
+async function loadStudio() {
+  const dash = await fetch("/api/ops").then((r) => r.json());
+  const box = $("studio-queue");
+  if (!box) return;
+  box.innerHTML = "";
+  [...(dash.scheduled || []), ...(dash.drafts || [])].slice(0, 12).forEach((c) => {
+    const el = document.createElement("div");
+    el.className = "item";
+    el.innerHTML = `<b>${c.status}</b><div></div>`;
+    el.lastChild.textContent = `${c.title} — ${(c.platforms || []).join(",")}`;
+    box.appendChild(el);
+  });
+}
+
+$("btn-studio").addEventListener("click", () => {
+  $("studio-modal").classList.add("show");
+  loadStudio();
+});
+$("close-studio").addEventListener("click", () => $("studio-modal").classList.remove("show"));
+$("studio-body").addEventListener("input", () => {
+  $("studio-preview").textContent = $("studio-body").value;
+});
+
+async function saveDraft(schedule) {
+  const plats = $("studio-plats").value.split(",").map((s) => s.trim()).filter(Boolean);
+  const res = await fetch("/api/ops/draft", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      title: $("studio-title").value || "Untitled",
+      body: $("studio-body").value,
+      kind: $("studio-kind").value,
+      platforms: plats,
+    }),
+  });
+  const item = await res.json();
+  if (schedule && $("studio-when").value && item.id) {
+    await fetch("/api/ops/schedule", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: item.id, when: $("studio-when").value, platforms: plats }),
+    });
+  }
+  addMsg("assistant", `Draft saved: ${item.title || item.id}`, "STUDIO");
+  loadStudio();
+}
+$("studio-save").addEventListener("click", () => saveDraft(false));
+$("studio-sched").addEventListener("click", () => saveDraft(true));
 
 refreshStatus().catch(() => setStatus("backend offline"));
 setInterval(refreshWidgets, 60000);

@@ -124,6 +124,13 @@ def beat() -> list[str]:
     if not config.AUTONOMY_ENABLED:
         return []
     results = []
+    try:
+        from . import ops
+
+        for item in ops.fire_due():
+            results.append(f"publish {item}")
+    except Exception as exc:
+        results.append(f"publish-error {exc}")
     for job in memory.due_jobs():
         try:
             results.append(run_job(job))

@@ -7,7 +7,7 @@ from urllib.parse import urlparse
 
 import httpx
 
-from . import catalog, config, github_client, github_oss, markets, memory, obsidian, opensource, widgets, workspace
+from . import catalog, config, github_client, github_oss, markets, memory, obsidian, opensource, ops, widgets, workspace
 from .agents import AGENTS
 
 BUILTIN_TOOLS = [
@@ -173,6 +173,32 @@ FUNCTION_TOOLS = [
         ["query"],
     ),
     _fn(
+        "content",
+        "Content studio: draft/schedule/list/get/publish rich-text posts, blogs, social, Amazon listings. Also product/catalog/dashboard/html.",
+        {
+            "action": {
+                "type": "string",
+                "enum": ["draft", "schedule", "list", "get", "publish", "html", "product", "catalog", "dashboard"],
+            },
+            "title": {"type": "string"},
+            "body": {"type": "string"},
+            "kind": {"type": "string", "description": "post|blog|caption|email|listing"},
+            "platforms": {"type": "string", "description": "comma list: x,instagram,linkedin,tiktok,youtube,facebook,pinterest,threads,blog,amazon,email"},
+            "id": {"type": "string"},
+            "when": {"type": "string", "description": "ISO datetime"},
+            "confirm_token": {"type": "string"},
+            "status": {"type": "string"},
+            "sku": {"type": "string"},
+            "asin": {"type": "string"},
+            "price": {"type": "number"},
+            "url": {"type": "string"},
+            "bullets": {"type": "string"},
+            "description": {"type": "string"},
+            "limit": {"type": "integer"},
+        },
+        ["action"],
+    ),
+    _fn(
         "oss",
         "Pull open-source from GitHub: search, readme, ingest into vault, starter_pack, awesome lists, public_apis index, huggingface, youtube transcript.",
         {
@@ -212,7 +238,11 @@ def tools_for(agent_id: str, *, allow_spawn: bool = False) -> list[dict]:
             continue
         if name == "workspace" and agent_id not in _FILE_AGENTS:
             continue
-        if name == "obsidian" and agent_id not in {"jarvis", "archivist", "strategist", "analyst", "trader"}:
+        if name == "obsidian" and agent_id not in {"jarvis", "archivist", "strategist", "analyst", "trader", "scribe", "publisher"}:
+            continue
+        if name == "content" and agent_id not in {
+            "jarvis", "scribe", "social", "merch", "publisher", "scheduler", "designer", "strategist",
+        }:
             continue
         out.append(fn)
     return out
@@ -285,6 +315,8 @@ def execute(name: str, arguments: dict[str, Any], *, session_id: str, agent_id: 
         return catalog.call(arguments.get("source") or "", arguments.get("query") or "")
     if name == "oss":
         return github_oss.dispatch(arguments.get("action") or "search", **{k: v for k, v in arguments.items() if k != "action"})
+    if name == "content":
+        return ops.dispatch(arguments.get("action") or "dashboard", **{k: v for k, v in arguments.items() if k != "action"})
     if name == "vault_rag":
         from . import rag as rag_mod
 

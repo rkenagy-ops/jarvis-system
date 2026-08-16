@@ -62,6 +62,11 @@ IMMICH_URL = _clean(os.getenv("IMMICH_URL"))
 IMMICH_API_KEY = _clean(os.getenv("IMMICH_API_KEY"))
 POSTIZ_URL = _clean(os.getenv("POSTIZ_URL"))
 STIRLING_URL = _clean(os.getenv("STIRLING_URL"))
+WORDPRESS_URL = _clean(os.getenv("WORDPRESS_URL"))
+WORDPRESS_USER = _clean(os.getenv("WORDPRESS_USER"))
+WORDPRESS_APP_PASSWORD = _clean(os.getenv("WORDPRESS_APP_PASSWORD"))
+X_BEARER_TOKEN = _clean(os.getenv("X_BEARER_TOKEN"))
+AMAZON_MARKETPLACE = _clean(os.getenv("AMAZON_MARKETPLACE")) or "US"
 
 XAI_BASE = "https://api.x.ai/v1"
 XAI_REALTIME = "wss://api.x.ai/v1/realtime"
@@ -72,6 +77,7 @@ DB_PATH = DATA_DIR / "jarvis.db"
 def reload_env() -> None:
     load_dotenv(ENV_PATH, override=True)
     global XAI_API_KEY, GITHUB_TOKEN, GITHUB_USERNAME, OWNER_NAME, VOICE, MODEL, TRADING_MODE, AUTONOMY_ENABLED
+    global WORDPRESS_URL, WORDPRESS_USER, WORDPRESS_APP_PASSWORD, X_BEARER_TOKEN, POSTIZ_URL
     XAI_API_KEY = _clean(os.getenv("XAI_API_KEY"))
     GITHUB_TOKEN = _clean(os.getenv("GITHUB_TOKEN"))
     GITHUB_USERNAME = _clean(os.getenv("GITHUB_USERNAME")) or "rkenagy-ops"
@@ -80,6 +86,11 @@ def reload_env() -> None:
     MODEL = _clean(os.getenv("JARVIS_MODEL")) or "grok-4.6"
     TRADING_MODE = (_clean(os.getenv("TRADING_MODE")) or "paper").lower()
     AUTONOMY_ENABLED = (_clean(os.getenv("JARVIS_AUTONOMY")) or "true").lower() == "true"
+    WORDPRESS_URL = _clean(os.getenv("WORDPRESS_URL"))
+    WORDPRESS_USER = _clean(os.getenv("WORDPRESS_USER"))
+    WORDPRESS_APP_PASSWORD = _clean(os.getenv("WORDPRESS_APP_PASSWORD"))
+    X_BEARER_TOKEN = _clean(os.getenv("X_BEARER_TOKEN"))
+    POSTIZ_URL = _clean(os.getenv("POSTIZ_URL"))
 
 
 def save_env(updates: dict[str, str]) -> None:

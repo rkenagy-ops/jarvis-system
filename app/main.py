@@ -9,12 +9,13 @@ from fastapi.responses import FileResponse, JSONResponse, Response, StreamingRes
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import __version__, autonomy, catalog, config, github_client, github_oss, markets, memory, obsidian, opensource, rag, widgets, workspace, xai
+from . import __version__, autonomy, catalog, config, github_client, github_oss, markets, memory, obsidian, opensource, ops, rag, widgets, workspace, xai
 from .agents import list_public
 from .brain import think, think_events
 from .voice_live import handle_live
 
 memory.init()
+ops.init()
 markets.init()
 obsidian.init_vault()
 rag.init()
@@ -41,6 +42,11 @@ class SettingsIn(BaseModel):
     voice: str | None = None
     owner_name: str | None = None
     trading_mode: str | None = None
+    wordpress_url: str | None = None
+    wordpress_user: str | None = None
+    wordpress_app_password: str | None = None
+    x_bearer_token: str | None = None
+    postiz_url: str | None = None
 
 
 class TradeIn(BaseModel):
@@ -83,6 +89,34 @@ class RememberIn(BaseModel):
     kind: str = "note"
     tags: list[str] = Field(default_factory=list)
     importance: float = 0.6
+
+
+class ContentIn(BaseModel):
+    title: str
+    body: str
+    kind: str = "post"
+    platforms: list[str] = Field(default_factory=lambda: ["x"])
+
+
+class ScheduleIn(BaseModel):
+    id: str
+    when: str
+    platforms: list[str] | None = None
+
+
+class PublishIn(BaseModel):
+    id: str
+    confirm_token: str | None = None
+
+
+class ProductIn(BaseModel):
+    title: str
+    sku: str = ""
+    asin: str = ""
+    price: float | None = None
+    url: str = ""
+    bullets: list[str] = Field(default_factory=list)
+    description: str = ""
 
 
 @app.get("/")
@@ -146,6 +180,16 @@ def save_settings(body: SettingsIn) -> dict:
         updates["JARVIS_OWNER_NAME"] = body.owner_name
     if body.trading_mode in {"paper", "live"}:
         updates["TRADING_MODE"] = body.trading_mode
+    if body.wordpress_url:
+        updates["WORDPRESS_URL"] = body.wordpress_url
+    if body.wordpress_user:
+        updates["WORDPRESS_USER"] = body.wordpress_user
+    if body.wordpress_app_password:
+        updates["WORDPRESS_APP_PASSWORD"] = body.wordpress_app_password
+    if body.x_bearer_token:
+        updates["X_BEARER_TOKEN"] = body.x_bearer_token
+    if body.postiz_url:
+        updates["POSTIZ_URL"] = body.postiz_url
     if updates:
         config.save_env(updates)
     if config.GITHUB_TOKEN and not config.GITHUB_USERNAME:
@@ -313,6 +357,34 @@ def vault_write(body: NoteIn) -> dict:
 @app.get("/api/vault/daily")
 def vault_daily() -> dict:
     return obsidian.daily()
+
+
+@app.get("/api/ops")
+def ops_dash() -> dict:
+    return ops.dashboard()
+
+
+@app.post("/api/ops/draft")
+def ops_draft(body: ContentIn) -> dict:
+    return ops.draft(body.title, body.body, kind=body.kind, platforms=body.platforms)
+
+
+@app.post("/api/ops/schedule")
+def ops_schedule(body: ScheduleIn) -> dict:
+    return ops.schedule(body.id, body.when, body.platforms)
+
+
+@app.post("/api/ops/publish")
+def ops_publish(body: PublishIn) -> dict:
+    return ops.publish(body.id, confirm_token=body.confirm_token)
+
+
+@app.post("/api/ops/product")
+def ops_product(body: ProductIn) -> dict:
+    return ops.add_product(
+        body.title, sku=body.sku, asin=body.asin, price=body.price,
+        url=body.url, bullets=body.bullets, description=body.description,
+    )
 
 
 @app.get("/api/opensource")
