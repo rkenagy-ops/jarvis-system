@@ -463,6 +463,13 @@ def api_finish() -> dict:
     return finish.checklist()
 
 
+@app.get("/api/wordpress")
+def api_wordpress() -> dict:
+    from . import ops
+
+    return ops.wordpress_probe()
+
+
 @app.post("/api/backup")
 def api_backup() -> dict:
     from . import backup

@@ -218,11 +218,39 @@ def _local_blog(item: dict) -> dict:
     return {"platform": "blog", "status": "published-local", "path": f"Blog/{slug}.md"}
 
 
+_WP_HEADERS = {
+    "User-Agent": "SuperJarvis/5.0 (local; https://github.com/rkenagy-ops/jarvis-system)",
+    "Accept": "application/json",
+}
+
+
+def wordpress_probe() -> dict:
+    if not (config.WORDPRESS_URL and config.WORDPRESS_USER and config.WORDPRESS_APP_PASSWORD):
+        return {"ok": False, "reason": "missing_keys"}
+    url = config.WORDPRESS_URL.rstrip("/") + "/wp-json/wp/v2/users/me?context=edit"
+    auth = (config.WORDPRESS_USER, config.WORDPRESS_APP_PASSWORD)
+    with httpx.Client(timeout=25.0, follow_redirects=True, headers=_WP_HEADERS) as client:
+        resp = client.get(url, auth=auth)
+    if "Just a moment" in resp.text or "cf-mitigated" in (resp.headers.get("cf-mitigated") or ""):
+        return {
+            "ok": False,
+            "reason": "cloudflare",
+            "hint": "Cloudflare is blocking /wp-json. Add a WAF skip rule for /wp-json* or allow this PC's IP.",
+        }
+    if resp.status_code >= 400:
+        return {"ok": False, "reason": f"http_{resp.status_code}", "detail": resp.text[:200]}
+    data = resp.json() if "json" in (resp.headers.get("content-type") or "") else {}
+    return {"ok": True, "id": data.get("id"), "name": data.get("name") or data.get("slug")}
+
+
 def _wordpress(item: dict, *, live: bool = False) -> dict:
+    probe = wordpress_probe()
+    if not probe.get("ok"):
+        return {"platform": "blog", **probe, "status": "blocked"}
     url = config.WORDPRESS_URL.rstrip("/") + "/wp-json/wp/v2/posts"
     auth = (config.WORDPRESS_USER, config.WORDPRESS_APP_PASSWORD)
     status = "publish" if live else "draft"
-    with httpx.Client(timeout=30.0) as client:
+    with httpx.Client(timeout=30.0, headers=_WP_HEADERS) as client:
         resp = client.post(url, auth=auth, json={"title": item["title"], "content": item["body_html"], "status": status})
     if resp.status_code >= 400:
         return {"platform": "blog", "error": resp.text[:400]}
