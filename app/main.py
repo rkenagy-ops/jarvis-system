@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response, StreamingRes
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import __version__, autonomy, catalog, config, feeds, github_client, github_oss, guard, markets, memory, obsidian, opensource, ops, rag, widgets, workspace, xai
+from . import __version__, autonomy, catalog, config, feeds, github_client, github_oss, guard, markets, memory, obsidian, ollama as ollama_mod, opensource, ops, rag, widgets, workspace, xai
 from .agents import list_public
 from .brain import think, think_events
 from .voice_live import handle_live
@@ -170,21 +170,35 @@ def index() -> FileResponse:
     return FileResponse(config.WEB_DIR / "index.html")
 
 
+def _brain_name() -> tuple[str, str]:
+    if not config.OFFLINE and xai.probe().get("ok"):
+        return "grok", xai.probe().get("reason") or "ready"
+    ol = ollama_mod.probe()
+    if ol.get("ok"):
+        return "ollama", ol.get("reason") or "ready"
+    if config.OFFLINE:
+        return "offline", "ollama_down"
+    return "free", xai.probe().get("reason") or "no_grok"
+
+
 @app.post("/api/brain/refresh")
 def brain_refresh() -> dict:
-    probe = xai.probe(force=True)
-    return {"brain": "grok" if probe.get("ok") else "free", "reason": probe.get("reason")}
+    xai.probe(force=True)
+    ollama_mod.probe(force=True)
+    name, reason = _brain_name()
+    return {"brain": name, "reason": reason, "ollama": ollama_mod.probe()}
 
 
 @app.get("/api/health")
 def health() -> dict:
-    probe = xai.probe()
+    name, reason = _brain_name()
     return {
         "ok": True,
         "version": __version__,
         **config.status(),
-        "brain": "offline" if config.OFFLINE else ("grok" if probe.get("ok") else "free"),
-        "brain_reason": "offline" if config.OFFLINE else probe.get("reason"),
+        "brain": name,
+        "brain_reason": reason,
+        "ollama": ollama_mod.probe(),
         "fortress": guard.posture(),
     }
 
@@ -197,11 +211,12 @@ def status() -> dict:
             github = github_client.whoami()
         except Exception as exc:
             github = {"error": str(exc)}
-    probe = xai.probe()
+    name, reason = _brain_name()
     return {
         **config.status(),
-        "brain": "grok" if probe.get("ok") else "free",
-        "brain_reason": probe.get("reason"),
+        "brain": name,
+        "brain_reason": reason,
+        "ollama": ollama_mod.probe(),
         "github": github,
         "agents": list_public(),
         "memory": memory.dashboard(),
@@ -409,6 +424,16 @@ def api_growth() -> dict:
     from . import growth
 
     return growth.cycle(6)
+
+
+@app.get("/api/ollama")
+def api_ollama() -> dict:
+    return ollama_mod.probe(force=True)
+
+
+@app.post("/api/ollama/pull")
+def api_ollama_pull() -> dict:
+    return ollama_mod.pull()
 
 
 @app.get("/api/tasks")

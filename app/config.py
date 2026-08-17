@@ -52,6 +52,8 @@ JARVIS_TOKEN = _clean(os.getenv("JARVIS_TOKEN"))
 JARVIS_ALLOW_LAN = (_clean(os.getenv("JARVIS_ALLOW_LAN")) or "false").lower() == "true"
 JARVIS_PUBLIC_HOST = _clean(os.getenv("JARVIS_PUBLIC_HOST"))
 OFFLINE = (_clean(os.getenv("JARVIS_OFFLINE")) or "false").lower() == "true"
+OLLAMA_HOST = _clean(os.getenv("OLLAMA_HOST")) or "http://127.0.0.1:11434"
+OLLAMA_MODEL = _clean(os.getenv("OLLAMA_MODEL")) or "llama3.2"
 TRADING_MODE = (_clean(os.getenv("TRADING_MODE")) or "paper").lower()
 TRADING_REQUIRE_CONFIRMATION = (_clean(os.getenv("TRADING_REQUIRE_CONFIRMATION")) or "true").lower() == "true"
 PAPER_CASH = float(_clean(os.getenv("PAPER_CASH")) or "100000")
@@ -83,6 +85,7 @@ def reload_env() -> None:
     global XAI_API_KEY, GITHUB_TOKEN, GITHUB_USERNAME, OWNER_NAME, VOICE, MODEL, TRADING_MODE, AUTONOMY_ENABLED
     global WORDPRESS_URL, WORDPRESS_USER, WORDPRESS_APP_PASSWORD, X_BEARER_TOKEN, POSTIZ_URL
     global JARVIS_TOKEN, JARVIS_ALLOW_LAN, JARVIS_PUBLIC_HOST, OFFLINE, HOST, PORT
+    global OLLAMA_HOST, OLLAMA_MODEL
     XAI_API_KEY = _clean(os.getenv("XAI_API_KEY"))
     GITHUB_TOKEN = _clean(os.getenv("GITHUB_TOKEN"))
     GITHUB_USERNAME = _clean(os.getenv("GITHUB_USERNAME")) or "rkenagy-ops"
@@ -102,6 +105,8 @@ def reload_env() -> None:
     OFFLINE = (_clean(os.getenv("JARVIS_OFFLINE")) or "false").lower() == "true"
     HOST = _clean(os.getenv("JARVIS_HOST")) or "127.0.0.1"
     PORT = int(_clean(os.getenv("JARVIS_PORT")) or "8787")
+    OLLAMA_HOST = _clean(os.getenv("OLLAMA_HOST")) or "http://127.0.0.1:11434"
+    OLLAMA_MODEL = _clean(os.getenv("OLLAMA_MODEL")) or "llama3.2"
 
 
 def save_env(updates: dict[str, str]) -> None:
@@ -140,4 +145,6 @@ def status() -> dict:
         "n8n": bool(N8N_WEBHOOK_URL),
         "brain": "offline" if OFFLINE else ("grok" if XAI_API_KEY else "free"),
         "offline": OFFLINE,
+        "ollama_host": OLLAMA_HOST,
+        "ollama_model": OLLAMA_MODEL,
     }

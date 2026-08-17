@@ -5,7 +5,7 @@ from collections.abc import Callable, Iterator
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
 
-from . import config, free_brain, memory, tools, xai
+from . import config, free_brain, memory, ollama as ollama_mod, tools, xai
 from .agents import AGENTS, conductor_system, get, specialist_system
 
 EventFn = Callable[[dict[str, Any]], None]
@@ -170,30 +170,16 @@ def think(
     if persist_user:
         memory.add_message(session_id, "user", user_text)
 
-    if config.OFFLINE:
-        if emit:
-            emit({"type": "status", "text": "offline mode — free APIs only"})
-        result = free_brain.handle(user_text, emit=emit)
-        final = result.get("text") or "Offline brain had nothing to add."
-        memory.add_message(session_id, "assistant", final, agent=agent_id)
-        if persist_user and agent_id == "jarvis":
-            memory.learn_from_turn(user_text, final, result.get("calls") or [])
-        if emit:
-            emit({"type": "done", "agent": agent_id, "text": final, "citations": [], "calls": result.get("calls") or [], "brain": "offline"})
-        return {"text": final, "agent": agent_id, "citations": [], "calls": result.get("calls") or [], "brain": "offline"}
-
-    probe = xai.probe()
-    if not probe.get("ok"):
-        if emit:
-            emit({"type": "status", "text": f"grok offline ({probe.get('reason')}) — free APIs"})
-        result = free_brain.handle(user_text, emit=emit)
-        final = result.get("text") or "Free brain had nothing to add."
-        memory.add_message(session_id, "assistant", final, agent=agent_id)
-        if persist_user and agent_id == "jarvis":
-            memory.learn_from_turn(user_text, final, result.get("calls") or [])
-        if emit:
-            emit({"type": "done", "agent": agent_id, "text": final, "citations": [], "calls": result.get("calls") or [], "brain": "free"})
-        return {"text": final, "agent": agent_id, "citations": [], "calls": result.get("calls") or [], "brain": "free"}
+    use_grok = (not config.OFFLINE) and bool(xai.probe().get("ok"))
+    if not use_grok:
+        return _think_fallback(
+            user_text,
+            session_id=session_id,
+            agent_id=agent_id,
+            persist_user=persist_user,
+            emit=emit,
+            why="offline" if config.OFFLINE else f"grok {xai.probe().get('reason')}",
+        )
 
     mind = memory.snapshot(session_id)
     try:
@@ -241,15 +227,139 @@ def think(
             mind=mind,
         )
     except xai.XAIError as exc:
-        if emit:
-            emit({"type": "status", "text": f"grok error — free APIs ({exc})"})
         xai._probe.update(ok=False, reason="credits_or_auth", checked=__import__("time").time())
-        result = free_brain.handle(user_text, emit=emit)
-        final = result.get("text") or str(exc)
-        memory.add_message(session_id, "assistant", final, agent=agent_id)
+        return _think_fallback(
+            user_text,
+            session_id=session_id,
+            agent_id=agent_id,
+            persist_user=persist_user,
+            emit=emit,
+            why=str(exc)[:120],
+        )
+
+
+def _compose_mind(user_text: str, session_id: str) -> str:
+    mind = memory.snapshot(session_id)
+    try:
+        from . import desktop
+
+        mind = desktop.situation() + "\n\n" + mind
+    except Exception:
+        pass
+    try:
+        from . import room
+
+        mind = room.context() + "\n\n" + mind
+    except Exception:
+        pass
+    try:
+        from . import obsidian
+
+        mind = mind + "\n\n" + obsidian.context_pack(user_text)
+    except Exception:
+        pass
+    try:
+        from . import rag
+
+        pack = rag.pack(user_text)
+        if pack:
+            mind = mind + "\n\n" + pack
+    except Exception:
+        pass
+    try:
+        from . import graph, router
+
+        mind = mind + "\n\n" + router.hint(user_text) + "\n\n" + graph.pack(user_text)
+    except Exception:
+        pass
+    return mind
+
+
+def _think_fallback(
+    user_text: str,
+    *,
+    session_id: str,
+    agent_id: str,
+    persist_user: bool,
+    emit: EventFn | None,
+    why: str,
+) -> dict[str, Any]:
+    ol = ollama_mod.probe()
+    if ol.get("ok"):
         if emit:
-            emit({"type": "done", "agent": agent_id, "text": final, "citations": [], "calls": result.get("calls") or [], "brain": "free"})
-        return {"text": final, "agent": agent_id, "citations": [], "calls": result.get("calls") or [], "brain": "free"}
+            emit({"type": "status", "text": f"{why} — Ollama {ollama_mod.model()}"})
+        try:
+            return _think_ollama(
+                user_text,
+                session_id=session_id,
+                agent_id=agent_id,
+                persist_user=persist_user,
+                emit=emit,
+            )
+        except Exception as exc:
+            if emit:
+                emit({"type": "status", "text": f"ollama failed — free APIs ({exc})"})
+    elif emit:
+        emit({"type": "status", "text": f"{why} — Ollama down — free APIs"})
+    result = free_brain.handle(user_text, emit=emit)
+    final = result.get("text") or "Free brain had nothing to add."
+    memory.add_message(session_id, "assistant", final, agent=agent_id)
+    if persist_user and agent_id == "jarvis":
+        memory.learn_from_turn(user_text, final, result.get("calls") or [])
+    brain = "offline" if config.OFFLINE else "free"
+    if emit:
+        emit({"type": "done", "agent": agent_id, "text": final, "citations": [], "calls": result.get("calls") or [], "brain": brain})
+    return {"text": final, "agent": agent_id, "citations": [], "calls": result.get("calls") or [], "brain": brain}
+
+
+def _think_ollama(
+    user_text: str,
+    *,
+    session_id: str,
+    agent_id: str,
+    persist_user: bool,
+    emit: EventFn | None,
+) -> dict[str, Any]:
+    mind = _compose_mind(user_text, session_id)
+    system = conductor_system(mind) if agent_id == "jarvis" else specialist_system(agent_id, mind)
+    system += "\nYou are running on local Ollama. Prefer local tools. Be concise."
+    if emit:
+        emit({"type": "agent_start", "agent": agent_id})
+        emit({"type": "status", "text": f"{get(agent_id).name} via Ollama"})
+    fns = [t for t in tools.tools_for(agent_id, allow_spawn=False) if t.get("type") == "function"][:18]
+    otools = ollama_mod.as_tools(fns)
+    messages: list[dict[str, Any]] = [
+        {"role": "system", "content": system[:12000]},
+        {"role": "user", "content": user_text},
+    ]
+    all_calls: list[dict] = []
+    last = ""
+    for _ in range(4):
+        result = ollama_mod.chat(messages, tools=otools or None)
+        last = result.get("text") or last
+        if last and emit:
+            emit({"type": "token", "text": last})
+        calls = result.get("tool_calls") or []
+        if not calls:
+            break
+        messages.append({"role": "assistant", "content": last or "", "tool_calls": calls})
+        for call in calls:
+            fn = call.get("function") or call
+            name = fn.get("name") or ""
+            raw_args = fn.get("arguments") or {}
+            args = raw_args if isinstance(raw_args, dict) else _parse_args(raw_args)
+            all_calls.append({"name": name, "arguments": args})
+            payload = tools.execute(name, args, session_id=session_id, agent_id=agent_id)
+            if emit:
+                emit({"type": "tool_result", "name": name, "result": payload})
+            messages.append({"role": "tool", "content": tools.dumps(payload)})
+    final = last or "Ollama is listening."
+    memory.add_message(session_id, "assistant", final, agent=agent_id)
+    if persist_user and agent_id == "jarvis":
+        memory.learn_from_turn(user_text, final, all_calls)
+    if emit:
+        emit({"type": "done", "agent": agent_id, "text": final, "citations": [], "calls": all_calls, "brain": "ollama"})
+    return {"text": final, "agent": agent_id, "citations": [], "calls": all_calls, "brain": "ollama"}
 
 
 def _think_grok(

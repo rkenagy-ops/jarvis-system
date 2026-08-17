@@ -73,9 +73,15 @@ async function refreshStatus() {
   $("gh-dot").className = `dot ${data.github_configured ? "on" : "off"}`;
   $("xai-label").textContent = data.xai_configured ? "XAI KEY" : "XAI MISSING";
   const grok = data.brain === "grok";
-  $("brain-dot").className = `dot ${grok ? "on" : "warn"}`;
-  $("brain-label").textContent = grok ? "GROK" : "FREE APIS";
+  const local = data.brain === "ollama";
+  $("brain-dot").className = `dot ${grok ? "on" : local ? "warn" : "warn"}`;
+  $("brain-label").textContent = grok ? "GROK" : local ? "OLLAMA" : (data.offline ? "OFFLINE" : "FREE APIS");
   state.useBrowserVoice = !grok;
+  if ($("ollama-label")) {
+    const ol = data.ollama || {};
+    $("ollama-dot").className = `dot ${ol.ok ? "on" : "off"}`;
+    $("ollama-label").textContent = ol.ok ? `OLLAMA ${ol.model || ""}`.trim() : "OLLAMA OFF";
+  }
   const gh = data.github && data.github.login;
   $("gh-label").textContent = gh ? `GH ${gh}` : data.github_configured ? "GITHUB" : "GH MISSING";
   if (!data.xai_configured) $("modal").classList.add("show");
