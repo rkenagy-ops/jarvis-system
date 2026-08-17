@@ -53,7 +53,7 @@ JARVIS_ALLOW_LAN = (_clean(os.getenv("JARVIS_ALLOW_LAN")) or "false").lower() ==
 JARVIS_PUBLIC_HOST = _clean(os.getenv("JARVIS_PUBLIC_HOST"))
 OFFLINE = (_clean(os.getenv("JARVIS_OFFLINE")) or "false").lower() == "true"
 OLLAMA_HOST = _clean(os.getenv("OLLAMA_HOST")) or "http://127.0.0.1:11434"
-OLLAMA_MODEL = _clean(os.getenv("OLLAMA_MODEL")) or "llama3.2"
+OLLAMA_MODEL = _clean(os.getenv("OLLAMA_MODEL")) or "llama3.1:8b"
 TRADING_MODE = (_clean(os.getenv("TRADING_MODE")) or "paper").lower()
 TRADING_REQUIRE_CONFIRMATION = (_clean(os.getenv("TRADING_REQUIRE_CONFIRMATION")) or "true").lower() == "true"
 PAPER_CASH = float(_clean(os.getenv("PAPER_CASH")) or "100000")
