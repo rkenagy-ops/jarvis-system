@@ -15,8 +15,9 @@ TOKEN = re.compile(r"[a-z0-9]{3,}")
 
 
 def _conn() -> sqlite3.Connection:
-    conn = sqlite3.connect(config.DB_PATH, check_same_thread=False)
+    conn = sqlite3.connect(config.DB_PATH, check_same_thread=False, timeout=30)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
     return conn
 
 
@@ -128,26 +129,28 @@ def embed_vault(*, limit_files: int = 200) -> dict:
         return {"ok": False, "reason": str(exc)[:200]}
     root = obsidian.vault()
     n = 0
-    files = 0
     with _lock:
         conn = _conn()
         conn.execute("DELETE FROM vault_embed")
         rows = conn.execute("SELECT id, path, heading, text FROM vault_chunks LIMIT ?", (limit_files * 8,)).fetchall()
-    for r in rows:
-        try:
-            v = ol.embed((r["text"] or "")[:1500])
-        except Exception:
-            continue
-        with _lock:
-            conn = _conn()
+        conn.close()
+    conn = _conn()
+    try:
+        for r in rows:
+            try:
+                v = ol.embed((r["text"] or "")[:1500])
+            except Exception:
+                continue
             conn.execute(
                 "INSERT OR REPLACE INTO vault_embed(chunk_id, path, heading, text, vec) VALUES(?,?,?,?,?)",
                 (r["id"], r["path"], r["heading"], r["text"], json.dumps(v)),
             )
-            conn.commit()
-            conn.close()
-        n += 1
-        files += 1
+            n += 1
+            if n % 25 == 0:
+                conn.commit()
+        conn.commit()
+    finally:
+        conn.close()
     return {"ok": True, "vectors": n}
 
 
