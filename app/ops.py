@@ -176,6 +176,8 @@ def publish(content_id: str, *, confirm_token: str | None = None) -> dict:
     if not item:
         return {"error": "content not found"}
     live_needed = any(p in {"x", "instagram", "facebook", "linkedin", "tiktok", "amazon"} for p in item["platforms"])
+    if "blog" in item["platforms"] and config.WORDPRESS_URL and config.WORDPRESS_APP_PASSWORD:
+        live_needed = True
     if live_needed and not confirm_token:
         pending = memory.create_pending("publish", {"id": content_id}, ttl_sec=300)
         return {"blocked": True, "reason": "Live social/Amazon publish needs confirm_token.", **pending}
@@ -183,9 +185,10 @@ def publish(content_id: str, *, confirm_token: str | None = None) -> dict:
         used = memory.consume_pending(confirm_token)
         if not used:
             return {"error": "Invalid or expired confirm token"}
+    live = bool(confirm_token)
     results = []
     for platform in item["platforms"]:
-        results.append(_push(platform, item))
+        results.append(_push(platform, item, live=live))
     now = time.time()
     with memory._db() as conn:
         conn.execute(
@@ -195,9 +198,9 @@ def publish(content_id: str, *, confirm_token: str | None = None) -> dict:
     return {"ok": True, "id": content_id, "results": results}
 
 
-def _push(platform: str, item: dict) -> dict:
+def _push(platform: str, item: dict, *, live: bool = False) -> dict:
     if platform == "blog":
-        return _wordpress(item) if getattr(config, "WORDPRESS_URL", "") else _local_blog(item)
+        return _wordpress(item, live=live) if getattr(config, "WORDPRESS_URL", "") else _local_blog(item)
     if platform == "x":
         return _post_x(item)
     if platform in {"instagram", "facebook", "linkedin", "tiktok", "youtube", "pinterest", "threads"}:
@@ -215,35 +218,30 @@ def _local_blog(item: dict) -> dict:
     return {"platform": "blog", "status": "published-local", "path": f"Blog/{slug}.md"}
 
 
-def _wordpress(item: dict) -> dict:
+def _wordpress(item: dict, *, live: bool = False) -> dict:
     url = config.WORDPRESS_URL.rstrip("/") + "/wp-json/wp/v2/posts"
     auth = (config.WORDPRESS_USER, config.WORDPRESS_APP_PASSWORD)
+    status = "publish" if live else "draft"
     with httpx.Client(timeout=30.0) as client:
-        resp = client.post(url, auth=auth, json={"title": item["title"], "content": item["body_html"], "status": "draft"})
+        resp = client.post(url, auth=auth, json={"title": item["title"], "content": item["body_html"], "status": status})
     if resp.status_code >= 400:
         return {"platform": "blog", "error": resp.text[:400]}
     data = resp.json()
-    return {"platform": "blog", "status": "wp-draft", "link": data.get("link"), "id": data.get("id")}
+    return {"platform": "blog", "status": "wp-live" if live else "wp-draft", "link": data.get("link"), "id": data.get("id")}
 
 
 def _post_x(item: dict) -> dict:
-    token = getattr(config, "X_BEARER_TOKEN", "") or ""
-    if not token:
+    from . import xpost
+
+    text = (item.get("body_md") or item.get("title") or "")[:280]
+    out = xpost.tweet(text)
+    if out.get("status") == "draft-only" or (out.get("error") and not xpost.ready() and not config.X_BEARER_TOKEN):
         obsidian.write_note(
             f"Social/x-{item['id'][:8]}.md",
-            f"# X draft\n\n{item['body_md'][:280]}\n",
+            f"# X draft\n\n{text}\n",
         )
-        return {"platform": "x", "status": "draft-vault", "note": "Set X_BEARER_TOKEN to post."}
-    text = item["body_md"][:280]
-    with httpx.Client(timeout=20.0) as client:
-        resp = client.post(
-            "https://api.x.com/2/tweets",
-            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
-            json={"text": text},
-        )
-    if resp.status_code >= 400:
-        return {"platform": "x", "error": resp.text[:400]}
-    return {"platform": "x", "status": "posted", "data": resp.json()}
+        out["vault"] = f"Social/x-{item['id'][:8]}.md"
+    return out
 
 
 def _postiz(platform: str, item: dict) -> dict:

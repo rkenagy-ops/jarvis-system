@@ -72,6 +72,10 @@ WORDPRESS_URL = _clean(os.getenv("WORDPRESS_URL"))
 WORDPRESS_USER = _clean(os.getenv("WORDPRESS_USER"))
 WORDPRESS_APP_PASSWORD = _clean(os.getenv("WORDPRESS_APP_PASSWORD"))
 X_BEARER_TOKEN = _clean(os.getenv("X_BEARER_TOKEN"))
+X_API_KEY = _clean(os.getenv("X_API_KEY"))
+X_API_SECRET = _clean(os.getenv("X_API_SECRET"))
+X_ACCESS_TOKEN = _clean(os.getenv("X_ACCESS_TOKEN"))
+X_ACCESS_SECRET = _clean(os.getenv("X_ACCESS_SECRET"))
 AMAZON_MARKETPLACE = _clean(os.getenv("AMAZON_MARKETPLACE")) or "US"
 ALPACA_KEY_ID = _clean(os.getenv("ALPACA_KEY_ID") or os.getenv("APCA_API_KEY_ID"))
 ALPACA_SECRET_KEY = _clean(os.getenv("ALPACA_SECRET_KEY") or os.getenv("APCA_API_SECRET_KEY"))
@@ -87,6 +91,7 @@ def reload_env() -> None:
     load_dotenv(ENV_PATH, override=True)
     global XAI_API_KEY, GITHUB_TOKEN, GITHUB_USERNAME, OWNER_NAME, VOICE, MODEL, TRADING_MODE, AUTONOMY_ENABLED
     global WORDPRESS_URL, WORDPRESS_USER, WORDPRESS_APP_PASSWORD, X_BEARER_TOKEN, POSTIZ_URL
+    global X_API_KEY, X_API_SECRET, X_ACCESS_TOKEN, X_ACCESS_SECRET
     global JARVIS_TOKEN, JARVIS_ALLOW_LAN, JARVIS_PUBLIC_HOST, OFFLINE, HOST, PORT
     global OLLAMA_HOST, OLLAMA_MODEL, ALPACA_KEY_ID, ALPACA_SECRET_KEY, ALPACA_LIVE
     XAI_API_KEY = _clean(os.getenv("XAI_API_KEY"))
@@ -101,6 +106,10 @@ def reload_env() -> None:
     WORDPRESS_USER = _clean(os.getenv("WORDPRESS_USER"))
     WORDPRESS_APP_PASSWORD = _clean(os.getenv("WORDPRESS_APP_PASSWORD"))
     X_BEARER_TOKEN = _clean(os.getenv("X_BEARER_TOKEN"))
+    X_API_KEY = _clean(os.getenv("X_API_KEY"))
+    X_API_SECRET = _clean(os.getenv("X_API_SECRET"))
+    X_ACCESS_TOKEN = _clean(os.getenv("X_ACCESS_TOKEN"))
+    X_ACCESS_SECRET = _clean(os.getenv("X_ACCESS_SECRET"))
     POSTIZ_URL = _clean(os.getenv("POSTIZ_URL"))
     JARVIS_TOKEN = _clean(os.getenv("JARVIS_TOKEN"))
     JARVIS_ALLOW_LAN = (_clean(os.getenv("JARVIS_ALLOW_LAN")) or "false").lower() == "true"
@@ -155,4 +164,6 @@ def status() -> dict:
         "ollama_model": OLLAMA_MODEL,
         "alpaca_configured": bool(ALPACA_KEY_ID and ALPACA_SECRET_KEY),
         "alpaca_live": ALPACA_LIVE,
+        "wordpress_configured": bool(WORDPRESS_URL and WORDPRESS_USER and WORDPRESS_APP_PASSWORD),
+        "x_oauth": bool(X_API_KEY and X_API_SECRET and X_ACCESS_TOKEN and X_ACCESS_SECRET),
     }

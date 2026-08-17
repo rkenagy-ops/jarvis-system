@@ -26,6 +26,7 @@
         <button class="btn" id="btn-studio">STUDIO</button>
         <button class="btn" id="btn-vault">VAULT</button>
         <button class="btn" id="btn-brief">BRIEFING</button>
+        <button class="btn" id="btn-backup">BACKUP</button>
         <button class="btn" id="btn-settings">KEYS</button>
         <button class="btn" id="btn-wake">WAKE</button>
         <button class="btn live" id="btn-live">LIVE VOICE</button>
@@ -51,6 +52,8 @@
         <div class="tape" id="tape"><div class="tape-inner" id="tape-inner">LIVE FEEDS STANDBY</div></div>
       </section>
       <aside class="rail right">
+        <h2>FINISH</h2>
+        <div class="feed" id="finish"></div>
         <h2>LIVE FEEDS</h2>
         <div class="feed" id="newsfeed"></div>
         <h2>TODAY</h2>
@@ -78,6 +81,7 @@
       <div class="transcript" id="transcript"></div>
       <form class="composer" id="form">
         <div class="chips" id="chips">
+          <button type="button" data-q="Draft a short WordPress-ready blog from today's intel desk. Save in the studio as kind=blog. Do not publish live without confirm.">Draft blog</button>
           <button type="button" data-q="Start my day. Use the daily pack and write a briefing to today's note.">Start my day</button>
           <button type="button" data-q="Give me a morning briefing and write it to today's daily note.">Brief me</button>
           <button type="button" data-q="Pull live feeds: Yahoo Finance quotes and the latest BBC/NPR/Yahoo/HN headlines. Summarize what matters.">Live feeds</button>
@@ -124,8 +128,20 @@
       <input id="key-user" />
       <label>WORDPRESS_URL (optional)</label>
       <input id="key-wp" placeholder="https://yoursite.com" />
-      <label>X_BEARER_TOKEN (optional, live tweets)</label>
+      <label>WORDPRESS_USER</label>
+      <input id="key-wp-user" />
+      <label>WORDPRESS_APP_PASSWORD</label>
+      <input id="key-wp-pass" type="password" autocomplete="off" />
+      <label>X_BEARER_TOKEN (optional, usually read-only)</label>
       <input id="key-x" type="password" autocomplete="off" />
+      <label>X_API_KEY (user OAuth — to tweet)</label>
+      <input id="key-x-key" type="password" autocomplete="off" />
+      <label>X_API_SECRET</label>
+      <input id="key-x-secret" type="password" autocomplete="off" />
+      <label>X_ACCESS_TOKEN</label>
+      <input id="key-x-access" type="password" autocomplete="off" />
+      <label>X_ACCESS_SECRET</label>
+      <input id="key-x-access-secret" type="password" autocomplete="off" />
       <label>POSTIZ_URL (optional social queue)</label>
       <input id="key-postiz" placeholder="http://localhost:5000" />
       <label>ALPACA_KEY_ID (paper/live brokerage)</label>

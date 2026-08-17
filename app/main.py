@@ -80,6 +80,10 @@ class SettingsIn(BaseModel):
     alpaca_key_id: str | None = None
     alpaca_secret_key: str | None = None
     alpaca_live: bool | None = None
+    x_api_key: str | None = None
+    x_api_secret: str | None = None
+    x_access_token: str | None = None
+    x_access_secret: str | None = None
 
 
 class TradeIn(BaseModel):
@@ -255,6 +259,14 @@ def save_settings(body: SettingsIn) -> dict:
         updates["WORDPRESS_APP_PASSWORD"] = body.wordpress_app_password
     if body.x_bearer_token:
         updates["X_BEARER_TOKEN"] = body.x_bearer_token
+    if body.x_api_key:
+        updates["X_API_KEY"] = body.x_api_key
+    if body.x_api_secret:
+        updates["X_API_SECRET"] = body.x_api_secret
+    if body.x_access_token:
+        updates["X_ACCESS_TOKEN"] = body.x_access_token
+    if body.x_access_secret:
+        updates["X_ACCESS_SECRET"] = body.x_access_secret
     if body.postiz_url:
         updates["POSTIZ_URL"] = body.postiz_url
     if body.alpaca_key_id:
@@ -442,6 +454,20 @@ def api_growth() -> dict:
     from . import growth
 
     return growth.cycle(6)
+
+
+@app.get("/api/finish")
+def api_finish() -> dict:
+    from . import finish
+
+    return finish.checklist()
+
+
+@app.post("/api/backup")
+def api_backup() -> dict:
+    from . import backup
+
+    return backup.run()
 
 
 @app.get("/api/ollama")

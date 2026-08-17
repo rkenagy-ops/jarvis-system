@@ -165,6 +165,12 @@ def briefing(*, use_grok: bool = True) -> str:
     except Exception:
         pass
     memory.remember(text, kind="briefing", tags=["autonomy", "briefing"], importance=0.7, source_agent="jarvis")
+    try:
+        from . import eval as eval_mod
+
+        eval_mod.score(text)
+    except Exception:
+        pass
     return text
 
 

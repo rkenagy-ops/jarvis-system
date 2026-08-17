@@ -182,6 +182,20 @@ async function refreshWidgets() {
       $("equity").textContent = `${(acc.mode || "paper").toUpperCase()} EQ ${acc.equity != null ? Number(acc.equity).toFixed(2) : "—"}  CASH ${acc.cash != null ? Number(acc.cash).toFixed(2) : "—"}`;
     }
     try {
+      const fin = await fetch("/api/finish").then((r) => r.json());
+      const fbox = $("finish");
+      if (fbox) {
+        fbox.innerHTML = "";
+        (fin.items || []).forEach((it) => {
+          const el = document.createElement("div");
+          el.className = "item";
+          el.innerHTML = `<b>${it.ok ? "ok" : "todo"}</b><div></div>`;
+          el.lastChild.textContent = it.label;
+          fbox.appendChild(el);
+        });
+      }
+    } catch {}
+    try {
       const today = await fetch("/api/daily").then((r) => r.json());
       const tbox = $("today");
       if (tbox) {
@@ -632,6 +646,13 @@ function toggleWake() {
   $("btn-wake").classList.add("on");
   setStatus("say jarvis");
 }
+$("btn-backup").addEventListener("click", async () => {
+  setStatus("backing up");
+  const res = await fetch("/api/backup", { method: "POST" });
+  const data = await res.json();
+  setStatus(data.ok ? `backup ${data.files} files` : (data.error || "backup failed"));
+  addMsg("assistant", data.path || JSON.stringify(data), "BACKUP");
+});
 $("btn-vault").addEventListener("click", async () => {
   setStatus("opening vault");
   const res = await fetch("/api/daily/vault", { method: "POST" });
@@ -652,7 +673,13 @@ $("save-keys").addEventListener("click", async () => {
       github_username: $("key-user").value || undefined,
       voice: $("key-voice").value,
       wordpress_url: $("key-wp") && $("key-wp").value || undefined,
+      wordpress_user: $("key-wp-user") && $("key-wp-user").value || undefined,
+      wordpress_app_password: $("key-wp-pass") && $("key-wp-pass").value || undefined,
       x_bearer_token: $("key-x") && $("key-x").value || undefined,
+      x_api_key: $("key-x-key") && $("key-x-key").value || undefined,
+      x_api_secret: $("key-x-secret") && $("key-x-secret").value || undefined,
+      x_access_token: $("key-x-access") && $("key-x-access").value || undefined,
+      x_access_secret: $("key-x-access-secret") && $("key-x-access-secret").value || undefined,
       postiz_url: $("key-postiz") && $("key-postiz").value || undefined,
       alpaca_key_id: $("key-alpaca-id") && $("key-alpaca-id").value || undefined,
       alpaca_secret_key: $("key-alpaca-secret") && $("key-alpaca-secret").value || undefined,
