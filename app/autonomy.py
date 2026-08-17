@@ -99,8 +99,21 @@ def briefing(*, use_grok: bool = True) -> str:
         f"- Weather: {temp} C" if temp is not None else "- Weather: n/a",
         "- Markets: " + (", ".join(movers[:8]) if movers else "n/a"),
         "- News: " + ("; ".join(headlines) if headlines else "n/a"),
-        "- Open tasks: " + ("; ".join(t["text"] for t in tasks) if tasks else "none"),
     ]
+    try:
+        from . import intel
+
+        desk = intel.desk()
+        if desk.get("movers"):
+            lines.append(
+                "- Desk movers: "
+                + ", ".join(f"{m.get('symbol')} {m.get('change_pct'):+.1f}%" for m in desk["movers"][:6] if m.get("change_pct") is not None)
+            )
+        if desk.get("linked"):
+            lines.append("- News×ticker: " + "; ".join((x.get("title") or "")[:80] for x in desk["linked"][:3]))
+    except Exception:
+        pass
+    lines.append("- Open tasks: " + ("; ".join(t["text"] for t in tasks) if tasks else "none"))
     try:
         goals = memory.list_goals("open")
         if goals:

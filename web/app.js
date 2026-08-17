@@ -654,6 +654,9 @@ $("save-keys").addEventListener("click", async () => {
       wordpress_url: $("key-wp") && $("key-wp").value || undefined,
       x_bearer_token: $("key-x") && $("key-x").value || undefined,
       postiz_url: $("key-postiz") && $("key-postiz").value || undefined,
+      alpaca_key_id: $("key-alpaca-id") && $("key-alpaca-id").value || undefined,
+      alpaca_secret_key: $("key-alpaca-secret") && $("key-alpaca-secret").value || undefined,
+      alpaca_live: $("key-alpaca-live") && $("key-alpaca-live").value === "true",
     }),
   });
   $("modal").classList.remove("show");

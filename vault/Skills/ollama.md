@@ -9,7 +9,8 @@ Grok stays primary. Ollama is the **local** fallback when `JARVIS_OFFLINE=true` 
 
 ```
 OLLAMA_HOST=http://127.0.0.1:11434
-OLLAMA_MODEL=llama3.2
+OLLAMA_MODEL=llama3.1:8b
+# Fallback if RAM is tight: llama3.2
 ```
 
 Install: [ollama.com](https://ollama.com) then `ollama pull llama3.2`.

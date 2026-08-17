@@ -77,6 +77,9 @@ class SettingsIn(BaseModel):
     wordpress_app_password: str | None = None
     x_bearer_token: str | None = None
     postiz_url: str | None = None
+    alpaca_key_id: str | None = None
+    alpaca_secret_key: str | None = None
+    alpaca_live: bool | None = None
 
 
 class TradeIn(BaseModel):
@@ -254,6 +257,14 @@ def save_settings(body: SettingsIn) -> dict:
         updates["X_BEARER_TOKEN"] = body.x_bearer_token
     if body.postiz_url:
         updates["POSTIZ_URL"] = body.postiz_url
+    if body.alpaca_key_id:
+        updates["ALPACA_KEY_ID"] = body.alpaca_key_id
+    if body.alpaca_secret_key:
+        updates["ALPACA_SECRET_KEY"] = body.alpaca_secret_key
+    if body.alpaca_live is True:
+        updates["ALPACA_LIVE"] = "true"
+    if body.alpaca_live is False:
+        updates["ALPACA_LIVE"] = "false"
     if updates:
         config.save_env(updates)
     if config.GITHUB_TOKEN and not config.GITHUB_USERNAME:
@@ -344,6 +355,13 @@ def markets_dash() -> dict:
 @app.get("/api/feeds")
 def api_feeds() -> dict:
     return feeds.snapshot()
+
+
+@app.get("/api/intel")
+def api_intel() -> dict:
+    from . import intel
+
+    return intel.desk()
 
 
 @app.get("/api/feeds/stream")

@@ -81,6 +81,7 @@
           <button type="button" data-q="Start my day. Use the daily pack and write a briefing to today's note.">Start my day</button>
           <button type="button" data-q="Give me a morning briefing and write it to today's daily note.">Brief me</button>
           <button type="button" data-q="Pull live feeds: Yahoo Finance quotes and the latest BBC/NPR/Yahoo/HN headlines. Summarize what matters.">Live feeds</button>
+          <button type="button" data-q="Run the market intel desk: scan indices, sectors, mega-caps, FX, commodities, and crypto. Cross those movers with live headlines. Flag what matters. Do not trade.">News+markets</button>
           <button type="button" data-q="Analyze the watchlist. Flag anything moving more than 1.5%.">Scan markets</button>
           <button type="button" data-q="List open vault tasks and suggest what to do first.">Tasks</button>
           <button type="button" data-q="Search the Obsidian vault for what we should remember about this project.">Search vault</button>
@@ -127,6 +128,12 @@
       <input id="key-x" type="password" autocomplete="off" />
       <label>POSTIZ_URL (optional social queue)</label>
       <input id="key-postiz" placeholder="http://localhost:5000" />
+      <label>ALPACA_KEY_ID (paper/live brokerage)</label>
+      <input id="key-alpaca-id" type="password" autocomplete="off" />
+      <label>ALPACA_SECRET_KEY</label>
+      <input id="key-alpaca-secret" type="password" autocomplete="off" />
+      <label>ALPACA_LIVE (real cash — still needs confirm token)</label>
+      <select id="key-alpaca-live"><option value="false">false — Alpaca paper</option><option value="true">true — real money</option></select>
       <label>VOICE</label>
       <select id="key-voice">
         <option>orion</option><option>eve</option><option>atlas</option><option>ara</option>

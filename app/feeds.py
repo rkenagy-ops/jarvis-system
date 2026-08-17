@@ -13,9 +13,14 @@ from . import guard
 
 NEWS_FEEDS = {
     "bbc": "https://feeds.bbci.co.uk/news/rss.xml",
+    "bbc_world": "https://feeds.bbci.co.uk/news/world/rss.xml",
     "bbc_business": "https://feeds.bbci.co.uk/news/business/rss.xml",
+    "bbc_tech": "https://feeds.bbci.co.uk/news/technology/rss.xml",
     "npr": "https://feeds.npr.org/1001/rss.xml",
     "yahoo_finance": "https://finance.yahoo.com/news/rssindex",
+    "cnbc": "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=100003114",
+    "guardian_biz": "https://www.theguardian.com/uk/business/rss",
+    "coindesk": "https://www.coindesk.com/arc/outboundfeeds/rss/",
     "hn": "https://hnrss.org/frontpage",
 }
 

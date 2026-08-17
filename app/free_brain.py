@@ -191,6 +191,11 @@ def handle(user_text: str, emit=None) -> dict[str, Any]:
         lines = [f"- {i.get('title')}" for i in (n.get("items") or [])[:6]]
         return {"text": "Headlines:\n" + "\n".join(lines), "calls": calls, "brain": "free"}
 
+    if "intel" in low or "news+market" in low or "all market" in low or "market desk" in low:
+        from . import intel
+
+        return {"text": _fmt(intel.desk()), "calls": [{"name": "market", "arguments": {"action": "intel"}}], "brain": "free"}
+
     if any(w in low for w in ("watchlist", "scan market", "markets", "how is the market")):
         use("market", action="watchlist")
         rows = markets.watchlist()

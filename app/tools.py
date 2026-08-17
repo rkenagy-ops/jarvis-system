@@ -68,9 +68,10 @@ FUNCTION_TOOLS = [
     ),
     _fn(
         "market",
-        "Stocks/crypto: quote, history, analyze (RSI/SMA/MACD/vol), watchlist, account, trade, confirm.",
+        "Markets: quote, history, analyze, watchlist, scan (indices/sectors/fx/commod/crypto), intel (news+movers), account, broker, trade, confirm. Live Alpaca needs keys + confirm token.",
         {
-            "action": {"type": "string", "enum": ["quote", "history", "analyze", "watchlist", "account", "trade", "confirm"]},
+            "action": {"type": "string", "enum": ["quote", "history", "analyze", "watchlist", "scan", "intel", "account", "broker", "trade", "confirm"]},
+            "universe": {"type": "string"},
             "symbol": {"type": "string"},
             "side": {"type": "string", "enum": ["buy", "sell"]},
             "qty": {"type": "number"},

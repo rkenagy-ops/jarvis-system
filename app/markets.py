@@ -266,10 +266,21 @@ def paper_trade(symbol: str, side: str, qty: float, *, confirm_token: str | None
         consumed = memory.consume_pending(confirm_token)
         if not consumed or consumed.get("kind") != "live_trade":
             return {"error": "Invalid or expired confirm token. Live trade cancelled."}
+        from . import broker
+
+        if broker.configured():
+            routed = broker.submit_market(symbol, side, qty)
+            memory.remember(
+                f"alpaca {side} {qty} {symbol} → {routed}",
+                kind="trade",
+                tags=["trade", "alpaca", symbol],
+                importance=0.85,
+                source_agent="trader",
+            )
+            return routed
         return {
-            "error": "Live brokerage routing is not connected. Trade recorded as paper instead.",
-            "fallback": "paper",
-            **_fill(symbol, side, qty, price, mode="paper-after-live-block"),
+            "error": "Live mode is on but ALPACA_KEY_ID / ALPACA_SECRET_KEY are not set. No fill.",
+            "hint": "Create keys at https://app.alpaca.markets . ALPACA_LIVE=true is real cash.",
         }
 
     if config.TRADING_REQUIRE_CONFIRMATION and qty * price >= 25000 and not confirm_token:
@@ -288,6 +299,12 @@ def confirm_trade(token: str) -> dict[str, Any]:
     if not item:
         return {"error": "Invalid or expired confirm token."}
     payload = item["payload"]
+    if item.get("kind") == "live_trade":
+        from . import broker
+
+        if broker.configured():
+            return broker.submit_market(payload["symbol"], payload["side"], float(payload["qty"]))
+        return {"error": "Confirm received but Alpaca keys are missing. No live fill."}
     return _fill(payload["symbol"], payload["side"], float(payload["qty"]), float(payload["price"]), mode="paper-confirmed")
 
 
@@ -361,4 +378,16 @@ def dispatch(action: str, **kwargs) -> Any:
         )
     if action == "confirm":
         return confirm_trade(kwargs.get("confirm_token") or kwargs.get("token") or "")
+    if action == "scan":
+        from . import intel
+
+        return intel.scan(kwargs.get("universe") or kwargs.get("symbols") or "all")
+    if action == "intel":
+        from . import intel
+
+        return intel.desk()
+    if action == "broker":
+        from . import broker
+
+        return broker.account() if broker.configured() else broker.status()
     return {"error": f"Unknown market action {action}"}

@@ -73,6 +73,9 @@ WORDPRESS_USER = _clean(os.getenv("WORDPRESS_USER"))
 WORDPRESS_APP_PASSWORD = _clean(os.getenv("WORDPRESS_APP_PASSWORD"))
 X_BEARER_TOKEN = _clean(os.getenv("X_BEARER_TOKEN"))
 AMAZON_MARKETPLACE = _clean(os.getenv("AMAZON_MARKETPLACE")) or "US"
+ALPACA_KEY_ID = _clean(os.getenv("ALPACA_KEY_ID") or os.getenv("APCA_API_KEY_ID"))
+ALPACA_SECRET_KEY = _clean(os.getenv("ALPACA_SECRET_KEY") or os.getenv("APCA_API_SECRET_KEY"))
+ALPACA_LIVE = (_clean(os.getenv("ALPACA_LIVE")) or "false").lower() == "true"
 
 XAI_BASE = "https://api.x.ai/v1"
 XAI_REALTIME = "wss://api.x.ai/v1/realtime"
@@ -85,7 +88,7 @@ def reload_env() -> None:
     global XAI_API_KEY, GITHUB_TOKEN, GITHUB_USERNAME, OWNER_NAME, VOICE, MODEL, TRADING_MODE, AUTONOMY_ENABLED
     global WORDPRESS_URL, WORDPRESS_USER, WORDPRESS_APP_PASSWORD, X_BEARER_TOKEN, POSTIZ_URL
     global JARVIS_TOKEN, JARVIS_ALLOW_LAN, JARVIS_PUBLIC_HOST, OFFLINE, HOST, PORT
-    global OLLAMA_HOST, OLLAMA_MODEL
+    global OLLAMA_HOST, OLLAMA_MODEL, ALPACA_KEY_ID, ALPACA_SECRET_KEY, ALPACA_LIVE
     XAI_API_KEY = _clean(os.getenv("XAI_API_KEY"))
     GITHUB_TOKEN = _clean(os.getenv("GITHUB_TOKEN"))
     GITHUB_USERNAME = _clean(os.getenv("GITHUB_USERNAME")) or "rkenagy-ops"
@@ -106,7 +109,10 @@ def reload_env() -> None:
     HOST = _clean(os.getenv("JARVIS_HOST")) or "127.0.0.1"
     PORT = int(_clean(os.getenv("JARVIS_PORT")) or "8787")
     OLLAMA_HOST = _clean(os.getenv("OLLAMA_HOST")) or "http://127.0.0.1:11434"
-    OLLAMA_MODEL = _clean(os.getenv("OLLAMA_MODEL")) or "llama3.2"
+    OLLAMA_MODEL = _clean(os.getenv("OLLAMA_MODEL")) or "llama3.1:8b"
+    ALPACA_KEY_ID = _clean(os.getenv("ALPACA_KEY_ID") or os.getenv("APCA_API_KEY_ID"))
+    ALPACA_SECRET_KEY = _clean(os.getenv("ALPACA_SECRET_KEY") or os.getenv("APCA_API_SECRET_KEY"))
+    ALPACA_LIVE = (_clean(os.getenv("ALPACA_LIVE")) or "false").lower() == "true"
 
 
 def save_env(updates: dict[str, str]) -> None:
@@ -147,4 +153,6 @@ def status() -> dict:
         "offline": OFFLINE,
         "ollama_host": OLLAMA_HOST,
         "ollama_model": OLLAMA_MODEL,
+        "alpaca_configured": bool(ALPACA_KEY_ID and ALPACA_SECRET_KEY),
+        "alpaca_live": ALPACA_LIVE,
     }
