@@ -119,7 +119,7 @@ def _run_model(
 
 
 def _handle_spawn(task: str, agent_ids: list[str], session_id: str, emit: EventFn | None) -> list[dict[str, Any]]:
-    chosen = [a for a in agent_ids if a in AGENTS and a != "jarvis"][:6]
+    chosen = [a for a in agent_ids if a in AGENTS and a != "jarvis"][:8]
     if not chosen:
         return [{"error": "No valid specialists requested."}]
     if emit:
@@ -144,7 +144,7 @@ def _handle_spawn(task: str, agent_ids: list[str], session_id: str, emit: EventF
         return {"agent": aid, "text": insight, "citations": result.get("citations") or []}
 
     out: list[dict[str, Any]] = []
-    with ThreadPoolExecutor(max_workers=min(4, len(chosen))) as pool:
+    with ThreadPoolExecutor(max_workers=min(8, len(chosen))) as pool:
         futs = {pool.submit(run_one, aid): aid for aid in chosen}
         for fut in as_completed(futs):
             try:

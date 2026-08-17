@@ -241,7 +241,7 @@ FUNCTION_TOOLS = [
         {
             "action": {
                 "type": "string",
-                "enum": ["search", "readme", "ingest", "starter_pack", "brain_pack", "jarvis_pack", "awesome", "public_apis", "huggingface", "youtube"],
+                "enum": ["search", "readme", "ingest", "starter_pack", "brain_pack", "jarvis_pack", "growth_pack", "self_upgrade", "awesome", "public_apis", "huggingface", "youtube"],
             },
             "query": {"type": "string"},
             "repo": {"type": "string", "description": "owner/repo"},
@@ -254,9 +254,9 @@ FUNCTION_TOOLS = [
     ),
 ]
 
-_MARKET_AGENTS = {"jarvis", "trader", "oracle", "analyst"}
-_GITHUB_AGENTS = {"jarvis", "sentinel"}
-_FILE_AGENTS = {"jarvis", "forge", "analyst", "archivist"}
+_GITHUB_AGENTS = {"jarvis", "sentinel", "scout"}
+_FILE_AGENTS = {"jarvis", "forge", "analyst", "archivist", "steward"}
+_MARKET_AGENTS = {"jarvis", "trader", "oracle", "analyst", "watcher"}
 
 
 def tools_for(agent_id: str, *, allow_spawn: bool = False) -> list[dict]:

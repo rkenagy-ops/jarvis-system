@@ -145,6 +145,12 @@ JARVIS_PACK = [
 ]
 
 
+def growth_pack(limit: int = 10) -> dict:
+    from . import growth
+
+    return growth.pack(limit)
+
+
 def jarvis_pack(limit: int = 16) -> dict:
     ingested = []
     errors = []
@@ -268,6 +274,12 @@ def dispatch(action: str, **kwargs) -> Any:
         return brain_pack(int(kwargs.get("limit") or 10))
     if action in {"jarvis", "jarvis_pack"}:
         return jarvis_pack(int(kwargs.get("limit") or 16))
+    if action in {"growth", "growth_pack"}:
+        return growth_pack(int(kwargs.get("limit") or 10))
+    if action in {"upgrade", "self_upgrade"}:
+        from . import growth
+
+        return growth.cycle(int(kwargs.get("limit") or 6))
     if action == "awesome":
         return awesome(kwargs.get("name") or "public-apis", kwargs.get("query") or "", int(kwargs.get("limit") or 15))
     if action == "public_apis":
@@ -276,4 +288,4 @@ def dispatch(action: str, **kwargs) -> Any:
         return huggingface(kwargs.get("query") or "", kwargs.get("kind") or "models")
     if action == "youtube":
         return youtube_transcript(kwargs.get("url") or kwargs.get("query") or "")
-    return {"error": f"Unknown oss action {action}", "actions": ["search", "readme", "ingest", "starter_pack", "brain_pack", "jarvis_pack", "awesome", "public_apis", "huggingface", "youtube"]}
+    return {"error": f"Unknown oss action {action}", "actions": ["search", "readme", "ingest", "starter_pack", "brain_pack", "jarvis_pack", "growth_pack", "self_upgrade", "awesome", "public_apis", "huggingface", "youtube"]}

@@ -404,6 +404,13 @@ def api_daily_vault() -> dict:
     return daily_mod.open_vault()
 
 
+@app.post("/api/growth")
+def api_growth() -> dict:
+    from . import growth
+
+    return growth.cycle(6)
+
+
 @app.get("/api/tasks")
 def tasks_list() -> dict:
     return {"tasks": obsidian.list_tasks(open_only=True)}

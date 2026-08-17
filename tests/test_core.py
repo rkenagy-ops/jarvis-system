@@ -9,8 +9,8 @@ from app import agents, memory, tools
 
 def test_agents_present():
     ids = set(agents.AGENTS)
-    assert len(ids) == 15
-    assert {"jarvis", "scribe", "social", "merch", "publisher", "scheduler", "designer"} <= ids
+    assert len(ids) == 20
+    assert {"jarvis", "scribe", "social", "merch", "publisher", "scheduler", "designer", "scout", "steward", "counsel", "liaison", "watcher"} <= ids
     assert agents.get("jarvis").can_spawn
     assert not agents.get("oracle").can_spawn
 

@@ -17,6 +17,13 @@ def run_job(job: dict[str, Any]) -> str:
         summary = briefing()
         memory.mark_job(job["id"], summary[:400])
         return summary
+    if name in {"self-upgrade", "growth"} or "self-upgrade" in prompt or "growth pack" in prompt:
+        from . import growth
+
+        result = growth.cycle(6)
+        summary = f"Self-upgrade: ingested {result.get('count') if 'count' in result else len(result.get('ingested') or [])} — {result.get('note')}"
+        memory.mark_job(job["id"], summary[:400])
+        return summary
     if name == "watchlist-scan" or prompt.strip().startswith("scan the watchlist"):
         quotes = markets.watchlist()
         movers = []
@@ -155,6 +162,7 @@ def ensure_defaults() -> list[dict]:
     specs = [
         ("morning-briefing", "Write the morning briefing to today's daily note.", 86400),
         ("watchlist-scan", "Scan the watchlist for 1.5% movers.", 1800),
+        ("self-upgrade", "Hunt GitHub for OSS Super Jarvis can absorb. Ingest new READMEs. Do not clone stacks.", 21600),
     ]
     for name, prompt, every in specs:
         if name in have:
