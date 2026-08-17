@@ -638,6 +638,7 @@ def run() -> None:
     import uvicorn
 
     guard.persist_token()
+    config.save_env({"OLLAMA_HOST": config.OLLAMA_HOST, "OLLAMA_MODEL": config.OLLAMA_MODEL})
     host = guard.bind_host()
     uvicorn.run("app.main:app", host=host, port=config.PORT, reload=False)
 
