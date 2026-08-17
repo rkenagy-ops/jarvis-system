@@ -205,6 +205,9 @@ async function refreshWidgets() {
           ["vault", today.vault],
           ["obsidian", today.obsidian_installed ? "installed" : "not installed — VAULT still opens the folder"],
         ];
+        ((today.calendar && today.calendar.events) || []).slice(0, 4).forEach((e) => {
+          bits.push(["cal", `${(e.start || "").slice(11, 16)} ${e.subject || ""}`]);
+        });
         (today.goals || []).slice(0, 3).forEach((g) => bits.push(["goal", g.title]));
         (today.tasks || []).slice(0, 3).forEach((task) => bits.push(["task", task.text]));
         bits.forEach(([k, v]) => {
@@ -646,6 +649,18 @@ function toggleWake() {
   $("btn-wake").classList.add("on");
   setStatus("say jarvis");
 }
+$("btn-ms").addEventListener("click", async () => {
+  setStatus("microsoft login");
+  const res = await fetch("/api/microsoft/login", { method: "POST" });
+  const data = await res.json();
+  if (data.user_code) {
+    addMsg("assistant", `${data.message || "Open " + data.verification_uri + " and enter " + data.user_code}`, "MICROSOFT");
+    if (data.verification_uri) window.open(data.verification_uri, "_blank", "noopener");
+  } else {
+    addMsg("assistant", data.error || JSON.stringify(data), "MICROSOFT");
+  }
+  setStatus(data.ok ? "enter the code at microsoft.com/devicelogin" : "microsoft setup needed");
+});
 $("btn-backup").addEventListener("click", async () => {
   setStatus("backing up");
   const res = await fetch("/api/backup", { method: "POST" });
@@ -684,6 +699,8 @@ $("save-keys").addEventListener("click", async () => {
       alpaca_key_id: $("key-alpaca-id") && $("key-alpaca-id").value || undefined,
       alpaca_secret_key: $("key-alpaca-secret") && $("key-alpaca-secret").value || undefined,
       alpaca_live: $("key-alpaca-live") && $("key-alpaca-live").value === "true",
+      ms_client_id: $("key-ms-client") && $("key-ms-client").value || undefined,
+      ms_tenant: $("key-ms-tenant") && $("key-ms-tenant").value || undefined,
     }),
   });
   $("modal").classList.remove("show");
@@ -704,6 +721,7 @@ $("btn-brief").addEventListener("click", async () => {
   const res = await fetch("/api/briefing", { method: "POST" });
   const data = await res.json();
   addMsg("assistant", data.text || "briefing done", "BRIEFING");
+  if (data.text) maybeSpeak(data.text);
   refreshWidgets();
   setStatus("briefing written to daily note");
 });

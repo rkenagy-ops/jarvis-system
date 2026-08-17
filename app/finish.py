@@ -1,4 +1,4 @@
-"""What 'finished' means for Super Jarvis 5.0 — status only, no secrets."""
+"""What 'finished' means for Super Jarvis 5.1 — status only, no secrets."""
 
 from __future__ import annotations
 
@@ -28,10 +28,11 @@ def checklist() -> dict:
         {"id": "alpaca", "ok": bool(config.ALPACA_KEY_ID and config.ALPACA_SECRET_KEY), "label": "Alpaca keys (optional paper/live)"},
         {"id": "eval", "ok": bool(ev), "label": "Briefing eval written"},
         {"id": "backup", "ok": bool(backup.latest()), "label": "At least one vault+db zip"},
+        {"id": "microsoft", "ok": bool(config.MS_CLIENT_ID and config.MS_REFRESH_TOKEN), "label": "Microsoft calendar + mail signed in"},
     ]
     done = sum(1 for i in items if i["ok"])
     return {
-        "version": "5.0",
+        "version": "5.1",
         "done": done,
         "total": len(items),
         "complete": done >= 6,
@@ -43,6 +44,6 @@ def checklist() -> dict:
 
 def _next(items: list[dict]) -> str:
     for i in items:
-        if not i["ok"] and i["id"] in {"wordpress", "backup", "eval"}:
+        if not i["ok"] and i["id"] in {"wordpress", "microsoft", "backup", "eval"}:
             return i["label"]
     return "Use it. Keys you do not have stay optional."

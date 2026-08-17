@@ -84,6 +84,8 @@ class SettingsIn(BaseModel):
     x_api_secret: str | None = None
     x_access_token: str | None = None
     x_access_secret: str | None = None
+    ms_client_id: str | None = None
+    ms_tenant: str | None = None
 
 
 class TradeIn(BaseModel):
@@ -267,6 +269,10 @@ def save_settings(body: SettingsIn) -> dict:
         updates["X_ACCESS_TOKEN"] = body.x_access_token
     if body.x_access_secret:
         updates["X_ACCESS_SECRET"] = body.x_access_secret
+    if body.ms_client_id:
+        updates["MS_CLIENT_ID"] = body.ms_client_id
+    if body.ms_tenant:
+        updates["MS_TENANT"] = body.ms_tenant
     if body.postiz_url:
         updates["POSTIZ_URL"] = body.postiz_url
     if body.alpaca_key_id:
@@ -475,6 +481,45 @@ def api_backup() -> dict:
     from . import backup
 
     return backup.run()
+
+
+@app.get("/api/microsoft")
+def api_ms() -> dict:
+    from . import msgraph
+
+    return msgraph.status()
+
+
+@app.post("/api/microsoft/login")
+def api_ms_login() -> dict:
+    from . import msgraph
+
+    return msgraph.start_device()
+
+
+@app.get("/api/microsoft/calendar")
+def api_ms_cal() -> dict:
+    from . import msgraph
+
+    return msgraph.calendar_today()
+
+
+class MailIn(BaseModel):
+    to: str
+    subject: str
+    body: str = ""
+
+
+@app.post("/api/microsoft/send")
+def api_ms_send(body: MailIn) -> dict:
+    from . import msgraph
+
+    return msgraph.send_mail(body.to, body.subject, body.body)
+
+
+@app.post("/api/rag/embed")
+def api_rag_embed() -> dict:
+    return rag.embed_vault()
 
 
 @app.get("/api/ollama")

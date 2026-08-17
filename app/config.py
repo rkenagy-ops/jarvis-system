@@ -54,6 +54,10 @@ JARVIS_PUBLIC_HOST = _clean(os.getenv("JARVIS_PUBLIC_HOST"))
 OFFLINE = (_clean(os.getenv("JARVIS_OFFLINE")) or "false").lower() == "true"
 OLLAMA_HOST = _clean(os.getenv("OLLAMA_HOST")) or "http://127.0.0.1:11434"
 OLLAMA_MODEL = _clean(os.getenv("OLLAMA_MODEL")) or "llama3.1:8b"
+OLLAMA_EMBED_MODEL = _clean(os.getenv("OLLAMA_EMBED_MODEL")) or "nomic-embed-text"
+MS_CLIENT_ID = _clean(os.getenv("MS_CLIENT_ID"))
+MS_TENANT = _clean(os.getenv("MS_TENANT")) or "consumers"
+MS_REFRESH_TOKEN = _clean(os.getenv("MS_REFRESH_TOKEN"))
 TRADING_MODE = (_clean(os.getenv("TRADING_MODE")) or "paper").lower()
 TRADING_REQUIRE_CONFIRMATION = (_clean(os.getenv("TRADING_REQUIRE_CONFIRMATION")) or "true").lower() == "true"
 PAPER_CASH = float(_clean(os.getenv("PAPER_CASH")) or "100000")
@@ -93,7 +97,8 @@ def reload_env() -> None:
     global WORDPRESS_URL, WORDPRESS_USER, WORDPRESS_APP_PASSWORD, X_BEARER_TOKEN, POSTIZ_URL
     global X_API_KEY, X_API_SECRET, X_ACCESS_TOKEN, X_ACCESS_SECRET
     global JARVIS_TOKEN, JARVIS_ALLOW_LAN, JARVIS_PUBLIC_HOST, OFFLINE, HOST, PORT
-    global OLLAMA_HOST, OLLAMA_MODEL, ALPACA_KEY_ID, ALPACA_SECRET_KEY, ALPACA_LIVE
+    global OLLAMA_HOST, OLLAMA_MODEL, OLLAMA_EMBED_MODEL, ALPACA_KEY_ID, ALPACA_SECRET_KEY, ALPACA_LIVE
+    global MS_CLIENT_ID, MS_TENANT, MS_REFRESH_TOKEN
     XAI_API_KEY = _clean(os.getenv("XAI_API_KEY"))
     GITHUB_TOKEN = _clean(os.getenv("GITHUB_TOKEN"))
     GITHUB_USERNAME = _clean(os.getenv("GITHUB_USERNAME")) or "rkenagy-ops"
@@ -119,6 +124,10 @@ def reload_env() -> None:
     PORT = int(_clean(os.getenv("JARVIS_PORT")) or "8787")
     OLLAMA_HOST = _clean(os.getenv("OLLAMA_HOST")) or "http://127.0.0.1:11434"
     OLLAMA_MODEL = _clean(os.getenv("OLLAMA_MODEL")) or "llama3.1:8b"
+    OLLAMA_EMBED_MODEL = _clean(os.getenv("OLLAMA_EMBED_MODEL")) or "nomic-embed-text"
+    MS_CLIENT_ID = _clean(os.getenv("MS_CLIENT_ID"))
+    MS_TENANT = _clean(os.getenv("MS_TENANT")) or "consumers"
+    MS_REFRESH_TOKEN = _clean(os.getenv("MS_REFRESH_TOKEN"))
     ALPACA_KEY_ID = _clean(os.getenv("ALPACA_KEY_ID") or os.getenv("APCA_API_KEY_ID"))
     ALPACA_SECRET_KEY = _clean(os.getenv("ALPACA_SECRET_KEY") or os.getenv("APCA_API_SECRET_KEY"))
     ALPACA_LIVE = (_clean(os.getenv("ALPACA_LIVE")) or "false").lower() == "true"
@@ -166,4 +175,5 @@ def status() -> dict:
         "alpaca_live": ALPACA_LIVE,
         "wordpress_configured": bool(WORDPRESS_URL and WORDPRESS_USER and WORDPRESS_APP_PASSWORD),
         "x_oauth": bool(X_API_KEY and X_API_SECRET and X_ACCESS_TOKEN and X_ACCESS_SECRET),
+        "microsoft_configured": bool(MS_CLIENT_ID and MS_REFRESH_TOKEN),
     }

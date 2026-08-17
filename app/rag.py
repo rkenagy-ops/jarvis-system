@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 import sqlite3
 import threading
@@ -37,6 +38,13 @@ def init() -> None:
             CREATE TRIGGER IF NOT EXISTS vault_chunks_ad AFTER DELETE ON vault_chunks BEGIN
               INSERT INTO vault_fts(vault_fts, rowid, path, heading, text) VALUES ('delete', old.id, old.path, old.heading, old.text);
             END;
+            CREATE TABLE IF NOT EXISTS vault_embed (
+                chunk_id INTEGER PRIMARY KEY,
+                path TEXT NOT NULL,
+                heading TEXT,
+                text TEXT NOT NULL,
+                vec TEXT NOT NULL
+            );
             """
         )
         conn.commit()
@@ -96,6 +104,53 @@ def reindex_vault() -> dict:
     return {"files": files, "chunks": counted}
 
 
+def _cosine(a: list[float], b: list[float]) -> float:
+    if not a or not b or len(a) != len(b):
+        return 0.0
+    dot = sum(x * y for x, y in zip(a, b))
+    na = sum(x * x for x in a) ** 0.5
+    nb = sum(y * y for y in b) ** 0.5
+    if na == 0 or nb == 0:
+        return 0.0
+    return dot / (na * nb)
+
+
+def embed_vault(*, limit_files: int = 200) -> dict:
+    """Build local vectors via Ollama. No-op if the embed model is missing."""
+    init()
+    from . import ollama as ol
+
+    try:
+        vec = ol.embed("ping")
+        if not vec:
+            return {"ok": False, "reason": "empty_embed"}
+    except Exception as exc:
+        return {"ok": False, "reason": str(exc)[:200]}
+    root = obsidian.vault()
+    n = 0
+    files = 0
+    with _lock:
+        conn = _conn()
+        conn.execute("DELETE FROM vault_embed")
+        rows = conn.execute("SELECT id, path, heading, text FROM vault_chunks LIMIT ?", (limit_files * 8,)).fetchall()
+    for r in rows:
+        try:
+            v = ol.embed((r["text"] or "")[:1500])
+        except Exception:
+            continue
+        with _lock:
+            conn = _conn()
+            conn.execute(
+                "INSERT OR REPLACE INTO vault_embed(chunk_id, path, heading, text, vec) VALUES(?,?,?,?,?)",
+                (r["id"], r["path"], r["heading"], r["text"], json.dumps(v)),
+            )
+            conn.commit()
+            conn.close()
+        n += 1
+        files += 1
+    return {"ok": True, "vectors": n}
+
+
 def retrieve(query: str, limit: int = 6) -> list[dict]:
     init()
     q = (query or "").strip()
@@ -104,6 +159,7 @@ def retrieve(query: str, limit: int = 6) -> list[dict]:
     tokens = TOKEN.findall(q.lower())
     fts_q = " OR ".join(tokens) if tokens else q
     hits: list[dict] = []
+    seen: set[str] = set()
     with _lock:
         conn = _conn()
         try:
@@ -119,10 +175,44 @@ def retrieve(query: str, limit: int = 6) -> list[dict]:
                 "SELECT path, heading, text FROM vault_chunks WHERE text LIKE ? OR path LIKE ? LIMIT ?",
                 (like, like, limit),
             ).fetchall()
+        embeds = conn.execute("SELECT path, heading, text, vec FROM vault_embed").fetchall()
         conn.close()
     for r in rows:
-        hits.append({"path": r["path"], "heading": r["heading"], "text": (r["text"] or "")[:700]})
-    return hits
+        key = f"{r['path']}:{r['heading']}"
+        seen.add(key)
+        hits.append({"path": r["path"], "heading": r["heading"], "text": (r["text"] or "")[:700], "via": "fts"})
+    if embeds:
+        try:
+            from . import ollama as ol
+            import json
+
+            qv = ol.embed(q)
+            ranked = []
+            for r in embeds:
+                try:
+                    vv = json.loads(r["vec"])
+                except Exception:
+                    continue
+                ranked.append((_cosine(qv, vv), r))
+            ranked.sort(key=lambda x: x[0], reverse=True)
+            for score, r in ranked[:limit]:
+                key = f"{r['path']}:{r['heading']}"
+                if key in seen or score < 0.25:
+                    continue
+                hits.append(
+                    {
+                        "path": r["path"],
+                        "heading": r["heading"],
+                        "text": (r["text"] or "")[:700],
+                        "via": "embed",
+                        "score": round(score, 3),
+                    }
+                )
+                if len(hits) >= limit + 3:
+                    break
+        except Exception:
+            pass
+    return hits[: max(limit, 6)]
 
 
 def pack(query: str, *, max_chars: int = 3500) -> str:

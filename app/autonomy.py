@@ -17,6 +17,13 @@ def run_job(job: dict[str, Any]) -> str:
         summary = briefing()
         memory.mark_job(job["id"], summary[:400])
         return summary
+    if name in {"weekly-backup", "backup"} or "zip vault" in prompt:
+        from . import backup
+
+        result = backup.run()
+        summary = f"Backup {result.get('path')} ({result.get('files')} files)"
+        memory.mark_job(job["id"], summary[:400])
+        return summary
     if name in {"self-upgrade", "growth"} or "self-upgrade" in prompt or "growth pack" in prompt:
         from . import growth
 
@@ -115,6 +122,19 @@ def briefing(*, use_grok: bool = True) -> str:
         pass
     lines.append("- Open tasks: " + ("; ".join(t["text"] for t in tasks) if tasks else "none"))
     try:
+        from . import msgraph
+
+        if msgraph.ready():
+            cal = msgraph.calendar_today()
+            evs = cal.get("events") or []
+            if evs:
+                lines.append(
+                    "- Calendar: "
+                    + "; ".join(f"{(e.get('start') or '')[11:16]} {e.get('subject')}" for e in evs[:5])
+                )
+    except Exception:
+        pass
+    try:
         goals = memory.list_goals("open")
         if goals:
             lines.append("- Goals: " + "; ".join(g.get("title") or "" for g in goals[:5]))
@@ -182,6 +202,7 @@ def ensure_defaults() -> list[dict]:
         ("morning-briefing", "Write the morning briefing to today's daily note.", 86400),
         ("watchlist-scan", "Scan the watchlist for 1.5% movers.", 1800),
         ("self-upgrade", "Hunt GitHub for OSS Super Jarvis can absorb. Ingest new READMEs. Do not clone stacks.", 21600),
+        ("weekly-backup", "Zip vault and SQLite mind to workspace/backups.", 604800),
     ]
     for name, prompt, every in specs:
         if name in have:

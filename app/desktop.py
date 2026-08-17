@@ -166,7 +166,16 @@ def email_draft(to: str, subject: str, body: str) -> dict:
     slug = _safe(subject or "email", 40).replace(" ", "-") or "email"
     path = f"Inbox/email-{slug}.md"
     obsidian.write_note(path, note)
-    return {"ok": True, "path": path, "note": "Draft only. Add SMTP to send."}
+    return {"ok": True, "path": path, "note": "Draft only. Use email_send after Microsoft login."}
+
+
+def email_send(to: str, subject: str, body: str) -> dict:
+    from . import msgraph
+
+    sent = msgraph.send_mail(to, subject, body)
+    if sent.get("ok"):
+        email_draft(to, subject, body + "\n\n_sent via Microsoft Graph_")
+    return sent
 
 
 def screenshot(name: str = "") -> dict:
@@ -321,6 +330,14 @@ def plan_day() -> dict:
         coming = reminders.list_items(open_only=True, limit=6)
     except Exception:
         pass
+    cal = cal if isinstance(cal, dict) else {}
+    try:
+        from . import msgraph
+
+        if msgraph.ready():
+            cal = {**cal, "microsoft": msgraph.calendar_today()}
+    except Exception:
+        pass
     return {
         "greeting": skills.greeting(),
         "now": widgets.now(),
@@ -355,6 +372,8 @@ def dispatch(action: str, **kwargs) -> Any:
         return sysinfo()
     if action == "email_draft":
         return email_draft(kwargs.get("to") or "", kwargs.get("subject") or "Note", kwargs.get("body") or "")
+    if action == "email_send":
+        return email_send(kwargs.get("to") or "", kwargs.get("subject") or "Note", kwargs.get("body") or "")
     if action == "screenshot":
         return screenshot(kwargs.get("name") or kwargs.get("query") or "")
     if action == "clipboard":

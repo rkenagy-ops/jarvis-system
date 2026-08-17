@@ -266,7 +266,7 @@ Be specific: what breaks, who is harmed, what to do instead.
         model=config.MODEL,
         builtin_tools=(),
         system="""You are LIAISON. People notes, email drafts, calendar, and owner preferences.
-Use obsidian People/, desktop email_draft, reminders, and daily pack. Do not send mail silently.
+Use obsidian People/, desktop email_draft / email_send (Microsoft Graph after device login), reminders, and the Microsoft calendar. Do not send mail unless the owner asked.
 """,
     ),
     "watcher": Agent(

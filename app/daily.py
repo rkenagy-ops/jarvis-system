@@ -251,7 +251,7 @@ def pack() -> dict[str, Any]:
         wx = widgets.weather()
     except Exception as exc:
         wx = {"error": str(exc)}
-    return {
+    out = {
         "greeting": skills.greeting(),
         "now": widgets.now(),
         "daily": {"path": day.get("path"), "chars": len(day.get("text") or "")},
@@ -262,7 +262,16 @@ def pack() -> dict[str, Any]:
         "yesterday": yesterday_excerpt(),
         "obsidian_installed": bool(obsidian_exe()),
         "vault": str(obsidian.vault()),
+        "calendar": None,
     }
+    try:
+        from . import msgraph
+
+        if msgraph.ready():
+            out["calendar"] = msgraph.calendar_today()
+    except Exception:
+        pass
+    return out
 
 
 def open_vault() -> dict:

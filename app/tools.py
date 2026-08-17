@@ -186,7 +186,7 @@ FUNCTION_TOOLS = [
                 "type": "string",
                 "enum": [
                     "open", "app", "youtube", "maps", "google", "notify", "sysinfo",
-                    "email_draft", "screenshot", "clipboard", "joke", "note", "remind",
+                    "email_draft", "email_send", "screenshot", "clipboard", "joke", "note", "remind",
                     "timer", "find", "plan_day", "skills", "situation", "vault", "daily",
                 ],
             },

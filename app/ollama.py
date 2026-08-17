@@ -47,6 +47,22 @@ def probe(*, force: bool = False) -> dict[str, Any]:
     return _probe
 
 
+def embed(text: str, *, model: str | None = None) -> list[float]:
+    tag = model or config.OLLAMA_EMBED_MODEL or "nomic-embed-text"
+    snippet = (text or "")[:4000]
+    with httpx.Client(timeout=60.0) as client:
+        resp = client.post(base() + "/api/embed", json={"model": tag, "input": snippet})
+        if resp.status_code >= 400:
+            resp = client.post(base() + "/api/embeddings", json={"model": tag, "prompt": snippet})
+    if resp.status_code >= 400:
+        raise RuntimeError(f"embed {resp.status_code}: {resp.text[:300]}")
+    data = resp.json()
+    vec = data.get("embedding")
+    if not vec and data.get("embeddings"):
+        vec = data["embeddings"][0]
+    return [float(x) for x in (vec or [])]
+
+
 def chat(messages: list[dict], *, tools: list[dict] | None = None, timeout: float = 180.0) -> dict[str, Any]:
     body: dict[str, Any] = {"model": model(), "messages": messages, "stream": False}
     if tools:
