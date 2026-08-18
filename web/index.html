@@ -102,6 +102,8 @@
           <button type="button" data-q="What is on my Microsoft Outlook calendar today? List times and subjects.">Today's calendar</button>
           <button type="button" data-q="File meeting minutes from the notes I paste next. Use the meeting tool: extract title, attendees, decisions, and action items into vault/Meetings/. Then list the open action items.">File minutes</button>
           <button type="button" data-q="Sync my Microsoft Outlook calendar into the vault Calendar folder and create reminders 15 minutes before each upcoming event. Do not send mail.">Sync calendar</button>
+          <button type="button" data-q="Run MarketBeast on liquid names for the best up-to-the-minute CALL options to buy. Use market action=options universe=liquid. List strike, expiry, debit, delta, and score. Do not place an IBKR order.">Best calls</button>
+          <button type="button" data-q="Check my Interactive Brokers account via the official TWS API (market action=ibkr). Report net liq, buying power, and positions. Do not trade.">IBKR account</button>
           <button type="button" data-q="Set a 5 minute timer called stand up.">5 min timer</button>
         </div>
         <textarea id="input" placeholder="Ask anything: markets, vault, GitHub, news, weather, goals. Paper-trade with confirm."></textarea>
@@ -156,6 +158,12 @@
       <input id="key-ms-client" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" />
       <label>MS_TENANT (consumers for personal Outlook)</label>
       <input id="key-ms-tenant" placeholder="consumers" />
+      <label>IBKR_PORT (7497 paper TWS, 7496 live TWS)</label>
+      <input id="key-ibkr-port" placeholder="7497" />
+      <label>IBKR_LIVE (real IBKR cash — still needs confirm token)</label>
+      <select id="key-ibkr-live"><option value="false">false — TWS paper 7497</option><option value="true">true — TWS live 7496</option></select>
+      <label>MARKETBEAST_ROOT (HyperTrader folder with scanner.py)</label>
+      <input id="key-beast-root" placeholder="C:\Users\Rhett\OneDrive\trading programs\hypertrader (9)\hypertrader" />
       <label>ALPACA_LIVE (real cash — still needs confirm token)</label>
       <select id="key-alpaca-live"><option value="false">false — Alpaca paper</option><option value="true">true — real money</option></select>
       <label>VOICE</label>

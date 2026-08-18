@@ -84,6 +84,11 @@ AMAZON_MARKETPLACE = _clean(os.getenv("AMAZON_MARKETPLACE")) or "US"
 ALPACA_KEY_ID = _clean(os.getenv("ALPACA_KEY_ID") or os.getenv("APCA_API_KEY_ID"))
 ALPACA_SECRET_KEY = _clean(os.getenv("ALPACA_SECRET_KEY") or os.getenv("APCA_API_SECRET_KEY"))
 ALPACA_LIVE = (_clean(os.getenv("ALPACA_LIVE")) or "false").lower() == "true"
+IBKR_HOST = "127.0.0.1"
+IBKR_PORT = int(_clean(os.getenv("IBKR_PORT")) or "7497")
+IBKR_CLIENT_ID = int(_clean(os.getenv("IBKR_CLIENT_ID")) or "7")
+IBKR_LIVE = (_clean(os.getenv("IBKR_LIVE")) or "false").lower() == "true"
+MARKETBEAST_ROOT = _clean(os.getenv("MARKETBEAST_ROOT")) or r"C:\Users\Rhett\OneDrive\trading programs\hypertrader (9)\hypertrader"
 
 XAI_BASE = "https://api.x.ai/v1"
 XAI_REALTIME = "wss://api.x.ai/v1/realtime"
@@ -99,6 +104,7 @@ def reload_env() -> None:
     global JARVIS_TOKEN, JARVIS_ALLOW_LAN, JARVIS_PUBLIC_HOST, OFFLINE, HOST, PORT
     global OLLAMA_HOST, OLLAMA_MODEL, OLLAMA_EMBED_MODEL, ALPACA_KEY_ID, ALPACA_SECRET_KEY, ALPACA_LIVE
     global MS_CLIENT_ID, MS_TENANT, MS_REFRESH_TOKEN
+    global IBKR_PORT, IBKR_CLIENT_ID, IBKR_LIVE, MARKETBEAST_ROOT
     XAI_API_KEY = _clean(os.getenv("XAI_API_KEY"))
     GITHUB_TOKEN = _clean(os.getenv("GITHUB_TOKEN"))
     GITHUB_USERNAME = _clean(os.getenv("GITHUB_USERNAME")) or "rkenagy-ops"
@@ -131,6 +137,10 @@ def reload_env() -> None:
     ALPACA_KEY_ID = _clean(os.getenv("ALPACA_KEY_ID") or os.getenv("APCA_API_KEY_ID"))
     ALPACA_SECRET_KEY = _clean(os.getenv("ALPACA_SECRET_KEY") or os.getenv("APCA_API_SECRET_KEY"))
     ALPACA_LIVE = (_clean(os.getenv("ALPACA_LIVE")) or "false").lower() == "true"
+    IBKR_PORT = int(_clean(os.getenv("IBKR_PORT")) or "7497")
+    IBKR_CLIENT_ID = int(_clean(os.getenv("IBKR_CLIENT_ID")) or "7")
+    IBKR_LIVE = (_clean(os.getenv("IBKR_LIVE")) or "false").lower() == "true"
+    MARKETBEAST_ROOT = _clean(os.getenv("MARKETBEAST_ROOT")) or r"C:\Users\Rhett\OneDrive\trading programs\hypertrader (9)\hypertrader"
 
 
 def save_env(updates: dict[str, str]) -> None:
@@ -176,4 +186,7 @@ def status() -> dict:
         "wordpress_configured": bool(WORDPRESS_URL and WORDPRESS_USER and WORDPRESS_APP_PASSWORD),
         "x_oauth": bool(X_API_KEY and X_API_SECRET and X_ACCESS_TOKEN and X_ACCESS_SECRET),
         "microsoft_configured": bool(MS_CLIENT_ID and MS_REFRESH_TOKEN),
+        "ibkr_live": IBKR_LIVE,
+        "ibkr_port": IBKR_PORT,
+        "marketbeast_root": bool(MARKETBEAST_ROOT),
     }

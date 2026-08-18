@@ -86,6 +86,9 @@ class SettingsIn(BaseModel):
     x_access_secret: str | None = None
     ms_client_id: str | None = None
     ms_tenant: str | None = None
+    ibkr_port: int | None = None
+    ibkr_live: bool | None = None
+    marketbeast_root: str | None = None
 
 
 class TradeIn(BaseModel):
@@ -273,6 +276,14 @@ def save_settings(body: SettingsIn) -> dict:
         updates["MS_CLIENT_ID"] = body.ms_client_id
     if body.ms_tenant:
         updates["MS_TENANT"] = body.ms_tenant
+    if body.ibkr_port:
+        updates["IBKR_PORT"] = str(int(body.ibkr_port))
+    if body.ibkr_live is True:
+        updates["IBKR_LIVE"] = "true"
+    if body.ibkr_live is False:
+        updates["IBKR_LIVE"] = "false"
+    if body.marketbeast_root:
+        updates["MARKETBEAST_ROOT"] = body.marketbeast_root
     if body.postiz_url:
         updates["POSTIZ_URL"] = body.postiz_url
     if body.alpaca_key_id:
@@ -411,6 +422,45 @@ def markets_trade(body: TradeIn) -> dict:
 @app.post("/api/markets/confirm")
 def markets_confirm(body: ConfirmIn) -> dict:
     return markets.confirm_trade(body.token)
+
+
+@app.get("/api/ibkr")
+def api_ibkr() -> dict:
+    from . import ibkr
+
+    return ibkr.account()
+
+
+@app.get("/api/options")
+def api_options(top: int = 8, universe: str = "liquid", dte: int = 7) -> dict:
+    from . import marketbeast
+
+    return marketbeast.best_calls(top=top, universe=universe, dte=dte)
+
+
+class OptionOrderIn(BaseModel):
+    symbol: str
+    expiry: str
+    strike: float
+    right: str = "C"
+    qty: int = 1
+    limit: float | None = None
+    confirm_token: str | None = None
+
+
+@app.post("/api/ibkr/option")
+def api_ibkr_option(body: OptionOrderIn) -> dict:
+    from . import ibkr
+
+    return ibkr.place_option(
+        body.symbol,
+        body.expiry,
+        body.strike,
+        body.right,
+        body.qty,
+        limit=body.limit,
+        confirm_token=body.confirm_token,
+    )
 
 
 @app.get("/api/autonomy")

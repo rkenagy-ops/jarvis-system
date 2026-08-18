@@ -1,4 +1,4 @@
-"""What 'finished' means for Super Jarvis 5.3 — status only, no secrets."""
+"""What 'finished' means for Super Jarvis 5.4 — status only, no secrets."""
 
 from __future__ import annotations
 
@@ -46,10 +46,11 @@ def checklist() -> dict:
         {"id": "microsoft", "ok": bool(config.MS_CLIENT_ID and config.MS_REFRESH_TOKEN), "label": "Microsoft calendar + mail signed in"},
         {"id": "meetings", "ok": bool(list((Path(config.VAULT_DIR) / "Meetings").glob("*.md"))) if (Path(config.VAULT_DIR) / "Meetings").exists() else False, "label": "At least one meeting note in the vault"},
         {"id": "autostart", "ok": _autostart_ok(), "label": "Windows logon task SuperJarvis"},
+        {"id": "marketbeast", "ok": Path(config.MARKETBEAST_ROOT).joinpath("scanner.py").is_file(), "label": "MarketBeast/HyperTrader scanner on disk"},
     ]
     done = sum(1 for i in items if i["ok"])
     return {
-        "version": "5.3",
+        "version": "5.4",
         "done": done,
         "total": len(items),
         "complete": done >= 6,

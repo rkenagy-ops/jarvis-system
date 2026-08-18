@@ -305,6 +305,21 @@ def confirm_trade(token: str) -> dict[str, Any]:
         if broker.configured():
             return broker.submit_market(payload["symbol"], payload["side"], float(payload["qty"]))
         return {"error": "Confirm received but Alpaca keys are missing. No live fill."}
+    if item.get("kind") == "ibkr_option":
+        from . import ibkr
+
+        # Token already consumed. Force paper-path execution flags off by
+        # calling place_option only after we stash a one-shot pass.
+        p = payload
+        return ibkr.place_option(
+            p.get("symbol") or "",
+            p.get("expiry") or "",
+            float(p.get("strike") or 0),
+            p.get("right") or "C",
+            int(p.get("qty") or 1),
+            limit=p.get("limit"),
+            confirmed=True,
+        )
     return _fill(payload["symbol"], payload["side"], float(payload["qty"]), float(payload["price"]), mode="paper-confirmed")
 
 
@@ -390,4 +405,16 @@ def dispatch(action: str, **kwargs) -> Any:
         from . import broker
 
         return broker.account() if broker.configured() else broker.status()
+    if action == "ibkr":
+        from . import ibkr
+
+        return ibkr.account()
+    if action in {"options", "beast", "calls"}:
+        from . import marketbeast
+
+        return marketbeast.best_calls(
+            top=int(kwargs.get("qty") or kwargs.get("top") or 8),
+            universe=str(kwargs.get("universe") or "liquid"),
+            dte=int(kwargs.get("dte") or 7),
+        )
     return {"error": f"Unknown market action {action}"}

@@ -140,9 +140,10 @@ Return a plan the conductor can execute.
         color="#fbbf24",
         model=config.MODEL,
         builtin_tools=("web_search", "x_search", "code_interpreter"),
-        system="""You are TRADER. Pull live quotes and history. Compute RSI/SMA/MACD/vol. Paper-trade via the market tool.
-Default mode is paper. Never claim a live brokerage fill.
-Large or live orders return a confirm_token — tell the owner to confirm. Always show thesis, invalidation, and size.
+        system="""You are TRADER. Pull live quotes and history. Compute RSI/SMA/MACD/vol.
+For call-option ideas run market action=options (MarketBeast/HyperTrader). For the IBKR account run market action=ibkr.
+Default is paper. Never claim a live brokerage fill. Live IBKR options need TWS + confirm_token.
+Always show thesis, invalidation, strike, expiry, debit, and size.
 """,
     ),
     "analyst": Agent(
