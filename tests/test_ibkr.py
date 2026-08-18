@@ -21,8 +21,22 @@ def test_live_option_blocked_without_confirm(monkeypatch):
 
 def test_marketbeast_root_detected():
     info = marketbeast.ready()
-    assert "root" in info
-    assert "ok" in info
+    assert info["ok"] is True
+    assert info.get("v9") is True
+    assert "scanner.py" in (info.get("scanner") or "")
+
+
+def test_paper_option_buy(tmp_path, monkeypatch):
+    from app import markets, config
+
+    monkeypatch.setattr(config, "DB_PATH", tmp_path / "m.db")
+    monkeypatch.setattr(config, "PAPER_CASH", 100000)
+    markets.init()
+    out = markets.paper_option_buy("NVDA", "20260821", 180, right="C", qty=1, debit=2.5)
+    assert out["ok"]
+    assert out["cost"] == 250
+    book = markets.list_paper_options()
+    assert book and book[0]["symbol"] == "NVDA"
 
 
 def test_bad_expiry():

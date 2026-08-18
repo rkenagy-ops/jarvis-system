@@ -17,6 +17,14 @@ def run_job(job: dict[str, Any]) -> str:
         summary = briefing()
         memory.mark_job(job["id"], summary[:400])
         return summary
+    if name in {"marketbeast-scan", "options-scan"} or "marketbeast" in prompt or "best calls" in prompt:
+        from . import marketbeast
+
+        result = marketbeast.best_calls(top=8, universe="liquid")
+        n = len(result.get("picks") or [])
+        summary = f"MarketBeast liquid scan: {n} calls → {result.get('vault')}"
+        memory.mark_job(job["id"], summary[:400])
+        return summary
     if name in {"calendar-sync", "outlook-sync"} or "sync calendar" in prompt or "outlook calendar" in prompt:
         from . import msgraph
 
@@ -216,6 +224,7 @@ def ensure_defaults() -> list[dict]:
         ("self-upgrade", "Hunt GitHub for OSS Super Jarvis can absorb. Ingest new READMEs. Do not clone stacks.", 21600),
         ("weekly-backup", "Zip vault and SQLite mind to workspace/backups.", 604800),
         ("calendar-sync", "Sync Outlook calendar into vault/Calendar and reminders.", 1800),
+        ("marketbeast-scan", "Scan liquid names for best call options. Write vault/Markets.", 3600),
     ]
     for name, prompt, every in specs:
         if name in have:

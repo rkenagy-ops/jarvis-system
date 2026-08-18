@@ -50,7 +50,7 @@ def checklist() -> dict:
     ]
     done = sum(1 for i in items if i["ok"])
     return {
-        "version": "5.4",
+        "version": "5.5",
         "done": done,
         "total": len(items),
         "complete": done >= 6,

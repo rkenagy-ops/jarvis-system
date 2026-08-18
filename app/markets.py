@@ -49,6 +49,16 @@ def init() -> None:
             mode TEXT NOT NULL,
             created_at REAL NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS paper_options (
+            id TEXT PRIMARY KEY,
+            symbol TEXT NOT NULL,
+            expiry TEXT NOT NULL,
+            strike REAL NOT NULL,
+            right TEXT NOT NULL,
+            qty INTEGER NOT NULL,
+            debit REAL NOT NULL,
+            created_at REAL NOT NULL
+        );
         """
     )
     if not conn.execute("SELECT 1 FROM paper_account WHERE id=1").fetchone():
@@ -369,6 +379,49 @@ def _fill(symbol: str, side: str, qty: float, price: float, mode: str) -> dict[s
     return {"ok": True, "id": trade_id, "symbol": symbol, "side": side, "qty": qty, "price": price, "cash": cash, "mode": mode}
 
 
+def paper_option_buy(symbol: str, expiry: str, strike: float, *, right: str = "C", qty: int = 1, debit: float = 0) -> dict[str, Any]:
+    """Internal paper option ticket. Does not touch IBKR."""
+    init()
+    symbol = (symbol or "").strip().upper()
+    right = "C" if str(right).upper().startswith("C") else "P"
+    qty = max(1, int(qty or 1))
+    debit = float(debit or 0)
+    expiry = (expiry or "").replace("-", "")
+    if not symbol or len(expiry) != 8 or strike <= 0 or debit <= 0:
+        return {"error": "Need symbol, YYYYMMDD expiry, strike, and debit (per share)."}
+    cost = debit * 100 * qty
+    conn = _db()
+    cash = conn.execute("SELECT cash FROM paper_account WHERE id=1").fetchone()[0]
+    if cost > cash + 1e-6:
+        conn.close()
+        return {"error": f"Insufficient paper cash ({cash:.2f}) for option debit {cost:.2f}"}
+    cash -= cost
+    oid = str(uuid.uuid4())
+    conn.execute(
+        "INSERT INTO paper_options(id, symbol, expiry, strike, right, qty, debit, created_at) VALUES(?,?,?,?,?,?,?,?)",
+        (oid, symbol, expiry, float(strike), right, qty, debit, time.time()),
+    )
+    conn.execute("UPDATE paper_account SET cash=?, updated_at=? WHERE id=1", (cash, time.time()))
+    conn.commit()
+    conn.close()
+    memory.remember(
+        f"paper BUY {qty} {symbol} {expiry} {strike}{right} @ {debit:.2f} (debit ${cost:.0f})",
+        kind="trade",
+        tags=["trade", "option", "paper", symbol],
+        importance=0.75,
+        source_agent="trader",
+    )
+    return {"ok": True, "id": oid, "symbol": symbol, "expiry": expiry, "strike": strike, "right": right, "qty": qty, "debit": debit, "cost": cost, "cash": cash, "mode": "paper-option"}
+
+
+def list_paper_options(limit: int = 20) -> list[dict]:
+    init()
+    conn = _db()
+    rows = conn.execute("SELECT * FROM paper_options ORDER BY created_at DESC LIMIT ?", (int(limit),)).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
 def dispatch(action: str, **kwargs) -> Any:
     init()
     if action == "quote":
@@ -412,9 +465,5 @@ def dispatch(action: str, **kwargs) -> Any:
     if action in {"options", "beast", "calls"}:
         from . import marketbeast
 
-        return marketbeast.best_calls(
-            top=int(kwargs.get("qty") or kwargs.get("top") or 8),
-            universe=str(kwargs.get("universe") or "liquid"),
-            dte=int(kwargs.get("dte") or 7),
-        )
+        return marketbeast.dispatch(str(kwargs.get("mode") or "calls"), **kwargs)
     return {"error": f"Unknown market action {action}"}

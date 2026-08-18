@@ -88,7 +88,7 @@ IBKR_HOST = "127.0.0.1"
 IBKR_PORT = int(_clean(os.getenv("IBKR_PORT")) or "7497")
 IBKR_CLIENT_ID = int(_clean(os.getenv("IBKR_CLIENT_ID")) or "7")
 IBKR_LIVE = (_clean(os.getenv("IBKR_LIVE")) or "false").lower() == "true"
-MARKETBEAST_ROOT = _clean(os.getenv("MARKETBEAST_ROOT")) or r"C:\Users\Rhett\OneDrive\trading programs\hypertrader (9)\hypertrader"
+MARKETBEAST_ROOT = _clean(os.getenv("MARKETBEAST_ROOT")) or str(ROOT / "vendor" / "marketbeast" / "hypertrader")
 
 XAI_BASE = "https://api.x.ai/v1"
 XAI_REALTIME = "wss://api.x.ai/v1/realtime"
@@ -140,7 +140,7 @@ def reload_env() -> None:
     IBKR_PORT = int(_clean(os.getenv("IBKR_PORT")) or "7497")
     IBKR_CLIENT_ID = int(_clean(os.getenv("IBKR_CLIENT_ID")) or "7")
     IBKR_LIVE = (_clean(os.getenv("IBKR_LIVE")) or "false").lower() == "true"
-    MARKETBEAST_ROOT = _clean(os.getenv("MARKETBEAST_ROOT")) or r"C:\Users\Rhett\OneDrive\trading programs\hypertrader (9)\hypertrader"
+    MARKETBEAST_ROOT = _clean(os.getenv("MARKETBEAST_ROOT")) or str(ROOT / "vendor" / "marketbeast" / "hypertrader")
 
 
 def save_env(updates: dict[str, str]) -> None:
