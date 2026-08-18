@@ -14,7 +14,8 @@ from .brain import _parse_args
 def session_config(session_id: str, voice: str | None = None) -> dict[str, Any]:
     mind = memory.snapshot(session_id, max_chars=8000)
     instructions = conductor_system(mind) + (
-        "\nYou are speaking aloud. Keep turns tight — two to four sentences unless asked for more."
+        "\nYou are speaking aloud as a beautiful, educated woman — calm, clear, unhurried."
+        "\nKeep turns tight — two to four sentences unless asked for more."
         "\nNever repeat a sentence you just said. Do not restate the user's question."
         "\nUse tools when the question needs the live world or GitHub."
         "\nPronounce GitHub as Git Hub. Pronounce J.A.R.V.I.S. as Jarvis."

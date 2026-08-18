@@ -44,7 +44,7 @@ XAI_API_KEY = _clean(os.getenv("XAI_API_KEY"))
 GITHUB_TOKEN = _clean(os.getenv("GITHUB_TOKEN"))
 GITHUB_USERNAME = _clean(os.getenv("GITHUB_USERNAME")) or "rkenagy-ops"
 OWNER_NAME = _clean(os.getenv("JARVIS_OWNER_NAME")) or "Rhett"
-VOICE = _clean(os.getenv("JARVIS_VOICE")) or "rex"
+VOICE = _clean(os.getenv("JARVIS_VOICE")) or "eve"
 VOICE_MODEL = _clean(os.getenv("JARVIS_VOICE_MODEL")) or "grok-voice-think-fast-2.0"
 MODEL = _clean(os.getenv("JARVIS_MODEL")) or "grok-4.6"
 HOST = _clean(os.getenv("JARVIS_HOST")) or "127.0.0.1"
@@ -110,7 +110,7 @@ def reload_env() -> None:
     GITHUB_TOKEN = _clean(os.getenv("GITHUB_TOKEN"))
     GITHUB_USERNAME = _clean(os.getenv("GITHUB_USERNAME")) or "rkenagy-ops"
     OWNER_NAME = _clean(os.getenv("JARVIS_OWNER_NAME")) or "Rhett"
-    VOICE = _clean(os.getenv("JARVIS_VOICE")) or "rex"
+    VOICE = _clean(os.getenv("JARVIS_VOICE")) or "eve"
     VOICE_MODEL = _clean(os.getenv("JARVIS_VOICE_MODEL")) or "grok-voice-think-fast-2.0"
     MODEL = _clean(os.getenv("JARVIS_MODEL")) or "grok-4.6"
     TRADING_MODE = (_clean(os.getenv("TRADING_MODE")) or "paper").lower()
