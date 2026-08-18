@@ -146,6 +146,10 @@ def me() -> dict:
 
 
 def calendar_today(hours: int = 24) -> dict:
+    return calendar_range(hours=hours)
+
+
+def calendar_range(*, hours: int = 24) -> dict:
     start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
     end = start + timedelta(hours=max(12, hours))
     data = _get(
@@ -155,7 +159,7 @@ def calendar_today(hours: int = 24) -> dict:
             "endDateTime": end.isoformat(),
             "$select": "subject,start,end,location,isAllDay,organizer",
             "$orderby": "start/dateTime",
-            "$top": "20",
+            "$top": "40",
         },
     )
     if data.get("error"):
@@ -168,9 +172,72 @@ def calendar_today(hours: int = 24) -> dict:
                 "start": (ev.get("start") or {}).get("dateTime"),
                 "end": (ev.get("end") or {}).get("dateTime"),
                 "where": ((ev.get("location") or {}).get("displayName")),
+                "all_day": bool(ev.get("isAllDay")),
             }
         )
     return {"ok": True, "events": events, "count": len(events)}
+
+
+def _parse_graph_time(raw: str | None) -> datetime | None:
+    if not raw:
+        return None
+    try:
+        when = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=timezone.utc)
+    return when
+
+
+def sync_calendar(*, hours: int = 72, lead_minutes: int = 15) -> dict:
+    """Write Outlook events into vault/Calendar and seed toasts. Read-only Graph."""
+    if not ready():
+        return {"ok": False, "error": "Microsoft not signed in."}
+    data = calendar_range(hours=hours)
+    if data.get("error"):
+        return data
+    events = data.get("events") or []
+    from . import obsidian, reminders
+
+    by_day: dict[str, list[dict]] = {}
+    for ev in events:
+        when = _parse_graph_time(ev.get("start"))
+        day = when.date().isoformat() if when else datetime.now(timezone.utc).date().isoformat()
+        by_day.setdefault(day, []).append(ev)
+    notes = []
+    for day, evs in sorted(by_day.items()):
+        lines = [
+            f"---\ntype: calendar\ndate: {day}\nsource: microsoft\n---\n",
+            f"# {day}\n",
+        ]
+        for ev in evs:
+            stamp = (ev.get("start") or "")[11:16]
+            where = f" @ {ev['where']}" if ev.get("where") else ""
+            lines.append(f"- {stamp} {ev.get('subject') or '(no title)'}{where}")
+        rel = f"Calendar/{day}.md"
+        obsidian.write_note(rel, "\n".join(lines) + "\n")
+        notes.append(rel)
+    now = datetime.now(timezone.utc)
+    added = 0
+    skipped = 0
+    for ev in events:
+        if ev.get("all_day"):
+            skipped += 1
+            continue
+        start = _parse_graph_time(ev.get("start"))
+        if not start or start <= now:
+            skipped += 1
+            continue
+        title = f"Outlook: {ev.get('subject') or 'event'}"
+        if reminders.has_open(title):
+            skipped += 1
+            continue
+        lead = start - timedelta(minutes=max(1, lead_minutes))
+        when = lead if lead > now else now + timedelta(seconds=30)
+        reminders.add(title, when.isoformat(), kind="outlook")
+        added += 1
+    return {"ok": True, "events": len(events), "notes": notes, "reminders_added": added, "skipped": skipped}
 
 
 def send_mail(to: str, subject: str, body: str) -> dict:

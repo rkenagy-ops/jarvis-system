@@ -394,6 +394,10 @@ def dispatch(action: str, **kwargs) -> Any:
         return find(kwargs.get("query") or "")
     if action in {"plan", "plan_day"}:
         return plan_day()
+    if action in {"calendar_sync", "sync_calendar"}:
+        from . import msgraph
+
+        return msgraph.sync_calendar()
     if action in {"skills", "capabilities"}:
         return capabilities()
     if action == "situation":

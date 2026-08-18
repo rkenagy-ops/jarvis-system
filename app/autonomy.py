@@ -17,6 +17,18 @@ def run_job(job: dict[str, Any]) -> str:
         summary = briefing()
         memory.mark_job(job["id"], summary[:400])
         return summary
+    if name in {"calendar-sync", "outlook-sync"} or "sync calendar" in prompt or "outlook calendar" in prompt:
+        from . import msgraph
+
+        result = msgraph.sync_calendar()
+        summary = (
+            f"Calendar sync: {result.get('events', 0)} events, "
+            f"{result.get('reminders_added', 0)} reminders"
+            if result.get("ok")
+            else f"Calendar sync: {result.get('error')}"
+        )
+        memory.mark_job(job["id"], summary[:400])
+        return summary
     if name in {"weekly-backup", "backup"} or "zip vault" in prompt:
         from . import backup
 
@@ -203,6 +215,7 @@ def ensure_defaults() -> list[dict]:
         ("watchlist-scan", "Scan the watchlist for 1.5% movers.", 1800),
         ("self-upgrade", "Hunt GitHub for OSS Super Jarvis can absorb. Ingest new READMEs. Do not clone stacks.", 21600),
         ("weekly-backup", "Zip vault and SQLite mind to workspace/backups.", 604800),
+        ("calendar-sync", "Sync Outlook calendar into vault/Calendar and reminders.", 1800),
     ]
     for name, prompt, every in specs:
         if name in have:

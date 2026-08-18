@@ -12,3 +12,5 @@ name: microsoft
 5. **MICROSOFT** → open the URL → enter the code.
 
 Then briefing includes today's calendar. `desktop email_send` sends via Graph.
+
+`calendar-sync` (every 30 min) writes `vault/Calendar/YYYY-MM-DD.md` and seeds Outlook toasts 15 minutes before events. Windows logon task `SuperJarvis` starts the HUD via `serve.ps1`.

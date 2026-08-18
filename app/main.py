@@ -504,6 +504,13 @@ def api_ms_cal() -> dict:
     return msgraph.calendar_today()
 
 
+@app.post("/api/microsoft/sync")
+def api_ms_sync() -> dict:
+    from . import msgraph
+
+    return msgraph.sync_calendar()
+
+
 class MailIn(BaseModel):
     to: str
     subject: str

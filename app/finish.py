@@ -1,10 +1,25 @@
-"""What 'finished' means for Super Jarvis 5.2 — status only, no secrets."""
+"""What 'finished' means for Super Jarvis 5.3 — status only, no secrets."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
 from . import backup, config, ollama as ollama_mod, xai, xpost
+
+
+def _autostart_ok() -> bool:
+    import subprocess
+
+    try:
+        r = subprocess.run(
+            ["schtasks", "/Query", "/TN", "SuperJarvis"],
+            capture_output=True,
+            text=True,
+            timeout=8,
+        )
+        return r.returncode == 0
+    except Exception:
+        return False
 
 
 def checklist() -> dict:
@@ -30,10 +45,11 @@ def checklist() -> dict:
         {"id": "backup", "ok": bool(backup.latest()), "label": "At least one vault+db zip"},
         {"id": "microsoft", "ok": bool(config.MS_CLIENT_ID and config.MS_REFRESH_TOKEN), "label": "Microsoft calendar + mail signed in"},
         {"id": "meetings", "ok": bool(list((Path(config.VAULT_DIR) / "Meetings").glob("*.md"))) if (Path(config.VAULT_DIR) / "Meetings").exists() else False, "label": "At least one meeting note in the vault"},
+        {"id": "autostart", "ok": _autostart_ok(), "label": "Windows logon task SuperJarvis"},
     ]
     done = sum(1 for i in items if i["ok"])
     return {
-        "version": "5.2",
+        "version": "5.3",
         "done": done,
         "total": len(items),
         "complete": done >= 6,

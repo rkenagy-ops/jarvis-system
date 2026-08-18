@@ -26,3 +26,28 @@ def test_send_mail_blocked(monkeypatch):
     monkeypatch.setattr(msgraph, "access_token", lambda: None)
     out = msgraph.send_mail("a@b.com", "hi", "body")
     assert "error" in out
+
+
+def test_sync_calendar_seeds_reminder(tmp_path, monkeypatch):
+    from datetime import datetime, timedelta, timezone
+    from app import obsidian, reminders
+
+    monkeypatch.setattr(msgraph, "ready", lambda: True)
+    start = (datetime.now(timezone.utc) + timedelta(hours=2)).strftime("%Y-%m-%dT%H:%M:%S")
+    monkeypatch.setattr(
+        msgraph,
+        "calendar_range",
+        lambda hours=72: {
+            "ok": True,
+            "events": [{"subject": "Standup", "start": start, "end": start, "where": "", "all_day": False}],
+            "count": 1,
+        },
+    )
+    monkeypatch.setattr(obsidian.config, "VAULT_DIR", tmp_path / "vault")
+    monkeypatch.setattr(reminders, "PATH", tmp_path / "reminders.json")
+    out = msgraph.sync_calendar()
+    assert out["ok"]
+    assert out["reminders_added"] == 1
+    assert reminders.has_open("Outlook: Standup")
+    again = msgraph.sync_calendar()
+    assert again["reminders_added"] == 0

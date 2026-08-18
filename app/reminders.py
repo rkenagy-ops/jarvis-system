@@ -53,6 +53,13 @@ def timer(minutes: int, title: str = "Timer") -> dict:
     return add(title or f"{mins} minute timer", minutes=mins, kind="timer")
 
 
+def has_open(title: str) -> bool:
+    needle = (title or "").strip().lower()
+    if not needle:
+        return False
+    return any((i.get("title") or "").strip().lower() == needle and not i.get("fired") for i in _load())
+
+
 def list_items(*, open_only: bool = False, limit: int = 30) -> list[dict]:
     rows = _load()
     if open_only:
