@@ -118,6 +118,49 @@ def account() -> dict[str, Any]:
         return {"error": str(exc)[:300], **probe()}
 
 
+def option_quotes(specs: list[dict]) -> dict[str, dict]:
+    """Live bid/ask for a few contracts. Empty if TWS is down."""
+    if not specs or not port_open():
+        return {}
+
+    def read(ib) -> dict[str, dict]:
+        from ib_insync import Option
+
+        out: dict[str, dict] = {}
+        for spec in specs[:8]:
+            symbol = (spec.get("symbol") or "").upper()
+            expiry = str(spec.get("expiry") or spec.get("expiration") or "").replace("-", "")
+            try:
+                strike = float(spec.get("strike") or 0)
+            except (TypeError, ValueError):
+                continue
+            right = "C" if str(spec.get("right") or spec.get("option_type") or "C").upper().startswith("C") else "P"
+            if not symbol or len(expiry) != 8 or strike <= 0:
+                continue
+            try:
+                contract = Option(symbol, expiry, strike, right, "SMART")
+                qualified = ib.qualifyContracts(contract)
+                if not qualified:
+                    continue
+                ticker = ib.reqMktData(qualified[0], "", False, False)
+                ib.sleep(1.0)
+                bid = float(ticker.bid or 0) if ticker.bid and ticker.bid == ticker.bid else 0.0
+                ask = float(ticker.ask or 0) if ticker.ask and ticker.ask == ticker.ask else 0.0
+                last = float(ticker.last or 0) if ticker.last and ticker.last == ticker.last else 0.0
+                ib.cancelMktData(qualified[0])
+                key = f"{symbol}-{expiry}-{strike:g}{right}"
+                mid = (bid + ask) / 2 if bid and ask else last
+                out[key] = {"bid": bid, "ask": ask, "last": last, "mid": mid, "source": "ibkr"}
+            except Exception:
+                continue
+        return out
+
+    try:
+        return _call(read, timeout=40.0)
+    except Exception:
+        return {}
+
+
 def place_option(
     symbol: str,
     expiry: str,

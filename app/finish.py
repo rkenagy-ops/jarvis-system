@@ -1,4 +1,4 @@
-"""What 'finished' means for Super Jarvis 5.4 — status only, no secrets."""
+"""What 'finished' means for Super Jarvis 5.6 — status only, no secrets."""
 
 from __future__ import annotations
 
@@ -50,7 +50,7 @@ def checklist() -> dict:
     ]
     done = sum(1 for i in items if i["ok"])
     return {
-        "version": "5.5",
+        "version": "5.6",
         "done": done,
         "total": len(items),
         "complete": done >= 6,

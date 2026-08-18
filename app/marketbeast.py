@@ -1,9 +1,10 @@
-"""Internal MarketBeast desk. Vendored from D:\\MARKETBEAST (v9 + v8)."""
+"""Internal MarketBeast desk. v9 engine + Super Jarvis quality layer."""
 
 from __future__ import annotations
 
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -21,8 +22,7 @@ def root() -> Path:
     primary = VENDOR / "hypertrader"
     if (primary / "scanner.py").is_file():
         return primary
-    fallback = VENDOR / "marketbeast hypertrader 8 - Copy" / "hypertrader"
-    return fallback
+    return VENDOR / "marketbeast hypertrader 8 - Copy" / "hypertrader"
 
 
 def ready() -> dict[str, Any]:
@@ -37,6 +37,7 @@ def ready() -> dict[str, Any]:
         "v9": v9.is_file(),
         "v8": v8.is_file(),
         "engine": "v9" if r.name == "hypertrader" and "Copy" not in str(r) else "v8",
+        "layer": "super-5.6",
     }
 
 
@@ -56,24 +57,92 @@ def _load_scanner():
     return sc
 
 
-def _pick(row: dict) -> dict[str, Any]:
-    return {
+def _num(value: Any, default: float = 0.0) -> float:
+    try:
+        if value is None:
+            return default
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def grade(pick: dict[str, Any]) -> str:
+    """A = liquid + sane delta. WATCH = junk or too wide."""
+    score = 0
+    spread = pick.get("spread")
+    if spread is not None:
+        if spread <= 0.06:
+            score += 2
+        elif spread <= 0.10:
+            score += 1
+        elif spread > 0.18:
+            score -= 2
+    oi = int(pick.get("oi") or 0)
+    if oi >= 500:
+        score += 2
+    elif oi >= 80:
+        score += 1
+    delta = abs(_num(pick.get("delta")))
+    if 0.35 <= delta <= 0.60:
+        score += 2
+    elif 0.25 <= delta <= 0.70:
+        score += 1
+    if _num(pick.get("combined_score")) >= 0.7:
+        score += 1
+    if _num(pick.get("option_price")) < 0.15:
+        score -= 2
+    if score >= 6:
+        return "A"
+    if score >= 4:
+        return "B"
+    if score >= 2:
+        return "C"
+    return "WATCH"
+
+
+def enrich(row: dict[str, Any], extra: dict | None = None) -> dict[str, Any]:
+    extra = extra or {}
+    bid = _num(extra.get("bid") if extra.get("bid") is not None else row.get("bid"))
+    ask = _num(extra.get("ask") if extra.get("ask") is not None else row.get("ask"))
+    mid = _num(row.get("option_price"))
+    if bid > 0 and ask > 0:
+        mid = (bid + ask) / 2
+        spread = (ask - bid) / ask
+    else:
+        spread = None
+    strike = _num(row.get("strike"))
+    debit = mid
+    spot = _num(row.get("price"))
+    out = {
         "symbol": row.get("symbol"),
         "direction": row.get("direction"),
-        "option_type": row.get("option_type"),
-        "strike": row.get("strike"),
-        "option_price": row.get("option_price"),
+        "option_type": row.get("option_type") or "CALL",
+        "moneyness": extra.get("type") or row.get("moneyness"),
+        "strike": strike or None,
+        "option_price": debit or None,
+        "bid": bid or None,
+        "ask": ask or None,
+        "spread": round(spread, 4) if spread is not None else None,
         "delta": row.get("delta"),
         "itm_prob": row.get("itm_prob"),
         "expiration": row.get("expiration"),
         "dte": row.get("dte"),
         "iv": row.get("iv"),
+        "oi": int(extra.get("oi") or row.get("oi") or 0),
+        "volume": int(extra.get("volume") or row.get("volume") or 0),
         "score": row.get("score"),
-        "option_score": row.get("option_score"),
+        "option_score": extra.get("score") or row.get("option_score"),
         "combined_score": row.get("combined_score"),
-        "price": row.get("price"),
+        "price": spot or None,
         "rsi": row.get("rsi"),
+        "breakeven": round(strike + debit, 2) if strike and debit else None,
+        "max_loss": round(debit * 100, 2) if debit else None,
+        "reason": extra.get("reason") or row.get("reason"),
+        "quote_source": extra.get("source") or "yahoo",
     }
+    out["grade"] = grade(out)
+    out["buyable"] = out["grade"] in {"A", "B"}
+    return out
 
 
 def _liquid_symbols() -> list[str]:
@@ -94,54 +163,123 @@ def _sector_symbols(sc, universe: str) -> list[str] | None:
         "sp500": getattr(sc, "SP500_TOP_100", None),
         "russell": getattr(sc, "RUSSELL_2000_TOP", None),
         "etfs": list(getattr(sc, "ETFS", {}) or {}),
+        "full": getattr(sc, "FULL_MARKET", None),
     }
     return mapping.get(uni)
 
 
+def _analyze_one(scanner, symbol: str, dte: int) -> dict | None:
+    df = scanner.fetch_data(symbol)
+    if df is None or len(df) < 20:
+        return None
+    try:
+        analysis = scanner.analyze(symbol, df)
+    except Exception:
+        return None
+    if analysis.get("direction") not in {"BULLISH", "NEUTRAL"}:
+        return None
+    opts = scanner.get_options_data(symbol, target_dte=dte)
+    if not opts or not opts.get("preferred_calls"):
+        return None
+    best = opts["preferred_calls"][0]
+    analysis.update(
+        {
+            "option_type": "CALL",
+            "strike": best.get("strike"),
+            "option_price": best.get("price"),
+            "bid": best.get("bid"),
+            "ask": best.get("ask"),
+            "delta": best.get("delta"),
+            "itm_prob": best.get("itm_prob"),
+            "expiration": opts.get("expiration"),
+            "dte": opts.get("dte"),
+            "iv": opts.get("iv"),
+            "oi": best.get("oi"),
+            "volume": best.get("volume"),
+            "option_score": best.get("score"),
+            "combined_score": float(analysis.get("score") or 0) * 0.6 + float(best.get("score") or 0) / 100 * 0.4,
+            "moneyness": best.get("type"),
+            "reason": best.get("reason"),
+        }
+    )
+    return enrich(analysis, best)
+
+
 def _score_calls(scanner, symbols: list[str], *, dte: int, top: int) -> list[dict]:
-    picks = []
-    for symbol in symbols:
-        df = scanner.fetch_data(symbol)
-        if df is None or len(df) < 20:
-            continue
-        try:
-            analysis = scanner.analyze(symbol, df)
-        except Exception:
-            continue
-        if analysis.get("direction") not in {"BULLISH", "NEUTRAL"}:
-            continue
-        opts = scanner.get_options_data(symbol, target_dte=dte)
-        if not opts or not opts.get("preferred_calls"):
-            continue
-        best = opts["preferred_calls"][0]
-        analysis.update(
-            {
-                "option_type": "CALL",
-                "strike": best.get("strike"),
-                "option_price": best.get("price"),
-                "delta": best.get("delta"),
-                "itm_prob": best.get("itm_prob"),
-                "expiration": opts.get("expiration"),
-                "dte": opts.get("dte"),
-                "iv": opts.get("iv"),
-                "option_score": best.get("score"),
-                "combined_score": float(analysis.get("score") or 0) * 0.6 + float(best.get("score") or 0) / 100 * 0.4,
-            }
-        )
-        picks.append(_pick(analysis))
-    picks.sort(key=lambda x: float(x.get("combined_score") or 0), reverse=True)
+    picks: list[dict] = []
+    workers = min(8, max(2, len(symbols)))
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        futs = {pool.submit(_analyze_one, scanner, symbol, dte): symbol for symbol in symbols}
+        for fut in as_completed(futs):
+            try:
+                row = fut.result()
+            except Exception:
+                continue
+            if row:
+                picks.append(row)
+    picks.sort(key=lambda x: (x.get("buyable"), _num(x.get("combined_score"))), reverse=True)
     return picks[:top]
+
+
+def _overlay_ibkr(picks: list[dict]) -> list[dict]:
+    if not picks:
+        return picks
+    try:
+        from . import ibkr
+
+        if not ibkr.port_open():
+            return picks
+        specs = [
+            {
+                "symbol": p.get("symbol"),
+                "expiry": p.get("expiration"),
+                "strike": p.get("strike"),
+                "right": "C",
+            }
+            for p in picks[:6]
+        ]
+        quotes = ibkr.option_quotes(specs)
+    except Exception:
+        return picks
+    for p in picks:
+        expiry = str(p.get("expiration") or "").replace("-", "")
+        key = f"{p.get('symbol')}-{expiry}-{_num(p.get('strike')):g}C"
+        q = quotes.get(key)
+        if not q:
+            continue
+        p["bid"] = q.get("bid") or p.get("bid")
+        p["ask"] = q.get("ask") or p.get("ask")
+        if q.get("mid"):
+            p["option_price"] = q["mid"]
+        if p.get("bid") and p.get("ask"):
+            ask = _num(p["ask"])
+            p["spread"] = round((_num(p["ask"]) - _num(p["bid"])) / ask, 4) if ask else p.get("spread")
+        p["max_loss"] = round(_num(p.get("option_price")) * 100, 2)
+        if p.get("strike") and p.get("option_price"):
+            p["breakeven"] = round(_num(p["strike"]) + _num(p["option_price"]), 2)
+        p["quote_source"] = "ibkr"
+        p["grade"] = grade(p)
+        p["buyable"] = p["grade"] in {"A", "B"}
+    picks.sort(key=lambda x: (x.get("buyable"), _num(x.get("combined_score"))), reverse=True)
+    return picks
 
 
 def _write_vault(picks: list[dict], universe: str) -> str | None:
     if not picks:
         return None
     day = date.today().isoformat()
-    lines = [f"---\ntype: options\ndate: {day}\nuniverse: {universe}\n---\n", f"# MarketBeast calls {day} ({universe})\n"]
+    lines = [
+        f"---\ntype: options\ndate: {day}\nuniverse: {universe}\nlayer: super-5.6\n---\n",
+        f"# MarketBeast calls {day} ({universe})\n",
+        "Grade A/B = liquid enough to ticket. C/WATCH = look only.\n",
+    ]
     for p in picks:
+        flag = "BUYABLE" if p.get("buyable") else "WATCH"
         lines.append(
-            f"- {p.get('symbol')} {p.get('expiration')} {p.get('strike')}C @ {p.get('option_price')} "
-            f"Δ{p.get('delta')} score={p.get('combined_score')}"
+            f"- [{p.get('grade')}/{flag}] {p.get('symbol')} {p.get('expiration')} "
+            f"{p.get('strike')}C @ {p.get('option_price')} "
+            f"spread={p.get('spread')} Δ{p.get('delta')} "
+            f"max_loss={p.get('max_loss')} be={p.get('breakeven')} via {p.get('quote_source')}"
         )
     rel = f"Markets/{day}-calls.md"
     try:
@@ -155,28 +293,33 @@ def best_calls(*, top: int = 8, universe: str = "liquid", dte: int = 7) -> dict[
     top = max(3, min(int(top or 8), 20))
     dte = max(2, min(int(dte or 7), 45))
     uni = (universe or "liquid").lower()
-    key = f"{uni}:{top}:{dte}"
+    key = f"{uni}:{top}:{dte}:v56"
     now = time.time()
     if _cache["picks"] and _cache["key"] == key and now - float(_cache["at"] or 0) < 90:
         return {"ok": True, "cached": True, "universe": uni, "picks": _cache["picks"][:top], **ready()}
     sc = _load_scanner()
     scanner = sc.StockScanner()
-    if uni == "full":
-        rows = sc.find_best_options(scanner, top_n=top, target_dte=dte, direction_filter="bullish")
-        picks = [_pick(r) for r in rows if (r.get("option_type") or "").upper() == "CALL"]
-    elif uni in {"dow", "nasdaq", "sp500", "russell", "etfs"}:
-        symbols = _sector_symbols(sc, uni) or []
-        picks = _score_calls(scanner, list(symbols)[:80], dte=dte, top=top)
+    if uni == "liquid":
+        symbols = _liquid_symbols()
     else:
-        picks = _score_calls(scanner, _liquid_symbols(), dte=dte, top=top)
+        symbols = list(_sector_symbols(sc, uni) or _liquid_symbols())
+        if uni == "full":
+            symbols = symbols[:220]
+        elif uni in {"nasdaq", "sp500"}:
+            symbols = symbols[:80]
+    picks = _score_calls(scanner, symbols, dte=dte, top=max(top, 10))
+    picks = _overlay_ibkr(picks)[:top]
     _cache.update(at=now, key=key, picks=picks)
     note = _write_vault(picks, uni)
+    buyable = [p for p in picks if p.get("buyable")]
     return {
         "ok": True,
         "cached": False,
         "universe": uni,
+        "scanned": len(symbols),
+        "buyable": len(buyable),
         "vault": note,
-        "disclaimer": "Signals only. Not advice. Paper ticket or IBKR+confirm to buy.",
+        "disclaimer": "Signals only. Grade A/B can paper-ticket. Live IBKR still needs TWS + confirm.",
         "picks": picks,
         **ready(),
     }
@@ -193,7 +336,9 @@ def deep(symbol: str, *, dte: int = 7) -> dict[str, Any]:
         return {"error": f"no data for {symbol}"}
     analysis = scanner.analyze(symbol, df)
     opts = scanner.get_options_data(symbol, target_dte=dte) or {}
-    calls = (opts.get("preferred_calls") or [])[:5]
+    raw = (opts.get("preferred_calls") or [])[:5]
+    calls = [enrich({**analysis, "option_type": "CALL", "expiration": opts.get("expiration"), "dte": opts.get("dte"), "option_price": c.get("price"), **c}, c) for c in raw]
+    calls = _overlay_ibkr(calls)
     return {
         "ok": True,
         "symbol": symbol,

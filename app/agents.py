@@ -141,7 +141,7 @@ Return a plan the conductor can execute.
         model=config.MODEL,
         builtin_tools=("web_search", "x_search", "code_interpreter"),
         system="""You are TRADER. Pull live quotes and history. Compute RSI/SMA/MACD/vol.
-For call-option ideas run market action=options (MarketBeast/HyperTrader). For the IBKR account run market action=ibkr.
+For call-option ideas run market action=options (MarketBeast v9 + Super Jarvis grades). Prefer grade A/B only. For the IBKR account run market action=ibkr.
 Default is paper. Never claim a live brokerage fill. Live IBKR options need TWS + confirm_token.
 Always show thesis, invalidation, strike, expiry, debit, and size.
 """,

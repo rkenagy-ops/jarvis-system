@@ -19,6 +19,37 @@ def test_live_option_blocked_without_confirm(monkeypatch):
     assert "token" in out or "confirm" in (out.get("reason") or "").lower()
 
 
+def test_grade_and_enrich():
+    wide = marketbeast.enrich(
+        {
+            "symbol": "XYZ",
+            "strike": 10,
+            "option_price": 0.05,
+            "delta": 0.05,
+            "combined_score": 0.2,
+            "price": 10,
+        },
+        {"bid": 0.01, "ask": 0.20, "oi": 5},
+    )
+    tight = marketbeast.enrich(
+        {
+            "symbol": "NVDA",
+            "strike": 180,
+            "option_price": 4.0,
+            "delta": 0.48,
+            "combined_score": 0.8,
+            "price": 182,
+        },
+        {"bid": 3.90, "ask": 4.10, "oi": 800, "type": "ATM"},
+    )
+    assert wide["grade"] == "WATCH"
+    assert wide["buyable"] is False
+    assert tight["grade"] in {"A", "B"}
+    assert tight["buyable"] is True
+    assert tight["breakeven"] == 184.0
+    assert tight["max_loss"] == 400.0
+
+
 def test_marketbeast_root_detected():
     info = marketbeast.ready()
     assert info["ok"] is True
