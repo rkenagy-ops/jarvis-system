@@ -537,6 +537,26 @@ def tasks_list() -> dict:
     return {"tasks": obsidian.list_tasks(open_only=True)}
 
 
+class MeetingIn(BaseModel):
+    title: str = ""
+    transcript: str = ""
+    attendees: str = ""
+
+
+@app.post("/api/meetings")
+def api_meeting_file(body: MeetingIn) -> dict:
+    from . import meetings as meetings_mod
+
+    return meetings_mod.file_minutes(body.transcript, title=body.title, attendees=body.attendees)
+
+
+@app.get("/api/meetings")
+def api_meeting_list() -> dict:
+    from . import meetings as meetings_mod
+
+    return meetings_mod.list_recent()
+
+
 @app.post("/api/tasks/toggle")
 def tasks_toggle(body: TaskToggleIn) -> dict:
     return obsidian.toggle_task(body.path, body.line, body.done)

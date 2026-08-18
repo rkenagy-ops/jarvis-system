@@ -205,6 +205,19 @@ FUNCTION_TOOLS = [
         ["action"],
     ),
     _fn(
+        "meeting",
+        "File meeting minutes (Meetily's job, our vault). Actions: file, list. Paste a transcript or notes; extracts decisions and action items into vault/Meetings/.",
+        {
+            "action": {"type": "string", "enum": ["file", "list"]},
+            "title": {"type": "string"},
+            "transcript": {"type": "string"},
+            "notes": {"type": "string"},
+            "attendees": {"type": "string"},
+            "limit": {"type": "integer"},
+        },
+        ["action"],
+    ),
+    _fn(
         "extract",
         "Ingest a URL or local file into the vault as markdown (trafilatura/Jina/markitdown/pypdf).",
         {"action": {"type": "string", "enum": ["url", "file"]}, "url": {"type": "string"}, "path": {"type": "string"}},
@@ -371,6 +384,10 @@ def execute(name: str, arguments: dict[str, Any], *, session_id: str, agent_id: 
         from . import desktop as desktop_mod
 
         return desktop_mod.dispatch(arguments.get("action") or "situation", **{k: v for k, v in arguments.items() if k != "action"})
+    if name == "meeting":
+        from . import meetings as meetings_mod
+
+        return meetings_mod.dispatch(arguments.get("action") or "file", **{k: v for k, v in arguments.items() if k != "action"})
     if name == "extract":
         from . import extract as extract_mod
 

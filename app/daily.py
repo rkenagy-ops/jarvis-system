@@ -263,12 +263,19 @@ def pack() -> dict[str, Any]:
         "obsidian_installed": bool(obsidian_exe()),
         "vault": str(obsidian.vault()),
         "calendar": None,
+        "meetings": [],
     }
     try:
         from . import msgraph
 
         if msgraph.ready():
             out["calendar"] = msgraph.calendar_today()
+    except Exception:
+        pass
+    try:
+        from . import meetings as meetings_mod
+
+        out["meetings"] = meetings_mod.list_recent(4).get("meetings") or []
     except Exception:
         pass
     return out

@@ -10,7 +10,7 @@ from . import config
 
 FOLDERS = (
     "Daily", "People", "Projects", "Markets", "Inbox", "Skills", "Memory",
-    "Calendar", "Templates", "Sources", "Content", "Blog", "Social", "Shop",
+    "Calendar", "Templates", "Sources", "Content", "Blog", "Social", "Shop", "Meetings",
 )
 WIKI = re.compile(r"\[\[([^\]|#]+)(?:#[^\]|]+)?(?:\|[^\]]+)?\]\]")
 TAG = re.compile(r"(?<!\w)#([A-Za-z][\w/-]*)")
@@ -224,7 +224,7 @@ def list_tasks(*, open_only: bool = True, limit: int = 40) -> list[dict]:
     init_vault()
     tasks = []
     root = vault()
-    for folder in ("Daily", "Inbox", "Projects", "Calendar", "People"):
+    for folder in ("Daily", "Inbox", "Projects", "Calendar", "People", "Meetings"):
         base = root / folder
         if not base.exists():
             continue

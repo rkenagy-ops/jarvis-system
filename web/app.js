@@ -208,6 +208,7 @@ async function refreshWidgets() {
         ((today.calendar && today.calendar.events) || []).slice(0, 4).forEach((e) => {
           bits.push(["cal", `${(e.start || "").slice(11, 16)} ${e.subject || ""}`]);
         });
+        (today.meetings || []).slice(0, 3).forEach((m) => bits.push(["mtg", m.title || m.path]));
         (today.goals || []).slice(0, 3).forEach((g) => bits.push(["goal", g.title]));
         (today.tasks || []).slice(0, 3).forEach((task) => bits.push(["task", task.text]));
         bits.forEach(([k, v]) => {

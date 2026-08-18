@@ -34,6 +34,7 @@ SKILLS: list[dict[str, Any]] = [
     {"id": "markets", "phrases": ("watchlist", "quote", "buy", "sell", "yahoo"), "desc": "Yahoo Finance quotes + paper trades", "src": "super-jarvis"},
     {"id": "vault", "phrases": ("vault", "obsidian"), "desc": "Obsidian PKM + RAG", "src": "super-jarvis"},
     {"id": "oss", "phrases": ("github", "ingest", "open source"), "desc": "Search and ingest GitHub OSS", "src": "super-jarvis"},
+    {"id": "meeting", "phrases": ("meeting minutes", "file these notes", "action items", "meeting notes"), "desc": "File meeting minutes + action items to vault/Meetings", "src": "Zackriya-Solutions/meetily"},
 ]
 
 

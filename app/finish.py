@@ -1,4 +1,4 @@
-"""What 'finished' means for Super Jarvis 5.1 — status only, no secrets."""
+"""What 'finished' means for Super Jarvis 5.2 — status only, no secrets."""
 
 from __future__ import annotations
 
@@ -29,10 +29,11 @@ def checklist() -> dict:
         {"id": "eval", "ok": bool(ev), "label": "Briefing eval written"},
         {"id": "backup", "ok": bool(backup.latest()), "label": "At least one vault+db zip"},
         {"id": "microsoft", "ok": bool(config.MS_CLIENT_ID and config.MS_REFRESH_TOKEN), "label": "Microsoft calendar + mail signed in"},
+        {"id": "meetings", "ok": bool(list((Path(config.VAULT_DIR) / "Meetings").glob("*.md"))) if (Path(config.VAULT_DIR) / "Meetings").exists() else False, "label": "At least one meeting note in the vault"},
     ]
     done = sum(1 for i in items if i["ok"])
     return {
-        "version": "5.1",
+        "version": "5.2",
         "done": done,
         "total": len(items),
         "complete": done >= 6,
