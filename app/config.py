@@ -44,7 +44,8 @@ XAI_API_KEY = _clean(os.getenv("XAI_API_KEY"))
 GITHUB_TOKEN = _clean(os.getenv("GITHUB_TOKEN"))
 GITHUB_USERNAME = _clean(os.getenv("GITHUB_USERNAME")) or "rkenagy-ops"
 OWNER_NAME = _clean(os.getenv("JARVIS_OWNER_NAME")) or "Rhett"
-VOICE = _clean(os.getenv("JARVIS_VOICE")) or "orion"
+VOICE = _clean(os.getenv("JARVIS_VOICE")) or "rex"
+VOICE_MODEL = _clean(os.getenv("JARVIS_VOICE_MODEL")) or "grok-voice-think-fast-2.0"
 MODEL = _clean(os.getenv("JARVIS_MODEL")) or "grok-4.6"
 HOST = _clean(os.getenv("JARVIS_HOST")) or "127.0.0.1"
 PORT = int(_clean(os.getenv("JARVIS_PORT")) or "8787")
@@ -98,7 +99,7 @@ DB_PATH = DATA_DIR / "jarvis.db"
 
 def reload_env() -> None:
     load_dotenv(ENV_PATH, override=True)
-    global XAI_API_KEY, GITHUB_TOKEN, GITHUB_USERNAME, OWNER_NAME, VOICE, MODEL, TRADING_MODE, AUTONOMY_ENABLED
+    global XAI_API_KEY, GITHUB_TOKEN, GITHUB_USERNAME, OWNER_NAME, VOICE, VOICE_MODEL, MODEL, TRADING_MODE, AUTONOMY_ENABLED
     global WORDPRESS_URL, WORDPRESS_USER, WORDPRESS_APP_PASSWORD, X_BEARER_TOKEN, POSTIZ_URL
     global X_API_KEY, X_API_SECRET, X_ACCESS_TOKEN, X_ACCESS_SECRET
     global JARVIS_TOKEN, JARVIS_ALLOW_LAN, JARVIS_PUBLIC_HOST, OFFLINE, HOST, PORT
@@ -109,7 +110,8 @@ def reload_env() -> None:
     GITHUB_TOKEN = _clean(os.getenv("GITHUB_TOKEN"))
     GITHUB_USERNAME = _clean(os.getenv("GITHUB_USERNAME")) or "rkenagy-ops"
     OWNER_NAME = _clean(os.getenv("JARVIS_OWNER_NAME")) or "Rhett"
-    VOICE = _clean(os.getenv("JARVIS_VOICE")) or "orion"
+    VOICE = _clean(os.getenv("JARVIS_VOICE")) or "rex"
+    VOICE_MODEL = _clean(os.getenv("JARVIS_VOICE_MODEL")) or "grok-voice-think-fast-2.0"
     MODEL = _clean(os.getenv("JARVIS_MODEL")) or "grok-4.6"
     TRADING_MODE = (_clean(os.getenv("TRADING_MODE")) or "paper").lower()
     AUTONOMY_ENABLED = (_clean(os.getenv("JARVIS_AUTONOMY")) or "true").lower() == "true"
@@ -168,6 +170,7 @@ def status() -> dict:
         "github_username": GITHUB_USERNAME or None,
         "owner": OWNER_NAME,
         "voice": VOICE,
+        "voice_model": VOICE_MODEL,
         "model": MODEL,
         "online": not OFFLINE,
         "trading_mode": TRADING_MODE,

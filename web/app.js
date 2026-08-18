@@ -420,32 +420,69 @@ async function sendText(text, { speak = true } = {}) {
   $("orb").classList.remove("talk");
 }
 
+function spokenExcerpt(text, limit = 420) {
+  const cleaned = String(text || "")
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/[#*_>`]+/g, " ")
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/\s+/g, " ")
+    .trim();
+  const parts = cleaned.split(/(?<=[.!?])\s+/).filter(Boolean);
+  const out = [];
+  for (const part of parts) {
+    if (out.length && out[out.length - 1].toLowerCase() === part.toLowerCase()) continue;
+    out.push(part);
+    if (out.join(" ").length >= limit || out.length >= 3) break;
+  }
+  return out.join(" ").slice(0, limit);
+}
+
+function stopSpeech() {
+  if (window.speechSynthesis) speechSynthesis.cancel();
+  if (state.audio) {
+    try { state.audio.pause(); } catch {}
+    state.audio.src = "";
+    state.audio = null;
+  }
+}
+
 function browserSpeak(text) {
   if (!window.speechSynthesis) return;
-  const u = new SpeechSynthesisUtterance(text.slice(0, 800));
-  u.rate = 1.02;
   speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(spokenExcerpt(text));
+  u.rate = 1.02;
   speechSynthesis.speak(u);
 }
 
 async function maybeSpeak(text) {
   if (state.live || !text) return;
+  const spoken = spokenExcerpt(text);
+  if (!spoken) return;
+  const now = Date.now();
+  if (state.lastSpoken === spoken && now - (state.lastSpokenAt || 0) < 8000) return;
+  state.lastSpoken = spoken;
+  state.lastSpokenAt = now;
+  stopSpeech();
   if (state.useBrowserVoice) {
-    browserSpeak(text);
+    browserSpeak(spoken);
     return;
   }
   try {
     const body = new FormData();
-    body.append("text", text.slice(0, 1200));
+    body.append("text", spoken);
     const res = await fetch("/api/voice/tts", { method: "POST", body });
     if (!res.ok) {
-      browserSpeak(text);
+      browserSpeak(spoken);
       return;
     }
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
     const audio = new Audio(url);
-    audio.onended = () => URL.revokeObjectURL(url);
+    state.audio = audio;
+    audio.onended = () => {
+      URL.revokeObjectURL(url);
+      if (state.audio === audio) state.audio = null;
+    };
     await audio.play();
   } catch {}
 }

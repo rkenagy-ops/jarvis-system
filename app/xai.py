@@ -94,9 +94,36 @@ def transcribe(file_bytes: bytes, filename: str = "audio.webm", mime: str = "aud
     return data.get("text") or data.get("transcript") or ""
 
 
+def spoken_excerpt(text: str, limit: int = 420) -> str:
+    """Short spoken turn. Cuts lag and stops him reading the same dump twice."""
+    import re
+
+    raw = (text or "").strip()
+    if not raw:
+        return ""
+    cleaned = re.sub(r"```[\s\S]*?```", " ", raw)
+    cleaned = re.sub(r"[#*_>`]+", " ", cleaned)
+    cleaned = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    parts = re.split(r"(?<=[.!?])\s+", cleaned)
+    out = []
+    for part in parts:
+        if not part:
+            continue
+        low = part.lower()
+        if any(low == prev.lower() or prev.lower().endswith(low) for prev in out):
+            continue
+        out.append(part)
+        if len(" ".join(out)) >= limit or len(out) >= 3:
+            break
+    spoken = " ".join(out).strip()
+    return spoken[:limit]
+
+
 def speak(text: str, voice_id: str | None = None, language: str = "en") -> bytes:
+    spoken = spoken_excerpt(text)
     payload = {
-        "text": text[:4000],
+        "text": spoken or "Ready.",
         "voice_id": voice_id or config.VOICE,
         "language": language,
     }

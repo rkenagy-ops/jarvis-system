@@ -14,7 +14,8 @@ from .brain import _parse_args
 def session_config(session_id: str, voice: str | None = None) -> dict[str, Any]:
     mind = memory.snapshot(session_id, max_chars=8000)
     instructions = conductor_system(mind) + (
-        "\nYou are speaking aloud. Keep turns tight — two to six sentences unless asked for more."
+        "\nYou are speaking aloud. Keep turns tight — two to four sentences unless asked for more."
+        "\nNever repeat a sentence you just said. Do not restate the user's question."
         "\nUse tools when the question needs the live world or GitHub."
         "\nPronounce GitHub as Git Hub. Pronounce J.A.R.V.I.S. as Jarvis."
     )
@@ -26,9 +27,9 @@ def session_config(session_id: str, voice: str | None = None) -> dict[str, Any]:
             "instructions": instructions,
             "turn_detection": {
                 "type": "server_vad",
-                "threshold": 0.8,
-                "silence_duration_ms": 700,
-                "prefix_padding_ms": 300,
+                "threshold": 0.75,
+                "silence_duration_ms": 900,
+                "prefix_padding_ms": 280,
             },
             "audio": {
                 "input": {"format": {"type": "audio/pcm", "rate": 24000}},
@@ -51,7 +52,7 @@ async def handle_live(ws: WebSocket, session_id: str, voice: str | None = None) 
         await ws.close()
         return
 
-    url = f"{config.XAI_REALTIME}?model=grok-voice-latest"
+    url = f"{config.XAI_REALTIME}?model={config.VOICE_MODEL or 'grok-voice-think-fast-2.0'}"
     headers = {"Authorization": f"Bearer {config.XAI_API_KEY}"}
     pending: dict[str, dict[str, Any]] = {}
 
