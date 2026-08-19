@@ -68,7 +68,7 @@ FUNCTION_TOOLS = [
     ),
     _fn(
         "market",
-        "Markets: quote, history, analyze, watchlist, scan, intel, account, broker, trade, confirm, ibkr, options. Live IBKR/Alpaca need confirm tokens. options runs MarketBeast/HyperTrader call scanner.",
+        "Markets: quote, history, analyze, watchlist, scan, intel, account, broker, trade, confirm, ibkr, options. action=ibkr with mode=account|order|option. Live IBKR stock/option: set symbol/side/qty (and expiry/strike for options). If blocked, call action=confirm with confirm_token. options runs MarketBeast.",
         {
             "action": {"type": "string", "enum": ["quote", "history", "analyze", "watchlist", "scan", "intel", "account", "broker", "trade", "confirm", "ibkr", "options"]},
             "universe": {"type": "string"},
@@ -84,6 +84,8 @@ FUNCTION_TOOLS = [
             "strike": {"type": "number"},
             "right": {"type": "string"},
             "top": {"type": "integer"},
+            "mode": {"type": "string"},
+            "limit": {"type": "number"},
         },
         ["action"],
     ),

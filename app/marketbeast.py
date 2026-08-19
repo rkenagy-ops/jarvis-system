@@ -227,7 +227,7 @@ def _overlay_ibkr(picks: list[dict]) -> list[dict]:
     try:
         from . import ibkr
 
-        if not ibkr.port_open():
+        if ibkr.busy() or not ibkr.port_open(ibkr.port()):
             return picks
         specs = [
             {

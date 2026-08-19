@@ -463,6 +463,27 @@ def api_ibkr_option(body: OptionOrderIn) -> dict:
     )
 
 
+class StockOrderIn(BaseModel):
+    symbol: str
+    side: str = "buy"
+    qty: float = 1
+    limit: float | None = None
+    confirm_token: str | None = None
+
+
+@app.post("/api/ibkr/order")
+def api_ibkr_stock(body: StockOrderIn) -> dict:
+    from . import ibkr
+
+    return ibkr.place_stock(
+        body.symbol,
+        body.side,
+        body.qty,
+        limit=body.limit,
+        confirm_token=body.confirm_token,
+    )
+
+
 @app.get("/api/autonomy")
 def autonomy_dash() -> dict:
     return autonomy.snapshot()

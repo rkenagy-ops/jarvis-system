@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/styles.css?v=5.7.0" />
+  <link rel="stylesheet" href="/static/styles.css?v=5.8.0" />
 </head>
 <body>
   <div class="app">
@@ -110,7 +110,8 @@
           <button type="button" data-q="Run MarketBeast on liquid names for the best up-to-the-minute CALL options to buy. Use market action=options universe=liquid. List strike, expiry, debit, delta, and score. Do not place an IBKR order.">Best calls</button>
           <button type="button" data-q="Run the full internal MarketBeast scan (universe=full) for the best CALL options. This may take a few minutes. Do not place an IBKR order.">Full MarketBeast</button>
           <button type="button" data-q="Spawn scout and steward. Run oss self_upgrade and growth_pack. Summarize what Super Jarvis absorbed, without cloning stacks or opening the HUD to the LAN.">Grow</button>
-          <button type="button" data-q="Check my Interactive Brokers account via the official TWS API (market action=ibkr). Report net liq, buying power, and positions. Do not trade.">IBKR account</button>
+          <button type="button" data-q="Check my Interactive Brokers account via market action=ibkr mode=account. Report port, whether TWS is live or paper, net liq, buying power, and positions.">IBKR account</button>
+          <button type="button" data-q="Arm live IBKR trading. Use market action=ibkr. If TWS is on 7496, prepare to send. For the best A/B call from MarketBeast, request a LIVE option order (mode=option) and give me the confirm_token. Do not claim a fill until I confirm.">Live IBKR</button>
           <button type="button" data-q="Set a 5 minute timer called stand up.">5 min timer</button>
         </div>
         <textarea id="input" placeholder="Ask anything: markets, vault, GitHub, news, weather, goals. Paper-trade with confirm."></textarea>
@@ -168,7 +169,11 @@
       <label>IBKR_PORT (7497 paper TWS, 7496 live TWS)</label>
       <input id="key-ibkr-port" placeholder="7497" />
       <label>IBKR_LIVE (real IBKR cash — still needs confirm token)</label>
-      <select id="key-ibkr-live"><option value="false">false — TWS paper 7497</option><option value="true">true — TWS live 7496</option></select>
+      <select id="key-ibkr-live">
+        <option value="">leave unchanged</option>
+        <option value="true">true — live TWS 7496 (real cash, confirm token)</option>
+        <option value="false">false — paper TWS 7497</option>
+      </select>
       <label>MARKETBEAST_ROOT (HyperTrader folder with scanner.py)</label>
       <input id="key-beast-root" placeholder="C:\Users\Rhett\OneDrive\trading programs\hypertrader (9)\hypertrader" />
       <label>ALPACA_LIVE (real cash — still needs confirm token)</label>
@@ -218,6 +223,6 @@
     </div>
   </div>
 
-  <script src="/static/app.js?v=5.7.0"></script>
+  <script src="/static/app.js?v=5.8.0"></script>
 </body>
 </html>

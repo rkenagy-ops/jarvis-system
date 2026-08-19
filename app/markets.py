@@ -318,8 +318,6 @@ def confirm_trade(token: str) -> dict[str, Any]:
     if item.get("kind") == "ibkr_option":
         from . import ibkr
 
-        # Token already consumed. Force paper-path execution flags off by
-        # calling place_option only after we stash a one-shot pass.
         p = payload
         return ibkr.place_option(
             p.get("symbol") or "",
@@ -327,6 +325,17 @@ def confirm_trade(token: str) -> dict[str, Any]:
             float(p.get("strike") or 0),
             p.get("right") or "C",
             int(p.get("qty") or 1),
+            limit=p.get("limit"),
+            confirmed=True,
+        )
+    if item.get("kind") == "ibkr_stock":
+        from . import ibkr
+
+        p = payload
+        return ibkr.place_stock(
+            p.get("symbol") or "",
+            p.get("side") or "buy",
+            float(p.get("qty") or 0),
             limit=p.get("limit"),
             confirmed=True,
         )
@@ -461,7 +470,12 @@ def dispatch(action: str, **kwargs) -> Any:
     if action == "ibkr":
         from . import ibkr
 
-        return ibkr.account()
+        mode = str(kwargs.get("mode") or "account")
+        if kwargs.get("expiry") and kwargs.get("strike"):
+            mode = "option"
+        elif kwargs.get("symbol") and kwargs.get("side"):
+            mode = "order"
+        return ibkr.dispatch(mode, **kwargs)
     if action in {"options", "beast", "calls"}:
         from . import marketbeast
 

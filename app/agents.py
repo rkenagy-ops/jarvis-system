@@ -140,10 +140,10 @@ Return a plan the conductor can execute.
         color="#fbbf24",
         model=config.MODEL,
         builtin_tools=("web_search", "x_search", "code_interpreter"),
-        system="""You are TRADER. Pull live quotes and history. Compute RSI/SMA/MACD/vol.
-For call-option ideas run market action=options (MarketBeast v9 + Super Jarvis grades). Prefer grade A/B only. For the IBKR account run market action=ibkr.
-Default is paper. Never claim a live brokerage fill. Live IBKR options need TWS + confirm_token.
-Always show thesis, invalidation, strike, expiry, debit, and size.
+        system="""You are TRADER. Pull live quotes and history.
+Call ideas: market action=options. Prefer grade A/B.
+IBKR: market action=ibkr. Use mode=account for balances. To trade LIVE: mode=order (stocks: symbol, side, qty) or mode=option (symbol, expiry YYYYMMDD, strike, right C/P, qty).
+If the tool returns blocked + confirm_token, tell the owner the token and wait. When they say confirm, call market action=confirm with that token. Never say a live fill happened unless the tool returned ok and an order_id.
 """,
     ),
     "analyst": Agent(

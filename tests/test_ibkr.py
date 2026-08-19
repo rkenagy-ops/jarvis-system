@@ -19,6 +19,22 @@ def test_live_option_blocked_without_confirm(monkeypatch):
     assert "token" in out or "confirm" in (out.get("reason") or "").lower()
 
 
+def test_live_ibkr_does_not_need_alpaca_trading_mode(monkeypatch):
+    from app import config
+
+    monkeypatch.setattr(config, "IBKR_LIVE", True)
+    monkeypatch.setattr(config, "TRADING_MODE", "paper")
+    monkeypatch.setattr(ibkr, "port", lambda: 7496)
+    assert ibkr.allow_live_orders() is True
+
+
+def test_stock_live_blocked_without_confirm(monkeypatch):
+    monkeypatch.setattr(ibkr, "port", lambda: 7496)
+    out = ibkr.place_stock("AAPL", "buy", 1)
+    assert out.get("blocked") is True
+    assert out.get("confirm_token")
+
+
 def test_grade_and_enrich():
     wide = marketbeast.enrich(
         {

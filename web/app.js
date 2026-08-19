@@ -740,7 +740,7 @@ $("save-keys").addEventListener("click", async () => {
       ms_client_id: $("key-ms-client") && $("key-ms-client").value || undefined,
       ms_tenant: $("key-ms-tenant") && $("key-ms-tenant").value || undefined,
       ibkr_port: $("key-ibkr-port") && $("key-ibkr-port").value ? Number($("key-ibkr-port").value) : undefined,
-      ibkr_live: $("key-ibkr-live") && $("key-ibkr-live").value === "true",
+      ibkr_live: $("key-ibkr-live") && $("key-ibkr-live").value === "" ? undefined : $("key-ibkr-live") && $("key-ibkr-live").value === "true",
       marketbeast_root: $("key-beast-root") && $("key-beast-root").value || undefined,
     }),
   });
