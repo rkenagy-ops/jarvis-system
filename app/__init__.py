@@ -1,3 +1,3 @@
 """Super Jarvis — multi-agent voice OS."""
 
-__version__ = "5.8.1"
+__version__ = "5.8.2"

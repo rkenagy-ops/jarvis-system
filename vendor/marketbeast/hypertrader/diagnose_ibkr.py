@@ -1,5 +1,5 @@
 """
-IBKR Connection Diagnostic Tool
+Legacy HyperTrader diagnostic. Super Jarvis uses app/ibkr.py (persistent TWS 2026).
 """
 
 import socket

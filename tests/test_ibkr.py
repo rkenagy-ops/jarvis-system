@@ -9,6 +9,7 @@ from app import ibkr, marketbeast
 
 def test_ibkr_host_is_loopback():
     assert ibkr.host() == "127.0.0.1"
+    assert ibkr.probe().get("adapter") == "persistent-tws-2026"
 
 
 def test_live_option_blocked_without_confirm(monkeypatch):
