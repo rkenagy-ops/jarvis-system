@@ -26,7 +26,7 @@ def probe(*, force: bool = False) -> dict[str, Any]:
         _probe.update(ok=False, reason="no_key", checked=now)
         return _probe
     try:
-        with httpx.Client(timeout=20.0) as client:
+        with httpx.Client(timeout=6.0) as client:
             resp = client.post(
                 f"{config.XAI_BASE}/responses",
                 headers=_headers(),

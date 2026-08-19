@@ -68,7 +68,17 @@ function setAgentBusy(id, busy) {
 
 async function refreshStatus() {
   const res = await fetch("/api/status");
-  const data = await res.json();
+  if (res.status === 401) {
+    await bootstrapGuard();
+    const retry = await fetch("/api/status");
+    if (!retry.ok) throw new Error("jarvis locked");
+    return applyStatus(await retry.json());
+  }
+  if (!res.ok) throw new Error("status " + res.status);
+  return applyStatus(await res.json());
+}
+
+function applyStatus(data) {
   $("xai-dot").className = `dot ${data.xai_configured ? "on" : "off"}`;
   $("gh-dot").className = `dot ${data.github_configured ? "on" : "off"}`;
   $("xai-label").textContent = data.xai_configured ? "XAI KEY" : "XAI MISSING";
@@ -83,7 +93,8 @@ async function refreshStatus() {
     $("ollama-label").textContent = ol.ok ? `OLLAMA ${ol.model || ""}`.trim() : "OLLAMA OFF";
   }
   const gh = data.github && data.github.login;
-  $("gh-label").textContent = gh ? `GH ${gh}` : data.github_configured ? "GITHUB" : "GH MISSING";
+  $("gh-dot").className = `dot ${gh ? "on" : data.github && data.github.error ? "warn" : data.github_configured ? "warn" : "off"}`;
+  $("gh-label").textContent = gh ? `GH ${gh}` : (data.github && data.github.error ? "GH AUTH" : data.github_configured ? "GITHUB" : "GH MISSING");
   if (!data.xai_configured) $("modal").classList.add("show");
   const fort = data.fortress || {};
   if ($("lock-label")) {

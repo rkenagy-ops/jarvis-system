@@ -11,6 +11,7 @@ import httpx
 from . import config
 
 UA = "SuperJarvis/2.3 (+https://github.com/rkenagy-ops/jarvis-system)"
+_whoami_cache: dict[str, Any] = {"at": 0.0, "data": None}
 
 
 class GitHubError(RuntimeError):
@@ -45,7 +46,8 @@ def _headers() -> dict[str, str]:
 
 def _request(method: str, path: str, **kwargs) -> Any:
     url = path if path.startswith("http") else f"{config.GITHUB_API}{path}"
-    with httpx.Client(timeout=40.0) as client:
+    timeout = kwargs.pop("timeout", 8.0)
+    with httpx.Client(timeout=timeout) as client:
         resp = client.request(method, url, headers=_headers(), **kwargs)
     if resp.status_code >= 400:
         raise GitHubError(f"GitHub {resp.status_code}: {resp.text[:800]}")
@@ -54,10 +56,15 @@ def _request(method: str, path: str, **kwargs) -> Any:
     return resp.json()
 
 
-def whoami() -> dict:
-    user = _request("GET", "/user")
+def whoami(*, force: bool = False) -> dict:
+    import time
+
+    now = time.time()
+    if not force and _whoami_cache["data"] and now - float(_whoami_cache["at"] or 0) < 90:
+        return _whoami_cache["data"]
+    user = _request("GET", "/user", timeout=6.0)
     config.GITHUB_USERNAME = user.get("login") or config.GITHUB_USERNAME
-    return {
+    data = {
         "login": user.get("login"),
         "name": user.get("name"),
         "id": user.get("id"),
@@ -65,7 +72,10 @@ def whoami() -> dict:
         "public_repos": user.get("public_repos"),
         "total_private_repos": user.get("total_private_repos"),
         "plan": (user.get("plan") or {}).get("name"),
+        "repo": "rkenagy-ops/jarvis-system",
     }
+    _whoami_cache.update(at=now, data=data)
+    return data
 
 
 def list_repos(limit: int = 20, visibility: str = "all") -> list[dict]:

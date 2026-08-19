@@ -218,11 +218,14 @@ def health() -> dict:
 @app.get("/api/status")
 def status() -> dict:
     github = None
-    if config.GITHUB_TOKEN:
-        try:
-            github = github_client.whoami()
-        except Exception as exc:
-            github = {"error": str(exc)}
+    try:
+        github = github_client.whoami()
+    except Exception as exc:
+        github = {
+            "error": str(exc)[:240],
+            "hint": "Repo is already https://github.com/rkenagy-ops/jarvis-system — do not Import. Run gh auth login or paste a repo-scoped token in KEYS.",
+            "repo": "rkenagy-ops/jarvis-system",
+        }
     name, reason = _brain_name()
     return {
         **config.status(),
