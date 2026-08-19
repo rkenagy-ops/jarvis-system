@@ -19,11 +19,21 @@
 html, body { height: 100%; margin: 0; background: var(--bg); color: var(--ink); font-family: var(--sans); }
 body {
   background:
-    radial-gradient(900px 500px at 50% 110%, rgba(212, 176, 86, 0.08), transparent 60%),
-    radial-gradient(700px 400px at 50% -10%, rgba(62, 224, 212, 0.06), transparent 55%),
+    radial-gradient(900px 500px at 50% 110%, rgba(212, 176, 86, 0.10), transparent 60%),
+    radial-gradient(700px 400px at 50% -10%, rgba(62, 224, 212, 0.08), transparent 55%),
     linear-gradient(180deg, #070a10 0%, #05070c 100%);
   overflow: hidden;
 }
+body::before {
+  content: "";
+  position: fixed; inset: 0; pointer-events: none; z-index: 0;
+  background:
+    repeating-linear-gradient(0deg, transparent 0 31px, rgba(62,224,212,0.03) 32px),
+    repeating-linear-gradient(90deg, transparent 0 31px, rgba(212,176,86,0.025) 32px);
+  animation: gridDrift 48s linear infinite;
+  opacity: 0.55;
+}
+.app { position: relative; z-index: 1; }
 
 .app { display: grid; grid-template-rows: 56px 1fr 168px; height: 100%; }
 
@@ -41,8 +51,8 @@ body {
   display: flex; align-items: center; gap: 6px;
 }
 .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--gold-dim); }
-.dot.on { background: var(--ok); box-shadow: 0 0 8px var(--ok); }
-.dot.warn { background: var(--gold); }
+.dot.on { background: var(--ok); box-shadow: 0 0 8px var(--ok); animation: pulseDot 2.4s ease-in-out infinite; }
+.dot.warn { background: var(--gold); animation: pulseDot 3.2s ease-in-out infinite; }
 .dot.off { background: var(--danger); }
 .btn {
   background: transparent; color: var(--gold); border: 1px solid var(--line);
@@ -78,31 +88,65 @@ body {
 .hud {
   position: relative; width: min(420px, 70vmin); height: min(420px, 70vmin);
 }
+.field { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 .ring {
   position: absolute; inset: 0; border-radius: 50%;
   border: 1px solid rgba(212,176,86,0.25);
   animation: spin 28s linear infinite;
 }
-.ring:nth-child(2) { inset: 9%; border-color: rgba(62,224,212,0.18); animation-duration: 18s; animation-direction: reverse; }
-.ring:nth-child(3) { inset: 20%; border-style: dashed; border-color: rgba(212,176,86,0.35); animation-duration: 12s; }
-.ring:nth-child(4) { inset: 32%; border-color: rgba(62,224,212,0.28); animation-duration: 22s; }
+.ring.r1 { inset: 0; }
+.ring.r2 { inset: 9%; border-color: rgba(62,224,212,0.18); animation-duration: 18s; animation-direction: reverse; }
+.ring.r3 { inset: 20%; border-style: dashed; border-color: rgba(212,176,86,0.35); animation-duration: 12s; }
+.ring.r4 { inset: 32%; border-color: rgba(62,224,212,0.28); animation-duration: 22s; box-shadow: inset 0 0 24px rgba(62,224,212,0.08); }
+.sweep {
+  position: absolute; inset: 8%; border-radius: 50%;
+  background: conic-gradient(from 0deg, transparent 0 72%, rgba(62,224,212,0.22) 78%, transparent 86%);
+  animation: spin 6.5s linear infinite;
+  pointer-events: none; mix-blend-mode: screen;
+}
+.scan {
+  position: absolute; inset: 18%; border-radius: 50%; overflow: hidden; pointer-events: none;
+}
+.scan::after {
+  content: ""; position: absolute; left: 0; right: 0; height: 18%;
+  background: linear-gradient(180deg, transparent, rgba(212,176,86,0.18), transparent);
+  animation: scanY 3.8s ease-in-out infinite;
+}
+.ticks { position: absolute; inset: 0; pointer-events: none; }
+.tick {
+  position: absolute; width: 2px; height: 8px; background: rgba(212,176,86,0.55);
+  left: 50%; top: 3px; transform-origin: 50% calc(min(210px, 35vmin));
+}
 .orb {
   position: absolute; inset: 38%; border-radius: 50%;
   background:
     radial-gradient(circle at 35% 30%, #fff7d1, transparent 28%),
     radial-gradient(circle at 50% 50%, #d4b056, #3ee0d4 70%, #071016 100%);
   box-shadow: 0 0 40px rgba(212,176,86,0.35), 0 0 80px rgba(62,224,212,0.12);
-  transition: transform 0.2s ease;
+  animation: breathe 4.4s ease-in-out infinite;
 }
-.orb.talk { transform: scale(1.08); box-shadow: 0 0 60px rgba(62,224,212,0.45); }
-.orb.listen { transform: scale(1.04); box-shadow: 0 0 70px rgba(212,176,86,0.55); }
-.tick {
-  position: absolute; width: 2px; height: 10px; background: var(--gold);
-  left: 50%; top: 2px; transform-origin: 50% 210px;
+.orb::after {
+  content: ""; position: absolute; inset: 22%; border-radius: 50%;
+  background: radial-gradient(circle at 40% 35%, rgba(255,255,255,0.55), transparent 55%);
+  animation: shimmer 3.2s ease-in-out infinite;
+}
+.orb.talk {
+  animation: talkpulse 0.85s ease-in-out infinite;
+  box-shadow: 0 0 70px rgba(62,224,212,0.55), 0 0 120px rgba(212,176,86,0.2);
+}
+.orb.listen {
+  animation: listenpulse 1.4s ease-in-out infinite;
+  box-shadow: 0 0 70px rgba(212,176,86,0.6);
 }
 .status-line {
   margin-top: 18px; font-family: var(--mono); font-size: 11px; letter-spacing: 0.16em;
   color: var(--cyan); min-height: 16px; text-align: center;
+  text-shadow: 0 0 12px rgba(62,224,212,0.35);
+  animation: statusGlow 3.6s ease-in-out infinite;
+}
+.clock {
+  margin-top: 6px; font-family: var(--mono); font-size: 10px; letter-spacing: 0.2em;
+  color: var(--gold-dim); min-height: 14px;
 }
 .widgets {
   display: flex; flex-wrap: wrap; gap: 8px; justify-content: center;
@@ -192,6 +236,48 @@ textarea {
 .hint { color: var(--muted); font-size: 12px; line-height: 1.45; }
 
 @keyframes spin { to { transform: rotate(360deg); } }
+@keyframes breathe {
+  0%, 100% { transform: scale(1); filter: brightness(1); }
+  50% { transform: scale(1.05); filter: brightness(1.14); }
+}
+@keyframes talkpulse {
+  0%, 100% { transform: scale(1.06); }
+  50% { transform: scale(1.14); }
+}
+@keyframes listenpulse {
+  0%, 100% { transform: scale(1.03); }
+  50% { transform: scale(1.08); }
+}
+@keyframes shimmer {
+  0%, 100% { opacity: 0.45; transform: translate(-4%, -3%); }
+  50% { opacity: 0.85; transform: translate(6%, 4%); }
+}
+@keyframes scanY {
+  0% { top: -10%; }
+  100% { top: 95%; }
+}
+@keyframes pulseDot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+@keyframes statusGlow {
+  0%, 100% { opacity: 0.75; }
+  50% { opacity: 1; }
+}
+@keyframes gridDrift {
+  from { background-position: 0 0, 0 0; }
+  to { background-position: 0 64px, 64px 0; }
+}
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+.ticker { animation: fadeUp 0.45s ease both; }
+.agent.busy { animation: fadeUp 0.3s ease both; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
 
 @media (max-width: 980px) {
   .stage { grid-template-columns: 1fr; }

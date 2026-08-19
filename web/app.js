@@ -830,10 +830,77 @@ async function saveDraft(schedule) {
 $("studio-save").addEventListener("click", () => saveDraft(false));
 $("studio-sched").addEventListener("click", () => saveDraft(true));
 
+function initLivingHud() {
+  const ticks = $("ticks");
+  if (ticks && !ticks.childElementCount) {
+    for (let i = 0; i < 60; i += 1) {
+      const el = document.createElement("div");
+      el.className = "tick";
+      el.style.transform = `rotate(${i * 6}deg)`;
+      el.style.opacity = i % 5 === 0 ? "0.9" : "0.28";
+      el.style.height = i % 5 === 0 ? "11px" : "6px";
+      ticks.appendChild(el);
+    }
+  }
+  const canvas = $("field");
+  const hud = $("hud");
+  if (canvas && hud && canvas.getContext) {
+    const ctx = canvas.getContext("2d");
+    const dots = Array.from({ length: 52 }, () => ({
+      a: Math.random() * Math.PI * 2,
+      r: 0.32 + Math.random() * 0.6,
+      s: 0.003 + Math.random() * 0.01,
+      z: 0.25 + Math.random() * 0.75,
+    }));
+    const loop = () => {
+      const w = hud.clientWidth;
+      const h = hud.clientHeight;
+      if (canvas.width !== w || canvas.height !== h) {
+        canvas.width = w;
+        canvas.height = h;
+      }
+      ctx.clearRect(0, 0, w, h);
+      const cx = w / 2;
+      const cy = h / 2;
+      const rad = Math.min(w, h) / 2;
+      const talk = $("orb") && $("orb").classList.contains("talk");
+      const listen = $("orb") && $("orb").classList.contains("listen");
+      dots.forEach((d) => {
+        d.a += d.s * (talk ? 2.4 : listen ? 1.6 : 1);
+        const x = cx + Math.cos(d.a) * rad * d.r;
+        const y = cy + Math.sin(d.a) * rad * d.r;
+        ctx.beginPath();
+        ctx.fillStyle = talk
+          ? `rgba(62,224,212,${0.18 + d.z * 0.55})`
+          : `rgba(212,176,86,${0.12 + d.z * 0.45})`;
+        ctx.arc(x, y, talk ? 1.8 : 1.2, 0, Math.PI * 2);
+        ctx.fill();
+      });
+      requestAnimationFrame(loop);
+    };
+    requestAnimationFrame(loop);
+  }
+  const tickClock = () => {
+    const el = $("clock");
+    if (!el) return;
+    const now = new Date();
+    el.textContent = now.toISOString().replace("T", "  ").slice(0, 19) + "Z";
+  };
+  tickClock();
+  setInterval(tickClock, 1000);
+  fetch("/api/health")
+    .then((r) => r.json())
+    .then((d) => {
+      if ($("edition") && d.version) $("edition").textContent = `v${d.version} · ${d.voice || "eve"} · LIVE`;
+    })
+    .catch(() => {});
+}
+
+initLivingHud();
 bootstrapGuard()
   .then(() => refreshStatus())
   .then(() => refreshWidgets())
   .then(() => startLiveFeeds())
   .catch(() => setStatus("backend offline"));
-setInterval(refreshWidgets, 60000);
-setStatus("systems ready — live feeds on");
+setInterval(refreshWidgets, 30000);
+setStatus("systems alive");
