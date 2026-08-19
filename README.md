@@ -1,10 +1,10 @@
 # jarvis-system
 
-Super Jarvis for [rkenagy-ops](https://github.com/rkenagy-ops). The GitHub scaffold is now a running OS: Obsidian vault, multi-agent swarm, live web/X, GitHub tools, paper markets, autonomy, and optional open-source services.
+Super Jarvis **5.8.2** for [rkenagy-ops](https://github.com/rkenagy-ops). This repo **is** the OS — do not GitHub-Import a second copy.
 
-Repo: https://github.com/rkenagy-ops/jarvis-system
+Local HUD: [http://127.0.0.1:8787](http://127.0.0.1:8787) (fortress / loopback only).
 
-## Quick start (no Claude, no Docker required)
+## Quick start
 
 ```powershell
 cd C:\Users\Rhett\jarvis-system
@@ -12,53 +12,39 @@ copy .env.example .env
 .\start.ps1
 ```
 
-Open http://127.0.0.1:8787 and paste `XAI_API_KEY` (https://console.x.ai) plus a GitHub PAT.
+Or after install: Windows logon task `SuperJarvis` (`install-startup.ps1` / `serve.ps1`).
 
-Open the **`vault/`** folder in [Obsidian](https://obsidian.md) with **File → Open vault**.
+Paste `XAI_API_KEY` from [console.x.ai](https://console.x.ai). GitHub is `gh auth login` (account **rkenagy-ops**) or a `repo` PAT in KEYS.
 
-## What “unlocked the GitHub base” means
+Open **`vault/`** in [Obsidian](https://obsidian.md) → File → Open vault.
 
-The original repo was a **scaffold**: CrewAI + Anthropic + Kimi + Supabase + Docker were required, and trading/memory/tools were stubs.
+## What it is now
 
-Those locks are off:
-
-| Old restriction | Now |
+| Layer | Running |
 |---|---|
-| Must use Claude Code / Anthropic | SpaceXAI (`grok-4.6`) is the brain |
-| Must run vLLM / Kimi | Optional LiteLLM fallback only |
-| Memory only on Supabase | SQLite index + **Obsidian markdown vault** |
-| Voice only Whisper/Piper containers | xAI STT/TTS + live realtime |
-| MCP/tools only if Node/Docker up | Native tools always work |
-| Trading skill was a README | Live quotes, RSI/MACD, paper broker |
+| Brain | SpaceXAI `grok-4.6` → Ollama `llama3.1:8b` → free APIs |
+| Voice | Eve + `grok-voice-think-fast-2.0` (short excerpt, no double-speak) |
+| Knowledge | Obsidian vault + SQLite FTS + local embeddings |
+| Calendar / mail | Microsoft Graph (device login) |
+| Markets | Yahoo desk + **MarketBeast v9** (D:\MARKETBEAST vendored) |
+| Brokerage | IBKR TWS **persistent session** (`app/ibkr.py` adapter `persistent-tws-2026`). Live **7496**, paper **7497**. Live orders need a **confirm token**. Optional Alpaca. |
+| Autonomy | Briefing, watchlist, calendar sync, weekly backup, MarketBeast scan, self-upgrade |
+| HUD | Animated living orb (5.7+), Grow chip |
 
-**Still locked (on purpose):** live money. Paper is default. Live/large tickets need a confirm token. No silent brokerage.
+**Still gated:** real cash. `IBKR_LIVE=true` + live TWS + confirm token. No silent fills.
 
-## Obsidian
+## GitHub
 
-`vault/` is a real vault (daily notes, wikilinks, tags, graph). Jarvis reads/writes it.
+Canonical repo: **https://github.com/rkenagy-ops/jarvis-system**
 
-Optional live-editor sync: [obsidian-local-rest-api](https://github.com/coddingtonbear/obsidian-local-rest-api) + `OBSIDIAN_API_URL` / `OBSIDIAN_API_KEY`.
-
-## Open-source adapters (GitHub projects)
-
-Work without the container; get richer if you start them.
-
-| Project | Role |
-|---|---|
-| [Obsidian](https://obsidian.md) | Knowledge OS |
-| [n8n](https://github.com/n8n-io/n8n) | `integrate n8n` + `N8N_WEBHOOK_URL` |
-| [Stirling-PDF](https://github.com/Stirling-Tools/Stirling-PDF) | PDF via `STIRLING_URL` or local `pypdf` |
-| [Jellyfin](https://github.com/jellyfin/jellyfin) | `JELLYFIN_URL` |
-| [Immich](https://github.com/immich-app/immich) | `IMMICH_URL` |
-| [Postiz](https://github.com/gitroomhq/postiz-app) | `POSTIZ_URL` |
-| Same-origin crawler | `integrate crawl` (crawl4ai fallback) |
-
-```powershell
-docker compose up -d
-```
+Do **not** use GitHub *Import repository*. Clone this repo; copy `.env` privately to another PC.
 
 ## Tests
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest -q
 ```
+
+## Fortress
+
+Bind `127.0.0.1` only. Do not port-forward 8787. Docker compose (if ever used) is also loopback-pinned.

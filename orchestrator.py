@@ -1,5 +1,5 @@
 """
-Optional CrewAI CLI loop.
+Parked CrewAI CLI loop. The live OS loop is `python -m app` (HUD + autonomy). GitHub docs: README.md / AGENTS.md (5.8.2).
 
 The live system is Super Jarvis: `python -m app` / start.ps1
 This file keeps the original crew for people who want a terminal crew.
