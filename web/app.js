@@ -193,6 +193,26 @@ async function refreshWidgets() {
       $("equity").textContent = `${(acc.mode || "paper").toUpperCase()} EQ ${acc.equity != null ? Number(acc.equity).toFixed(2) : "—"}  CASH ${acc.cash != null ? Number(acc.cash).toFixed(2) : "—"}`;
     }
     try {
+      const ib = await fetch("/api/ibkr/status").then((r) => r.json());
+      const lab = $("ibkr-label");
+      const dot = $("ibkr-dot");
+      if (lab && dot) {
+        if (ib.ok) {
+          dot.className = "dot on";
+          lab.textContent = ib.gateway_live ? "IBKR LIVE" : "IBKR PAPER";
+        } else if (ib.tws && ib.tws.login_screen) {
+          dot.className = "dot warn";
+          lab.textContent = "IBKR LOGIN";
+        } else if (ib.tws && ib.tws.process) {
+          dot.className = "dot warn";
+          lab.textContent = "IBKR API OFF";
+        } else {
+          dot.className = "dot off";
+          lab.textContent = "IBKR OFF";
+        }
+      }
+    } catch {}
+    try {
       const fin = await fetch("/api/finish").then((r) => r.json());
       const fbox = $("finish");
       if (fbox) {
@@ -398,7 +418,7 @@ function handleEvent(ev) {
     $("orb").classList.remove("talk");
     setAgentBusy(ev.agent || "jarvis", false);
     setStatus("systems ready");
-    if (ev.text && ev.speak !== false) maybeSpeak(ev.text);
+    if (ev.text && ev.speak !== false && !state.live) maybeSpeak(ev.text);
   }
 }
 
@@ -577,6 +597,7 @@ function pcmToBase64(float32) {
 function playPcm16(b64) {
   const ctx = state.audioCtx || new AudioContext({ sampleRate: 24000 });
   state.audioCtx = ctx;
+  if (ctx.state === "suspended") ctx.resume();
   const raw = atob(b64);
   const buf = new ArrayBuffer(raw.length);
   const view = new Uint8Array(buf);
@@ -589,7 +610,8 @@ function playPcm16(b64) {
   src.buffer = audio;
   src.connect(ctx.destination);
   const now = ctx.currentTime;
-  if (state.playTime < now) state.playTime = now;
+  if (!state.playTime || state.playTime < now) state.playTime = now;
+  if (state.playTime > now + 0.9) return;
   src.start(state.playTime);
   state.playTime += audio.duration;
   $("orb").classList.add("talk");
@@ -626,6 +648,11 @@ async function toggleLive() {
     proc.onaudioprocess = (e) => {
       if (!state.live || ws.readyState !== 1) return;
       const data = e.inputBuffer.getChannelData(0);
+      const now = ctx.currentTime;
+      if ((state.playTime || 0) > now + 0.08) {
+        ws.send(JSON.stringify({ type: "audio", data: pcmToBase64(new Float32Array(data.length)) }));
+        return;
+      }
       ws.send(JSON.stringify({ type: "audio", data: pcmToBase64(data) }));
     };
     state.processor = proc;

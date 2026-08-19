@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/styles.css?v=5.8.1" />
+  <link rel="stylesheet" href="/static/styles.css?v=5.8.3" />
 </head>
 <body>
   <div class="app">
@@ -23,6 +23,7 @@
         <div class="pill"><span id="gh-dot" class="dot off"></span><span id="gh-label">GITHUB</span></div>
         <div class="pill"><span id="net-dot" class="dot on"></span><span id="net-label">ONLINE</span></div>
         <div class="pill"><span id="lock-dot" class="dot on"></span><span id="lock-label">LOCAL</span></div>
+        <div class="pill"><span id="ibkr-dot" class="dot off"></span><span id="ibkr-label">IBKR</span></div>
         <button class="btn" id="btn-studio">STUDIO</button>
         <button class="btn" id="btn-vault">VAULT</button>
         <button class="btn" id="btn-brief">BRIEFING</button>
@@ -169,7 +170,7 @@
       <label>MS_TENANT (consumers for personal Outlook)</label>
       <input id="key-ms-tenant" placeholder="consumers" />
       <label>IBKR_PORT (7497 paper TWS, 7496 live TWS)</label>
-      <input id="key-ibkr-port" placeholder="7497" />
+      <input id="key-ibkr-port" placeholder="7496" />
       <label>IBKR_LIVE (real IBKR cash — still needs confirm token)</label>
       <select id="key-ibkr-live">
         <option value="">leave unchanged</option>
@@ -225,6 +226,6 @@
     </div>
   </div>
 
-  <script src="/static/app.js?v=5.8.1"></script>
+  <script src="/static/app.js?v=5.8.3"></script>
 </body>
 </html>

@@ -32,6 +32,23 @@ def checklist() -> dict:
     if daily.exists():
         has_brief = any("briefing" in p.name.lower() or "Morning briefing" in p.read_text(encoding="utf-8", errors="replace") for p in daily.glob("*.md"))
     ev = list((Path(config.VAULT_DIR) / "Memory").glob("*-briefing-eval.md")) if (Path(config.VAULT_DIR) / "Memory").exists() else []
+    try:
+        from . import ibkr as ibkr_mod
+
+        ib = ibkr_mod.probe()
+        ibkr_ok = bool(ib.get("ok"))
+        if ibkr_ok:
+            ibkr_label = f"IBKR TWS API {ib.get('port_name') or ib.get('configured_port')}"
+        elif (ib.get("tws") or {}).get("login_screen"):
+            ibkr_label = "IBKR: TWS is on the Login window — finish login + 2FA"
+        elif (ib.get("tws") or {}).get("process"):
+            ibkr_label = "IBKR: TWS running but API socket closed (enable ActiveX/Socket on 7496)"
+        else:
+            ibkr_label = "IBKR: start TWS, log in LIVE, enable API port 7496"
+    except Exception:
+        ibkr_ok = False
+        ibkr_label = "IBKR: TWS not reachable"
+
     items = [
         {"id": "grok", "ok": grok, "label": "Grok online"},
         {"id": "ollama", "ok": bool(ol.get("ok")), "label": f"Ollama {ol.get('model') or config.OLLAMA_MODEL}"},
@@ -47,6 +64,7 @@ def checklist() -> dict:
         {"id": "meetings", "ok": bool(list((Path(config.VAULT_DIR) / "Meetings").glob("*.md"))) if (Path(config.VAULT_DIR) / "Meetings").exists() else False, "label": "At least one meeting note in the vault"},
         {"id": "autostart", "ok": _autostart_ok(), "label": "Windows logon task SuperJarvis"},
         {"id": "marketbeast", "ok": Path(config.MARKETBEAST_ROOT).joinpath("scanner.py").is_file(), "label": "MarketBeast/HyperTrader scanner on disk"},
+        {"id": "ibkr", "ok": ibkr_ok, "label": ibkr_label},
     ]
     done = sum(1 for i in items if i["ok"])
     return {
@@ -62,6 +80,6 @@ def checklist() -> dict:
 
 def _next(items: list[dict]) -> str:
     for i in items:
-        if not i["ok"] and i["id"] in {"wordpress", "microsoft", "backup", "eval"}:
+        if not i["ok"] and i["id"] in {"ibkr", "wordpress", "microsoft", "backup", "eval"}:
             return i["label"]
     return "Use it. Keys you do not have stay optional."

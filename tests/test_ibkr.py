@@ -12,8 +12,35 @@ def test_ibkr_host_is_loopback():
     assert ibkr.probe().get("adapter") == "persistent-tws-2026"
 
 
+def test_gateway_live_requires_open_port(monkeypatch):
+    ibkr._probe_val = None
+    monkeypatch.setattr(ibkr, "port_open", lambda p: False)
+    monkeypatch.setattr(ibkr, "tws_state", lambda: {"process": False, "login_screen": False, "window": "", "pid": None})
+    from app import config
+
+    monkeypatch.setattr(config, "IBKR_LIVE", True)
+    assert ibkr.gateway_is_live() is False
+    assert ibkr.live_cash() is False
+    out = ibkr.account()
+    assert "error" in out
+    assert "not running" in out["error"].lower() or "login" in out["error"].lower()
+
+
+def test_login_screen_named_in_account_error(monkeypatch):
+    ibkr._probe_val = None
+    monkeypatch.setattr(ibkr, "port_open", lambda p: False)
+    monkeypatch.setattr(
+        ibkr,
+        "tws_state",
+        lambda: {"process": True, "login_screen": True, "window": "Login", "pid": 1, "path": r"C:\Jts\tws.exe"},
+    )
+    out = ibkr.account()
+    assert "error" in out
+    assert "login" in out["error"].lower()
+
+
 def test_live_option_blocked_without_confirm(monkeypatch):
-    monkeypatch.setattr(ibkr, "live_cash", lambda: True)
+    monkeypatch.setattr(ibkr, "gateway_is_live", lambda: True)
     monkeypatch.setattr(ibkr, "port", lambda: 7496)
     out = ibkr.place_option("NVDA", "20260821", 180, "C", 1)
     assert out.get("blocked") is True
@@ -25,11 +52,12 @@ def test_live_ibkr_does_not_need_alpaca_trading_mode(monkeypatch):
 
     monkeypatch.setattr(config, "IBKR_LIVE", True)
     monkeypatch.setattr(config, "TRADING_MODE", "paper")
-    monkeypatch.setattr(ibkr, "port", lambda: 7496)
+    monkeypatch.setattr(ibkr, "gateway_is_live", lambda: True)
     assert ibkr.allow_live_orders() is True
 
 
 def test_stock_live_blocked_without_confirm(monkeypatch):
+    monkeypatch.setattr(ibkr, "gateway_is_live", lambda: True)
     monkeypatch.setattr(ibkr, "port", lambda: 7496)
     out = ibkr.place_stock("AAPL", "buy", 1)
     assert out.get("blocked") is True

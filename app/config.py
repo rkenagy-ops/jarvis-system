@@ -86,8 +86,8 @@ ALPACA_KEY_ID = _clean(os.getenv("ALPACA_KEY_ID") or os.getenv("APCA_API_KEY_ID"
 ALPACA_SECRET_KEY = _clean(os.getenv("ALPACA_SECRET_KEY") or os.getenv("APCA_API_SECRET_KEY"))
 ALPACA_LIVE = (_clean(os.getenv("ALPACA_LIVE")) or "false").lower() == "true"
 IBKR_HOST = "127.0.0.1"
-IBKR_PORT = int(_clean(os.getenv("IBKR_PORT")) or "7497")
-IBKR_CLIENT_ID = int(_clean(os.getenv("IBKR_CLIENT_ID")) or "7")
+IBKR_PORT = int(_clean(os.getenv("IBKR_PORT")) or "7496")
+IBKR_CLIENT_ID = int(_clean(os.getenv("IBKR_CLIENT_ID")) or "117")
 IBKR_LIVE = (_clean(os.getenv("IBKR_LIVE")) or "false").lower() == "true"
 MARKETBEAST_ROOT = _clean(os.getenv("MARKETBEAST_ROOT")) or str(ROOT / "vendor" / "marketbeast" / "hypertrader")
 
@@ -139,8 +139,8 @@ def reload_env() -> None:
     ALPACA_KEY_ID = _clean(os.getenv("ALPACA_KEY_ID") or os.getenv("APCA_API_KEY_ID"))
     ALPACA_SECRET_KEY = _clean(os.getenv("ALPACA_SECRET_KEY") or os.getenv("APCA_API_SECRET_KEY"))
     ALPACA_LIVE = (_clean(os.getenv("ALPACA_LIVE")) or "false").lower() == "true"
-    IBKR_PORT = int(_clean(os.getenv("IBKR_PORT")) or "7497")
-    IBKR_CLIENT_ID = int(_clean(os.getenv("IBKR_CLIENT_ID")) or "7")
+    IBKR_PORT = int(_clean(os.getenv("IBKR_PORT")) or "7496")
+    IBKR_CLIENT_ID = int(_clean(os.getenv("IBKR_CLIENT_ID")) or "117")
     IBKR_LIVE = (_clean(os.getenv("IBKR_LIVE")) or "false").lower() == "true"
     MARKETBEAST_ROOT = _clean(os.getenv("MARKETBEAST_ROOT")) or str(ROOT / "vendor" / "marketbeast" / "hypertrader")
 

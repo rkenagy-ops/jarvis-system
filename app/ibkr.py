@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import queue
 import socket
 import threading
@@ -27,6 +26,8 @@ _busy = threading.Event()
 _ib = None
 _ib_port: int | None = None
 _ib_meta: dict[str, Any] = {}
+_probe_at = 0.0
+_probe_val: dict[str, Any] | None = None
 
 
 def host() -> str:
@@ -35,11 +36,51 @@ def host() -> str:
 
 def port_open(p: int) -> bool:
     try:
-        sock = socket.create_connection((host(), int(p)), timeout=0.8)
+        sock = socket.create_connection((host(), int(p)), timeout=0.25)
         sock.close()
         return True
     except OSError:
         return False
+
+
+def tws_state() -> dict[str, Any]:
+    """Detect TWS.exe and its window title (Login vs fully loaded)."""
+    running = False
+    title = ""
+    pid = None
+    try:
+        import csv
+        import io
+        import subprocess
+
+        r = subprocess.run(
+            ["tasklist", "/FI", "IMAGENAME eq tws.exe", "/V", "/FO", "CSV"],
+            capture_output=True,
+            text=True,
+            timeout=3,
+            creationflags=0x08000000,
+        )
+        rows = list(csv.reader(io.StringIO(r.stdout or "")))
+        for row in rows[1:]:
+            if not row or not str(row[0]).lower().startswith("tws"):
+                continue
+            running = True
+            try:
+                pid = int(row[1])
+            except (IndexError, ValueError):
+                pid = None
+            title = row[-1] if row else ""
+            break
+    except Exception:
+        pass
+    login = running and "login" in (title or "").lower()
+    return {
+        "process": running,
+        "pid": pid,
+        "window": title,
+        "login_screen": login,
+        "path": r"C:\Jts\tws.exe",
+    }
 
 
 def port() -> int:
@@ -57,7 +98,7 @@ def port() -> int:
 
 
 def gateway_is_live() -> bool:
-    return port() in LIVE_PORTS
+    return any(port_open(p) for p in LIVE_PORTS)
 
 
 def live_cash() -> bool:
@@ -72,27 +113,47 @@ def busy() -> bool:
     return _busy.is_set()
 
 
-def probe() -> dict[str, Any]:
+def probe(*, force: bool = False) -> dict[str, Any]:
+    global _probe_at, _probe_val
+    now = time.time()
+    if not force and _probe_val is not None and now - _probe_at < 2.5:
+        return _probe_val
     open_ports = {str(p): desc for p, desc in PORTS.items() if port_open(p)}
     chosen = port()
-    return {
+    tws = tws_state()
+    gateway_live = any(str(p) in open_ports for p in LIVE_PORTS)
+    if open_ports:
+        hint = "TWS API is listening. HUD IBKR account can sync. Live orders still need confirm_token."
+    elif tws.get("login_screen"):
+        hint = "TWS is open on the Login window. Enter username, password, and 2FA. API port 7496 only opens AFTER a full login."
+    elif tws.get("process"):
+        hint = "TWS is running but the API socket is closed. Edit → Global Configuration → API → Settings: Enable ActiveX and Socket Clients, Socket port 7496, Trusted IPs 127.0.0.1. Apply, then wait until 7496 listens."
+    else:
+        hint = r"Start C:\Jts\tws.exe, log in LIVE, then enable the API socket on 7496."
+    out = {
         "ok": bool(open_ports),
         "host": host(),
         "configured_port": chosen,
         "port_name": PORTS.get(chosen, str(chosen)),
         "ibkr_live_flag": bool(config.IBKR_LIVE),
-        "gateway_live": gateway_is_live(),
-        "live_orders": allow_live_orders(),
+        "gateway_live": gateway_live,
+        "live_orders": bool(config.IBKR_LIVE) and gateway_live,
         "session": {
             "connected": bool(_ib is not None and getattr(_ib, "isConnected", lambda: False)()),
-            "client_id": int(config.IBKR_CLIENT_ID or 7),
+            "client_id": int(config.IBKR_CLIENT_ID or 117),
             "port": _ib_port,
             "server": _ib_meta.get("server"),
         },
         "open": open_ports,
         "adapter": "persistent-tws-2026",
-        "hint": "Live TWS 7496 / paper 7497. API on, Trusted IP 127.0.0.1. Live orders still need confirm_token.",
+        "tws": tws,
+        "tws_running": bool(tws.get("process") or open_ports),
+        "tws_path": r"C:\Jts\tws.exe",
+        "hint": hint,
     }
+    _probe_val = out
+    _probe_at = now
+    return out
 
 
 def _ensure_worker() -> None:
@@ -107,8 +168,6 @@ def _ensure_worker() -> None:
 
 def _worker() -> None:
     global _ib, _ib_port, _ib_meta
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
     from ib_insync import IB
 
     _ib = IB()
@@ -125,11 +184,11 @@ def _worker() -> None:
         _busy.set()
         try:
             p = port()
-            cid = int(config.IBKR_CLIENT_ID or 7)
+            cid = int(config.IBKR_CLIENT_ID or 117)  # 7 is often TWS Master Client ID and will fail to connect
             if not _ib.isConnected() or _ib_port != p:
                 if _ib.isConnected():
                     _ib.disconnect()
-                _ib.connect(host(), p, clientId=cid, timeout=4)
+                _ib.connect(host(), p, clientId=cid, timeout=6)
                 _ib_port = p
                 try:
                     _ib_meta["server"] = getattr(_ib.client, "serverVersion", lambda: None)()
@@ -174,9 +233,32 @@ def _wait_status(ib, trade, seconds: float = 6.0) -> Any:
     return trade.orderStatus
 
 
+def _not_listening_error() -> dict[str, Any]:
+    info = probe(force=True)
+    tws = info.get("tws") or {}
+    if tws.get("login_screen"):
+        msg = (
+            "TWS is sitting on the Login window — that is why IBKR is not syncing. "
+            "Finish username, password, and 2FA. The API socket (7496 live / 7497 paper) "
+            "does not open until TWS is fully loaded."
+        )
+    elif tws.get("process"):
+        msg = (
+            "TWS is running but port 7496 is not listening. In TWS: Edit → Global Configuration "
+            "→ API → Settings. Check Enable ActiveX and Socket Clients. Socket port 7496. "
+            "Trusted IPs: 127.0.0.1. Uncheck Read-Only API if you want live orders. Apply."
+        )
+    else:
+        msg = (
+            r"Trader Workstation is not running. Start C:\Jts\tws.exe, log in LIVE, "
+            "wait until the window is fully loaded. API port 7496 must listen."
+        )
+    return {"error": msg, **info}
+
+
 def account() -> dict[str, Any]:
-    if not port_open(port()):
-        return {"error": "TWS/Gateway not listening", **probe()}
+    if not any(port_open(p) for p in PORTS):
+        return _not_listening_error()
 
     def read(ib) -> dict[str, Any]:
         try:

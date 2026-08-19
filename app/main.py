@@ -434,6 +434,13 @@ def api_ibkr() -> dict:
     return ibkr.account()
 
 
+@app.get("/api/ibkr/status")
+def api_ibkr_status() -> dict:
+    from . import ibkr
+
+    return ibkr.probe()
+
+
 @app.get("/api/options")
 def api_options(top: int = 8, universe: str = "liquid", dte: int = 7) -> dict:
     from . import marketbeast

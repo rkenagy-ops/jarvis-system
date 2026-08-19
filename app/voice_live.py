@@ -101,6 +101,7 @@ async def handle_live(ws: WebSocket, session_id: str, voice: str | None = None) 
                     return
 
             async def pump_down() -> None:
+                audio_kind = None
                 async for raw in upstream:
                     if isinstance(raw, bytes):
                         await ws.send_bytes(raw)
@@ -108,7 +109,12 @@ async def handle_live(ws: WebSocket, session_id: str, voice: str | None = None) 
                     event = json.loads(raw)
                     etype = event.get("type")
                     if etype in ("response.output_audio.delta", "response.audio.delta"):
+                        if audio_kind and audio_kind != etype:
+                            continue
+                        audio_kind = etype
                         await ws.send_json({"type": "audio", "data": event.get("delta")})
+                    elif etype in ("response.done", "response.completed"):
+                        audio_kind = None
                     elif etype in (
                         "response.output_audio_transcript.delta",
                         "response.audio_transcript.delta",
