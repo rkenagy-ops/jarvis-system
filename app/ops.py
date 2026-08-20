@@ -175,7 +175,10 @@ def publish(content_id: str, *, confirm_token: str | None = None) -> dict:
     item = get_content(content_id)
     if not item:
         return {"error": "content not found"}
-    live_needed = any(p in {"x", "instagram", "facebook", "linkedin", "tiktok", "amazon"} for p in item["platforms"])
+    live_needed = any(
+        p in {"x", "instagram", "facebook", "linkedin", "tiktok", "youtube", "pinterest", "threads", "amazon"}
+        for p in item["platforms"]
+    )
     if "blog" in item["platforms"] and config.WORDPRESS_URL and config.WORDPRESS_APP_PASSWORD:
         live_needed = True
     if live_needed and not confirm_token:

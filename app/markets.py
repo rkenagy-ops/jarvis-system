@@ -509,6 +509,13 @@ def dispatch(action: str, **kwargs) -> Any:
             elif kwargs.get("symbol") and kwargs.get("side"):
                 mode = "order"
         return ibkr.dispatch(mode, **kwargs)
+    if action in {"poly", "polymarket", "prediction"}:
+        from . import poly
+
+        mode = str(kwargs.get("mode") or "")
+        if not mode:
+            mode = "scan" if (kwargs.get("query") or kwargs.get("q") or kwargs.get("symbol")) else "bounce"
+        return poly.dispatch(mode, **kwargs)
     if action in {"options", "beast", "calls"}:
         from . import marketbeast
 

@@ -254,6 +254,15 @@ def coingecko(query: str) -> dict:
     return {"source": "coingecko", "coins": coins}
 
 
+def polymarket(query: str) -> dict:
+    from . import poly
+
+    q = (query or "").strip()
+    if q.lower() in {"bounce", "rotate", "hot"}:
+        return poly.bounce()
+    return poly.scan(query=q, limit=10)
+
+
 def sec_edgar(query: str) -> dict:
     data = _get(
         "https://efts.sec.gov/LATEST/search-index",
@@ -480,6 +489,7 @@ SOURCES: dict[str, tuple[str, Callable[..., dict]]] = {
     "defillama": ("Crypto TVL", defillama),
     "coingecko": ("Coin search", coingecko),
     "sec_edgar": ("SEC EDGAR filings", sec_edgar),
+    "polymarket": ("Polymarket public prediction markets (Gamma)", polymarket),
     "geocode": ("OpenStreetMap Nominatim", geocode),
     "countries": ("REST Countries", countries),
     "holidays": ("Public holidays (Nager)", holidays),

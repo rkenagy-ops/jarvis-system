@@ -17,6 +17,14 @@ def run_job(job: dict[str, Any]) -> str:
         summary = briefing()
         memory.mark_job(job["id"], summary[:400])
         return summary
+    if name in {"poly-scan", "polymarket"} or "polymarket" in prompt:
+        from . import poly
+
+        result = poly.bounce()
+        n = len(result.get("ideas") or [])
+        summary = f"Polymarket {result.get('verdict')}: {n} books → {result.get('vault')}"
+        memory.mark_job(job["id"], summary[:400])
+        return summary
     if name in {"desk-advise", "desk"} or "desk briefing" in prompt or "desk advise" in prompt:
         from . import intel
 
@@ -234,7 +242,8 @@ def ensure_defaults() -> list[dict]:
         ("weekly-backup", "Zip vault and SQLite mind to workspace/backups.", 604800),
         ("calendar-sync", "Sync Outlook calendar into vault/Calendar and reminders.", 1800),
         ("marketbeast-scan", "Scan liquid names for best call options. Write vault/Markets.", 3600),
-        ("desk-advise", "Full desk briefing: tape, sectors, VIX, news, MarketBeast, IBKR.", 14400),
+        ("desk-advise", "Full desk briefing: tape, sectors, VIX, news, MarketBeast, IBKR, Polymarket.", 14400),
+        ("poly-scan", "Scan Polymarket public Gamma for hot books. Paper Kelly only. One account.", 7200),
     ]
     for name, prompt, every in specs:
         if name in have:

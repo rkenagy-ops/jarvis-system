@@ -8,6 +8,7 @@ from typing import Any
 from . import github_oss, memory, obsidian
 
 GROWTH_PACK = [
+    "Polymarket/py-clob-client",
     "leon-ai/leon",
     "langchain-ai/langgraph",
     "letta-ai/letta",
@@ -32,6 +33,8 @@ HUNT = (
     "mcp server python tools assistant",
     "self-improving agent memory RAG",
     "open source personal AI assistant",
+    "polymarket python gamma clob",
+    "prediction market trading bot",
 )
 
 

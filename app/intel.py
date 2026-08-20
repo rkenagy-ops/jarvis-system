@@ -355,13 +355,17 @@ def advise(*, top: int = 6, dte: int = 7, symbol: str | None = None) -> dict[str
         ib_ok_port = lambda: False
 
     name_job = None
-    with ThreadPoolExecutor(max_workers=7) as pool:
+    poly_desk: dict[str, Any] = {"ok": False, "ideas": []}
+    with ThreadPoolExecutor(max_workers=8) as pool:
         f_scan = pool.submit(scan, "all", threshold=1.0)
         f_feed = pool.submit(feeds.snapshot)
         f_spy = pool.submit(markets.analyze, "SPY")
         f_fg = pool.submit(_fear_greed)
         f_beast = pool.submit(_beast, top, dte)
         f_perm = pool.submit(perm_fn)
+        from . import poly as poly_mod
+
+        f_poly = pool.submit(poly_mod.bounce, query=symbol or "", limit=6)
         if symbol:
             from . import marketbeast
 
@@ -372,6 +376,10 @@ def advise(*, top: int = 6, dte: int = 7, symbol: str | None = None) -> dict[str
         fg = f_fg.result()
         beast = f_beast.result()
         perm = f_perm.result() or {"can_trade": False, "ok": False}
+        try:
+            poly_desk = f_poly.result(timeout=12)
+        except Exception:
+            poly_desk = {"ok": False, "ideas": []}
         name = None
         if name_job:
             try:
@@ -479,6 +487,11 @@ def advise(*, top: int = 6, dte: int = 7, symbol: str | None = None) -> dict[str
         "movers": scanned.get("movers") or [],
         "news": [{"source": n.get("source"), "title": n.get("title")} for n in news],
         "options": picks[:top],
+        "polymarket": {
+            "verdict": (poly_desk or {}).get("verdict"),
+            "ideas": ((poly_desk or {}).get("ideas") or [])[:4],
+            "note": (poly_desk or {}).get("disclaimer"),
+        },
         "ideas": ideas,
         "ibkr": ibkr_block,
         "vault": note,

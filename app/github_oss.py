@@ -100,6 +100,38 @@ def readme(repo: str) -> dict:
     return github_client.get_readme(owner, name)
 
 
+DESK_PACK = [
+    "Polymarket/py-clob-client",
+    "ccxt/ccxt",
+    "freqtrade/freqtrade",
+    "ranaroussi/yfinance",
+    "kernc/backtesting.py",
+    "twopirllc/pandas-ta",
+    "rsheftel/pandas_market_calendars",
+    "matplotlib/mplfinance",
+    "gitroomhq/postiz-app",
+    "n8n-io/n8n",
+    "xai-org/xai-sdk-python",
+    "modelcontextprotocol/servers",
+]
+
+
+def _ingest_many(repos: list[str], limit: int) -> dict:
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    cap = max(1, min(int(limit), len(repos)))
+    ingested, errors = [], []
+    with ThreadPoolExecutor(max_workers=min(6, cap)) as pool:
+        futs = {pool.submit(ingest, repo): repo for repo in repos[:cap]}
+        for fut in as_completed(futs):
+            repo = futs[fut]
+            try:
+                ingested.append(fut.result())
+            except Exception as exc:
+                errors.append({"repo": repo, "error": str(exc)[:200]})
+    return {"ingested": ingested, "errors": errors, "count": len(ingested)}
+
+
 def ingest(repo: str) -> dict:
     owner, name = _split(repo)
     meta = github_client.get_repo(owner, name)
@@ -152,36 +184,29 @@ def growth_pack(limit: int = 10) -> dict:
 
 
 def jarvis_pack(limit: int = 16) -> dict:
-    ingested = []
-    errors = []
-    for repo in JARVIS_PACK[: max(1, min(int(limit), len(JARVIS_PACK)))]:
-        try:
-            ingested.append(ingest(repo))
-        except Exception as exc:
-            errors.append({"repo": repo, "error": str(exc)})
-    return {"ingested": ingested, "errors": errors, "count": len(ingested), "pack": "jarvis"}
+    out = _ingest_many(JARVIS_PACK, limit)
+    out["pack"] = "jarvis"
+    return out
+
+
+def desk_pack(limit: int = 12) -> dict:
+    """Markets + social README ingest. Playbooks, not cloned stacks."""
+    out = _ingest_many(DESK_PACK, limit)
+    out["pack"] = "desk"
+    out["note"] = "READMEs only. No clone, no extra Polymarket accounts, no unofficial social login."
+    return out
 
 
 def brain_pack(limit: int = 10) -> dict:
-    ingested = []
-    errors = []
-    for repo in BRAIN_PACK[: max(1, min(int(limit), len(BRAIN_PACK)))]:
-        try:
-            ingested.append(ingest(repo))
-        except Exception as exc:
-            errors.append({"repo": repo, "error": str(exc)})
-    return {"ingested": ingested, "errors": errors, "count": len(ingested), "pack": "brain"}
+    out = _ingest_many(BRAIN_PACK, limit)
+    out["pack"] = "brain"
+    return out
 
 
 def starter_pack(limit: int = 12) -> dict:
-    ingested = []
-    errors = []
-    for repo in STARTER_PACK[: max(1, min(int(limit), len(STARTER_PACK)))]:
-        try:
-            ingested.append(ingest(repo))
-        except Exception as exc:
-            errors.append({"repo": repo, "error": str(exc)})
-    return {"ingested": ingested, "errors": errors, "count": len(ingested)}
+    out = _ingest_many(STARTER_PACK, limit)
+    out["pack"] = "starter"
+    return out
 
 
 def awesome(name: str = "public-apis", query: str = "", limit: int = 15) -> dict:
@@ -274,6 +299,8 @@ def dispatch(action: str, **kwargs) -> Any:
         return brain_pack(int(kwargs.get("limit") or 10))
     if action in {"jarvis", "jarvis_pack"}:
         return jarvis_pack(int(kwargs.get("limit") or 16))
+    if action in {"desk", "desk_pack"}:
+        return desk_pack(int(kwargs.get("limit") or 12))
     if action in {"growth", "growth_pack"}:
         return growth_pack(int(kwargs.get("limit") or 10))
     if action in {"upgrade", "self_upgrade"}:
@@ -288,4 +315,4 @@ def dispatch(action: str, **kwargs) -> Any:
         return huggingface(kwargs.get("query") or "", kwargs.get("kind") or "models")
     if action == "youtube":
         return youtube_transcript(kwargs.get("url") or kwargs.get("query") or "")
-    return {"error": f"Unknown oss action {action}", "actions": ["search", "readme", "ingest", "starter_pack", "brain_pack", "jarvis_pack", "growth_pack", "self_upgrade", "awesome", "public_apis", "huggingface", "youtube"]}
+    return {"error": f"Unknown oss action {action}", "actions": ["search", "readme", "ingest", "starter_pack", "brain_pack", "jarvis_pack", "desk_pack", "growth_pack", "self_upgrade", "awesome", "public_apis", "huggingface", "youtube"]}

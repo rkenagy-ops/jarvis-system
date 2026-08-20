@@ -68,9 +68,9 @@ FUNCTION_TOOLS = [
     ),
     _fn(
         "market",
-        "Markets: quote, history, analyze, watchlist, scan, intel, advise, ticket, account, broker, trade, confirm, ibkr, options. For any should-I-enter / advice question call action=advise (pass symbol if they named one). Returns verdict ENTER or NO-GO plus a factor breakdown — read that, do not dump JSON. action=ibkr mode=account|permissions|order|option|ticket. Live IBKR still needs confirm_token. options runs MarketBeast.",
+        "Markets: quote, history, analyze, watchlist, scan, intel, advise, ticket, account, broker, trade, confirm, ibkr, options, poly. Advise = ENTER/NO-GO breakdown. poly = Polymarket public Gamma scan/bounce (one book, paper Kelly, no extra accounts, no wallet keys). IBKR live still needs confirm_token.",
         {
-            "action": {"type": "string", "enum": ["quote", "history", "analyze", "watchlist", "scan", "intel", "advise", "ticket", "account", "broker", "trade", "confirm", "ibkr", "options"]},
+            "action": {"type": "string", "enum": ["quote", "history", "analyze", "watchlist", "scan", "intel", "advise", "ticket", "account", "broker", "trade", "confirm", "ibkr", "options", "poly"]},
             "universe": {"type": "string"},
             "symbol": {"type": "string"},
             "side": {"type": "string", "enum": ["buy", "sell"]},
@@ -263,7 +263,7 @@ FUNCTION_TOOLS = [
         {
             "action": {
                 "type": "string",
-                "enum": ["search", "readme", "ingest", "starter_pack", "brain_pack", "jarvis_pack", "growth_pack", "self_upgrade", "awesome", "public_apis", "huggingface", "youtube"],
+                "enum": ["search", "readme", "ingest", "starter_pack", "brain_pack", "jarvis_pack", "desk_pack", "growth_pack", "self_upgrade", "awesome", "public_apis", "huggingface", "youtube"],
             },
             "query": {"type": "string"},
             "repo": {"type": "string", "description": "owner/repo"},

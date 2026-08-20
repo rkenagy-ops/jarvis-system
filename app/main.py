@@ -455,6 +455,15 @@ def api_desk(top: int = 6, dte: int = 7) -> dict:
     return intel.advise(top=top, dte=dte)
 
 
+@app.get("/api/poly")
+def api_poly(q: str = "", limit: int = 8) -> dict:
+    from . import poly
+
+    if q:
+        return poly.scan(query=q, limit=limit)
+    return poly.bounce(limit=limit)
+
+
 class OptionOrderIn(BaseModel):
     symbol: str
     expiry: str

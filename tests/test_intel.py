@@ -85,6 +85,9 @@ def test_advise_stand_down_risk_off(monkeypatch, tmp_path):
     monkeypatch.setattr(intel, "_beast", lambda top, dte: {"ok": True, "picks": []})
     monkeypatch.setattr(ibkr, "permissions", lambda: {"ok": False, "can_trade": False, "hint": "TWS off"})
     monkeypatch.setattr(ibkr, "busy", lambda: True)
+    from app import poly
+
+    monkeypatch.setattr(poly, "bounce", lambda **k: {"ok": True, "ideas": [], "verdict": "NO-GO", "disclaimer": "paper"})
     out = intel.advise(top=4)
     assert out["ok"] is True
     assert out["regime"]["bias"] == "risk-off"

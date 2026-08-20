@@ -21,6 +21,12 @@ def test_oss_unknown_action():
     out = github_oss.dispatch("nope")
     assert "error" in out
     assert "jarvis_pack" in out["actions"]
+    assert "desk_pack" in out["actions"]
+
+
+def test_desk_pack_listed():
+    assert "Polymarket/py-clob-client" in github_oss.DESK_PACK
+    assert "ccxt/ccxt" in github_oss.DESK_PACK
 
 
 def test_jarvis_pack_covers_the_field():

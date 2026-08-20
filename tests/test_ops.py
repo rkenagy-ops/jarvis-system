@@ -27,3 +27,14 @@ def test_draft_and_confirm(tmp_path, monkeypatch):
     assert ok.get("ok")
     blog = [r for r in ok["results"] if r.get("platform") == "blog"]
     assert blog
+
+
+def test_youtube_publish_needs_confirm(tmp_path, monkeypatch):
+    monkeypatch.setattr(memory, "DB_PATH", tmp_path / "ops2.db")
+    monkeypatch.setattr(ops.obsidian, "write_note", lambda *a, **k: {"ok": True, "path": "x.md"})
+    memory.init()
+    ops.init()
+    item = ops.draft("Clip", "Watch this", kind="post", platforms=["youtube"])
+    pub = ops.publish(item["id"])
+    assert pub.get("blocked") is True
+    assert pub.get("confirm_token")
