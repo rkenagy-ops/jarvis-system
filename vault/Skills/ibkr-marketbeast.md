@@ -16,3 +16,5 @@ MarketBeast is the HyperTrader scanner in OneDrive (`scanner.py --best`).
 8. Live: KEYS `IBKR_LIVE=true`, log into **live** TWS port **7496**. Jarvis keeps a **persistent TWS session** (`app/ibkr.py`, adapter `persistent-tws-2026`). Returns a `confirm_token` — say **confirm**. It will not silently fill.
 
 Do not paste IBKR usernames/passwords into Jarvis. Official socket API only.
+
+Desk: `market action=advise` is the analyst briefing (tape, sectors, VIX, news, graded calls, IBKR permissions). Live tickets: `market action=ibkr mode=option|order|ticket` then `confirm`. HUD **Desk advise** does not send an order.

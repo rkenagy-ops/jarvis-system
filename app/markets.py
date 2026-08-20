@@ -463,6 +463,33 @@ def dispatch(action: str, **kwargs) -> Any:
         from . import intel
 
         return intel.desk()
+    if action in {"advise", "desk", "thesis"}:
+        from . import intel
+
+        return intel.advise(
+            top=int(kwargs.get("top") or 6),
+            dte=int(kwargs.get("dte") or 7),
+        )
+    if action == "ticket":
+        from . import ibkr
+
+        if kwargs.get("expiry") and kwargs.get("strike"):
+            return ibkr.place_option(
+                kwargs.get("symbol") or "",
+                kwargs.get("expiry") or "",
+                float(kwargs.get("strike") or 0),
+                kwargs.get("right") or "C",
+                int(kwargs.get("qty") or 1),
+                limit=kwargs.get("limit"),
+                confirm_token=kwargs.get("confirm_token"),
+            )
+        return ibkr.place_stock(
+            kwargs.get("symbol") or "",
+            kwargs.get("side") or "buy",
+            float(kwargs.get("qty") or 0),
+            limit=kwargs.get("limit"),
+            confirm_token=kwargs.get("confirm_token"),
+        )
     if action == "broker":
         from . import broker
 
@@ -471,10 +498,11 @@ def dispatch(action: str, **kwargs) -> Any:
         from . import ibkr
 
         mode = str(kwargs.get("mode") or "account")
-        if kwargs.get("expiry") and kwargs.get("strike"):
-            mode = "option"
-        elif kwargs.get("symbol") and kwargs.get("side"):
-            mode = "order"
+        if mode not in {"permissions", "permit", "probe", "status", "quote", "quotes"}:
+            if kwargs.get("expiry") and kwargs.get("strike"):
+                mode = "option"
+            elif kwargs.get("symbol") and kwargs.get("side"):
+                mode = "order"
         return ibkr.dispatch(mode, **kwargs)
     if action in {"options", "beast", "calls"}:
         from . import marketbeast

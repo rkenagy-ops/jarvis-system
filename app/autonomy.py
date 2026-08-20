@@ -17,6 +17,15 @@ def run_job(job: dict[str, Any]) -> str:
         summary = briefing()
         memory.mark_job(job["id"], summary[:400])
         return summary
+    if name in {"desk-advise", "desk"} or "desk briefing" in prompt or "desk advise" in prompt:
+        from . import intel
+
+        result = intel.advise(top=6)
+        bias = (result.get("regime") or {}).get("bias")
+        n = len(result.get("ideas") or [])
+        summary = f"Desk {bias}: {n} ideas → {result.get('vault')}"
+        memory.mark_job(job["id"], summary[:400])
+        return summary
     if name in {"marketbeast-scan", "options-scan"} or "marketbeast" in prompt or "best calls" in prompt:
         from . import marketbeast
 
@@ -225,6 +234,7 @@ def ensure_defaults() -> list[dict]:
         ("weekly-backup", "Zip vault and SQLite mind to workspace/backups.", 604800),
         ("calendar-sync", "Sync Outlook calendar into vault/Calendar and reminders.", 1800),
         ("marketbeast-scan", "Scan liquid names for best call options. Write vault/Markets.", 3600),
+        ("desk-advise", "Full desk briefing: tape, sectors, VIX, news, MarketBeast, IBKR.", 14400),
     ]
     for name, prompt, every in specs:
         if name in have:

@@ -39,6 +39,16 @@ def test_login_screen_named_in_account_error(monkeypatch):
     assert "login" in out["error"].lower()
 
 
+def test_permissions_blocked_when_tws_down(monkeypatch):
+    ibkr._probe_val = None
+    monkeypatch.setattr(ibkr, "port_open", lambda p: False)
+    monkeypatch.setattr(ibkr, "tws_state", lambda: {"process": False, "login_screen": False, "window": "", "pid": None})
+    out = ibkr.permissions()
+    assert out.get("can_trade") is False
+    assert out.get("needs_confirm") is True
+    assert out.get("stocks") is False
+
+
 def test_live_option_blocked_without_confirm(monkeypatch):
     monkeypatch.setattr(ibkr, "gateway_is_live", lambda: True)
     monkeypatch.setattr(ibkr, "port", lambda: 7496)

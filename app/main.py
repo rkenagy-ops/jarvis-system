@@ -448,6 +448,13 @@ def api_options(top: int = 8, universe: str = "liquid", dte: int = 7) -> dict:
     return marketbeast.best_calls(top=top, universe=universe, dte=dte)
 
 
+@app.get("/api/desk")
+def api_desk(top: int = 6, dte: int = 7) -> dict:
+    from . import intel
+
+    return intel.advise(top=top, dte=dte)
+
+
 class OptionOrderIn(BaseModel):
     symbol: str
     expiry: str

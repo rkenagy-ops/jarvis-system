@@ -68,9 +68,9 @@ FUNCTION_TOOLS = [
     ),
     _fn(
         "market",
-        "Markets: quote, history, analyze, watchlist, scan, intel, account, broker, trade, confirm, ibkr, options. action=ibkr with mode=account|order|option. Live IBKR stock/option: set symbol/side/qty (and expiry/strike for options). If blocked, call action=confirm with confirm_token. options runs MarketBeast.",
+        "Markets: quote, history, analyze, watchlist, scan, intel, advise, ticket, account, broker, trade, confirm, ibkr, options. action=advise is the full desk (tape, sectors, VIX, news, graded options, IBKR permissions). action=ibkr mode=account|permissions|order|option|ticket. Live IBKR stock/option still returns confirm_token — never send without it. options runs MarketBeast.",
         {
-            "action": {"type": "string", "enum": ["quote", "history", "analyze", "watchlist", "scan", "intel", "account", "broker", "trade", "confirm", "ibkr", "options"]},
+            "action": {"type": "string", "enum": ["quote", "history", "analyze", "watchlist", "scan", "intel", "advise", "ticket", "account", "broker", "trade", "confirm", "ibkr", "options"]},
             "universe": {"type": "string"},
             "symbol": {"type": "string"},
             "side": {"type": "string", "enum": ["buy", "sell"]},

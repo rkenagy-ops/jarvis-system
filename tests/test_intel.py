@@ -30,6 +30,75 @@ def test_scan_uses_quotes(monkeypatch):
     assert out["count"] == 2
 
 
+def test_regime_risk_on_and_off():
+    on = intel.regime(
+        {
+            "^VIX": {"price": 14.2, "change_pct": -4},
+            "SPY": {"price": 560, "change_pct": 0.8},
+            "QQQ": {"price": 480, "change_pct": 1.1},
+            "XLK": {"price": 230, "change_pct": 1.4},
+            "XLU": {"price": 70, "change_pct": -0.3},
+        }
+    )
+    off = intel.regime(
+        {
+            "^VIX": {"price": 31, "change_pct": 12},
+            "SPY": {"price": 540, "change_pct": -2.1},
+            "QQQ": {"price": 450, "change_pct": -2.4},
+            "XLK": {"price": 210, "change_pct": -3},
+            "XLU": {"price": 72, "change_pct": 0.6},
+        }
+    )
+    assert on["bias"] == "risk-on"
+    assert off["bias"] == "risk-off"
+
+
+def test_advise_stand_down_risk_off(monkeypatch, tmp_path):
+    from app import ibkr, obsidian
+
+    intel._scan_cache.clear()
+    monkeypatch.setattr(obsidian.config, "VAULT_DIR", tmp_path / "v")
+    obsidian.init_vault()
+    monkeypatch.setattr(
+        intel,
+        "scan",
+        lambda *a, **k: {
+            "movers": [{"symbol": "NVDA", "change_pct": -4}],
+            "count": 5,
+            "quotes": [
+                {"symbol": "SPY", "price": 540, "change_pct": -2.1, "source": "yahoo"},
+                {"symbol": "QQQ", "price": 450, "change_pct": -2.4, "source": "yahoo"},
+                {"symbol": "^VIX", "price": 31, "change_pct": 12, "source": "yahoo"},
+                {"symbol": "XLK", "price": 210, "change_pct": -3, "source": "yahoo"},
+                {"symbol": "XLU", "price": 72, "change_pct": 0.6, "source": "yahoo"},
+            ],
+        },
+    )
+    monkeypatch.setattr(intel.feeds, "snapshot", lambda: {"news": [{"source": "cnbc", "title": "Risk off"}], "updated": 1})
+    monkeypatch.setattr(markets, "quote", lambda s: {"symbol": s, "price": 1, "change_pct": 0, "source": "yahoo"})
+    monkeypatch.setattr(
+        markets,
+        "analyze",
+        lambda s, range_="6mo": {"symbol": s, "quote": {"price": 540}, "stats": {"rsi14": 32, "trend": "down"}},
+    )
+    monkeypatch.setattr(intel, "_fear_greed", lambda: {"value": 18, "label": "Extreme Fear"})
+    monkeypatch.setattr(intel, "_beast", lambda top, dte: {"ok": True, "picks": []})
+    monkeypatch.setattr(ibkr, "permissions", lambda: {"ok": False, "can_trade": False, "hint": "TWS off"})
+    monkeypatch.setattr(ibkr, "busy", lambda: True)
+    out = intel.advise(top=4)
+    assert out["ok"] is True
+    assert out["regime"]["bias"] == "risk-off"
+    assert out["ideas"][0]["action"] == "STAND DOWN"
+    assert out["ibkr"]["can_trade"] is False
+
+
+def test_market_advise_dispatch(monkeypatch):
+    monkeypatch.setattr(intel, "advise", lambda **k: {"ok": True, "ideas": [{"action": "WATCH SPY"}]})
+    out = markets.dispatch("advise")
+    assert out["ok"] is True
+    assert out["ideas"]
+
+
 def test_broker_offline_without_keys(monkeypatch):
     from app import config
 

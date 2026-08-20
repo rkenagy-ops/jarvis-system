@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/styles.css?v=5.8.3" />
+  <link rel="stylesheet" href="/static/styles.css?v=5.9.0" />
 </head>
 <body>
   <div class="app">
@@ -108,11 +108,12 @@
           <button type="button" data-q="What is on my Microsoft Outlook calendar today? List times and subjects.">Today's calendar</button>
           <button type="button" data-q="File meeting minutes from the notes I paste next. Use the meeting tool: extract title, attendees, decisions, and action items into vault/Meetings/. Then list the open action items.">File minutes</button>
           <button type="button" data-q="Sync my Microsoft Outlook calendar into the vault Calendar folder and create reminders 15 minutes before each upcoming event. Do not send mail.">Sync calendar</button>
+          <button type="button" data-q="Give me a full desk briefing like a top market analyst. Use market action=advise. Cover regime, tape, sectors, VIX, news, MarketBeast A/B calls, and IBKR permissions. Then 2-4 trade ideas with invalidation and size. Do not place an IBKR order until I confirm.">Desk advise</button>
           <button type="button" data-q="Run MarketBeast on liquid names for the best up-to-the-minute CALL options to buy. Use market action=options universe=liquid. List strike, expiry, debit, delta, and score. Do not place an IBKR order.">Best calls</button>
           <button type="button" data-q="Run the full internal MarketBeast scan (universe=full) for the best CALL options. This may take a few minutes. Do not place an IBKR order.">Full MarketBeast</button>
           <button type="button" data-q="Spawn scout and steward. Run oss self_upgrade and growth_pack. Summarize what Super Jarvis absorbed, without cloning stacks or opening the HUD to the LAN.">Grow</button>
           <button type="button" data-q="Check my Interactive Brokers account via market action=ibkr mode=account. Report port, whether TWS is live or paper, net liq, buying power, and positions.">IBKR account</button>
-          <button type="button" data-q="Arm live IBKR trading. Use market action=ibkr. If TWS is on 7496, prepare to send. For the best A/B call from MarketBeast, request a LIVE option order (mode=option) and give me the confirm_token. Do not claim a fill until I confirm.">Live IBKR</button>
+          <button type="button" data-q="Check IBKR trading permissions via market action=ibkr mode=permissions. Then, if TWS is live on 7496, take the best A-grade call from advise/options and open a LIVE option ticket (mode=option or action=ticket). Give me the confirm_token. Do not claim a fill until I confirm.">Live IBKR</button>
           <button type="button" data-q="Set a 5 minute timer called stand up.">5 min timer</button>
         </div>
         <textarea id="input" placeholder="Ask anything: markets, vault, GitHub, news, weather, goals. Paper-trade with confirm."></textarea>
@@ -226,6 +227,6 @@
     </div>
   </div>
 
-  <script src="/static/app.js?v=5.8.3"></script>
+  <script src="/static/app.js?v=5.9.0"></script>
 </body>
 </html>

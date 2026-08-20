@@ -194,6 +194,10 @@ def _worker() -> None:
                     _ib_meta["server"] = getattr(_ib.client, "serverVersion", lambda: None)()
                 except Exception:
                     _ib_meta["server"] = None
+                try:
+                    _ib.reqMarketDataType(1 if p in LIVE_PORTS else 3)
+                except Exception:
+                    pass
             box["r"] = job(_ib)
         except Exception as exc:
             box["e"] = exc
@@ -321,8 +325,9 @@ def account() -> dict[str, Any]:
             "cushion": merged.get("Cushion"),
             "positions": positions[:40],
             "open_trades": open_tr,
-            "can_trade": True,
+            "can_trade": allow_live_orders(),
             "confirm_for_live": gateway_is_live(),
+            "permissions": "live-confirm" if allow_live_orders() else "blocked-until-tws-live",
         }
 
     try:
@@ -548,13 +553,81 @@ def place_stock(
     return out
 
 
+def permissions() -> dict[str, Any]:
+    """What Super Jarvis is allowed to do against TWS right now. Never asks for IBKR passwords."""
+    info = probe()
+    trading = allow_live_orders()
+    info.update(
+        {
+            "ok": bool(info.get("ok")),
+            "can_trade": trading,
+            "needs_confirm": True,
+            "read_only": not trading,
+            "market_data": "live" if trading else ("delayed" if info.get("ok") else "none"),
+            "stocks": trading,
+            "options": trading,
+            "broker": "ibkr",
+            "note": (
+                "Live IBKR stock and option orders are armed. Each send still needs confirm_token. "
+                "Do not paste IBKR usernames or passwords into Jarvis."
+                if trading
+                else info.get("hint")
+            ),
+        }
+    )
+    return info
+
+
+def stock_quotes(symbols: list[str]) -> dict[str, dict]:
+    if not symbols or busy() or not port_open(port()):
+        return {}
+
+    def read(ib) -> dict[str, dict]:
+        from ib_insync import Stock
+
+        out: dict[str, dict] = {}
+        for raw in symbols[:8]:
+            symbol = (raw or "").upper().strip()
+            if not symbol or symbol.startswith("^") or "-USD" in symbol:
+                continue
+            try:
+                qualified = ib.qualifyContracts(Stock(symbol, "SMART", "USD"))
+                if not qualified:
+                    continue
+                ticker = ib.reqMktData(qualified[0], "", True, False)
+                ib.sleep(0.5)
+                last = float(ticker.last or 0) if ticker.last == ticker.last and ticker.last else 0.0
+                bid = float(ticker.bid or 0) if ticker.bid == ticker.bid and ticker.bid else 0.0
+                ask = float(ticker.ask or 0) if ticker.ask == ticker.ask and ticker.ask else 0.0
+                try:
+                    ib.cancelMktData(qualified[0])
+                except Exception:
+                    pass
+                out[symbol] = {"bid": bid, "ask": ask, "last": last or ((bid + ask) / 2 if bid and ask else 0), "source": "ibkr"}
+            except Exception:
+                continue
+        return out
+
+    try:
+        return _call(read, timeout=8.0, block=False) or {}
+    except Exception:
+        return {}
+
+
 def dispatch(action: str = "account", **kwargs: Any) -> dict[str, Any]:
     act = (action or "account").lower()
     if act in {"probe", "status"}:
         return probe()
+    if act in {"permissions", "permit", "can_trade"}:
+        return permissions()
+    if act in {"quote", "quotes"}:
+        symbols = kwargs.get("symbols") or kwargs.get("symbol") or ""
+        if isinstance(symbols, str):
+            symbols = [s.strip() for s in symbols.split(",") if s.strip()]
+        return {"ok": True, "quotes": stock_quotes(list(symbols))}
     if act in {"account", "summary"}:
         return account()
-    if act in {"option", "options", "call", "put"}:
+    if act in {"option", "options", "call", "put", "ticket"}:
         return place_option(
             kwargs.get("symbol") or "",
             kwargs.get("expiry") or "",
