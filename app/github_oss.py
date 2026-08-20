@@ -106,7 +106,7 @@ DESK_PACK = [
     "freqtrade/freqtrade",
     "ranaroussi/yfinance",
     "kernc/backtesting.py",
-    "twopirllc/pandas-ta",
+    "mementum/backtrader",
     "rsheftel/pandas_market_calendars",
     "matplotlib/mplfinance",
     "gitroomhq/postiz-app",
