@@ -17,4 +17,4 @@ MarketBeast is the HyperTrader scanner in OneDrive (`scanner.py --best`).
 
 Do not paste IBKR usernames/passwords into Jarvis. Official socket API only.
 
-Desk: `market action=advise` is the analyst briefing (tape, sectors, VIX, news, graded calls, IBKR permissions). Live tickets: `market action=ibkr mode=option|order|ticket` then `confirm`. HUD **Desk advise** does not send an order.
+Desk: `market action=advise` searches tape/sectors/VIX/news/MarketBeast/IBKR and returns **ENTER or NO-GO** plus a pass/fail breakdown. Pass `symbol` if the owner named a ticker. Live tickets: `market action=ibkr mode=option|order|ticket` then `confirm`. HUD **Should I enter** does not send an order.

@@ -68,7 +68,7 @@ FUNCTION_TOOLS = [
     ),
     _fn(
         "market",
-        "Markets: quote, history, analyze, watchlist, scan, intel, advise, ticket, account, broker, trade, confirm, ibkr, options. action=advise is the full desk (tape, sectors, VIX, news, graded options, IBKR permissions). action=ibkr mode=account|permissions|order|option|ticket. Live IBKR stock/option still returns confirm_token — never send without it. options runs MarketBeast.",
+        "Markets: quote, history, analyze, watchlist, scan, intel, advise, ticket, account, broker, trade, confirm, ibkr, options. For any should-I-enter / advice question call action=advise (pass symbol if they named one). Returns verdict ENTER or NO-GO plus a factor breakdown — read that, do not dump JSON. action=ibkr mode=account|permissions|order|option|ticket. Live IBKR still needs confirm_token. options runs MarketBeast.",
         {
             "action": {"type": "string", "enum": ["quote", "history", "analyze", "watchlist", "scan", "intel", "advise", "ticket", "account", "broker", "trade", "confirm", "ibkr", "options"]},
             "universe": {"type": "string"},

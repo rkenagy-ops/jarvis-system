@@ -90,6 +90,32 @@ def test_advise_stand_down_risk_off(monkeypatch, tmp_path):
     assert out["regime"]["bias"] == "risk-off"
     assert out["ideas"][0]["action"] == "STAND DOWN"
     assert out["ibkr"]["can_trade"] is False
+    assert out["verdict"] == "NO-GO"
+    assert out["enter"] is False
+    assert "no-go" in (out.get("spoken") or "").lower()
+    assert out["decision"]["breakdown"]
+
+
+def test_decide_enter_and_nogo():
+    nogo = intel.decide(
+        regime={"bias": "risk-off", "vix": 31, "why": "VIX 31 is elevated"},
+        fear_greed={"value": 18, "label": "Fear"},
+        spy={"stats": {"trend": "down", "rsi14": 32}},
+        picks=[{"buyable": True, "grade": "A", "symbol": "NVDA", "strike": 180, "expiration": "20260821", "max_loss": 400}],
+        ibkr={"can_trade": True, "hint": "live"},
+        breadth={"up": 2, "n": 10},
+    )
+    go = intel.decide(
+        regime={"bias": "risk-on", "vix": 14, "why": "calm tape"},
+        fear_greed={"value": 52, "label": "Neutral"},
+        spy={"stats": {"trend": "up", "rsi14": 55}},
+        picks=[{"buyable": True, "grade": "A", "symbol": "NVDA", "strike": 180, "expiration": "20260821", "max_loss": 400}],
+        ibkr={"can_trade": True, "hint": "live"},
+        breadth={"up": 8, "n": 10},
+    )
+    assert nogo["enter"] is False and nogo["verdict"] == "NO-GO"
+    assert go["enter"] is True and go["verdict"] == "ENTER"
+    assert "enter" in go["spoken"].lower()
 
 
 def test_market_advise_dispatch(monkeypatch):

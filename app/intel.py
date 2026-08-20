@@ -180,6 +180,91 @@ def _beast(top: int, dte: int) -> dict[str, Any]:
         return {"ok": False, "picks": [], "error": str(exc)[:200]}
 
 
+def decide(
+    *,
+    regime: dict[str, Any],
+    fear_greed: dict[str, Any] | None,
+    spy: dict[str, Any],
+    picks: list[dict],
+    ibkr: dict[str, Any],
+    breadth: dict[str, Any] | None = None,
+    symbol: str | None = None,
+    name: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """GO / NO-GO with a factor breakdown. Force NO-GO on risk-off."""
+    bias = (regime or {}).get("bias") or "mixed"
+    vix = _num((regime or {}).get("vix"))
+    stats = (spy or {}).get("stats") or {}
+    trend = stats.get("trend")
+    rsi = _num(stats.get("rsi14"))
+    fg_val = _num((fear_greed or {}).get("value"))
+    buyable = [p for p in (picks or []) if p.get("buyable")]
+    best = buyable[0] if buyable else None
+    if symbol and name:
+        named = [p for p in ((name.get("calls") or []) if isinstance(name, dict) else []) if p.get("buyable")]
+        if named:
+            best = named[0]
+            buyable = named
+        direction = ((name.get("analysis") or {}) if isinstance(name, dict) else {}).get("direction")
+    else:
+        direction = None
+
+    factors: list[dict[str, Any]] = []
+
+    def add(factor: str, ok: bool, detail: str) -> None:
+        factors.append({"factor": factor, "pass": bool(ok), "detail": detail})
+
+    add("Regime", bias == "risk-on", (regime or {}).get("why") or bias)
+    add("VIX", vix is not None and vix < 22, f"VIX {vix}" if vix is not None else "VIX n/a")
+    add("SPY trend", trend == "up" and (rsi is None or rsi < 72), f"trend={trend} RSI={rsi}")
+    if breadth:
+        up, n = int(breadth.get("up") or 0), int(breadth.get("n") or 0)
+        add("Breadth", n > 0 and up >= n / 2, f"{up}/{n} names green")
+    if fear_greed:
+        add("Fear/greed", fg_val is not None and 25 <= fg_val <= 70, f"{fear_greed.get('label')} ({fg_val})")
+    add("Options A/B", bool(best), f"{len(buyable)} buyable graded calls" if buyable else "no A/B calls")
+    if symbol:
+        bull = str(direction or "").upper() in {"BULLISH", "UP"}
+        add(f"{symbol} setup", bull and bool(best), f"direction={direction or 'n/a'} best={best.get('grade') if best else 'none'}")
+    add("IBKR", bool((ibkr or {}).get("can_trade")), (ibkr or {}).get("hint") or "TWS not live")
+
+    forced_off = bias == "risk-off" or (vix is not None and vix >= 26)
+    name_fail = bool(symbol) and not (str(direction or "").upper() in {"BULLISH", "UP"} and best)
+    cautious_block = bias == "cautious" and not (best and best.get("grade") == "A" and trend == "up")
+    enter = (not forced_off) and (not name_fail) and (not cautious_block) and bool(best) and bias in {"risk-on", "mixed"}
+    if bias == "mixed" and best and best.get("grade") != "A":
+        enter = False
+    verdict = "ENTER" if enter else "NO-GO"
+    if enter and best:
+        headline = (
+            f"ENTER {best.get('symbol')} {best.get('expiration')} {best.get('strike')}C "
+            f"grade {best.get('grade')} — 1 contract, max loss ${best.get('max_loss')}."
+        )
+        spoken = (
+            f"Enter. {best.get('symbol')} {best.get('strike')} call, grade {best.get('grade')}. "
+            f"Invalidation is VIX through 26."
+        )
+    elif forced_off:
+        headline = "NO-GO. Do not enter a new long. Risk-off tape — wait."
+        spoken = f"No-go. Do not enter. {(regime or {}).get('why') or 'Tape is risk-off.'}"
+    elif symbol:
+        headline = f"NO-GO on {symbol}. Setup is not A-grade in this regime."
+        spoken = f"No-go on {symbol}. Do not enter this name right now."
+    else:
+        headline = "NO-GO. No A-grade ticket in this regime. Stay flat."
+        spoken = "No-go. Do not enter. No A-grade setup — stay flat."
+    spoken = " ".join(spoken.split())[:180]
+    return {
+        "enter": enter,
+        "verdict": verdict,
+        "headline": headline,
+        "spoken": spoken,
+        "breakdown": factors,
+        "candidate": best,
+        "symbol": symbol or (best.get("symbol") if best else None),
+    }
+
+
 def _ideas(bias: str, picks: list[dict], spy: dict, buying_power: float | None) -> list[dict]:
     size = (
         f"<= 1% of IBKR buying power (~${buying_power * 0.01:.0f}) or 1 contract"
@@ -248,46 +333,104 @@ def _ideas(bias: str, picks: list[dict], spy: dict, buying_power: float | None) 
     return ideas
 
 
-def advise(*, top: int = 6, dte: int = 7) -> dict[str, Any]:
-    """Full public+IBKR desk briefing. Not dark pools or every paid wire."""
+def advise(*, top: int = 6, dte: int = 7, symbol: str | None = None) -> dict[str, Any]:
+    """Full public+IBKR desk. Returns ENTER / NO-GO with a factor breakdown."""
+    from concurrent.futures import ThreadPoolExecutor
     from datetime import date
 
     from . import obsidian
 
-    scanned = scan("all", threshold=1.0)
+    symbol = (symbol or "").strip().upper() or None
+    try:
+        from . import ibkr
+
+        perm_fn = ibkr.permissions
+        acct_fn = ibkr.account
+        ib_busy = ibkr.busy
+        ib_ok_port = lambda: any(ibkr.port_open(p) for p in ibkr.PORTS)
+    except Exception:
+        perm_fn = lambda: {"can_trade": False, "ok": False}
+        acct_fn = lambda: None
+        ib_busy = lambda: True
+        ib_ok_port = lambda: False
+
+    name_job = None
+    with ThreadPoolExecutor(max_workers=7) as pool:
+        f_scan = pool.submit(scan, "all", threshold=1.0)
+        f_feed = pool.submit(feeds.snapshot)
+        f_spy = pool.submit(markets.analyze, "SPY")
+        f_fg = pool.submit(_fear_greed)
+        f_beast = pool.submit(_beast, top, dte)
+        f_perm = pool.submit(perm_fn)
+        if symbol:
+            from . import marketbeast
+
+            name_job = pool.submit(marketbeast.deep, symbol, dte=dte)
+        scanned = f_scan.result()
+        snap = f_feed.result()
+        spy = f_spy.result()
+        fg = f_fg.result()
+        beast = f_beast.result()
+        perm = f_perm.result() or {"can_trade": False, "ok": False}
+        name = None
+        if name_job:
+            try:
+                name = name_job.result(timeout=18)
+            except Exception as exc:
+                name = {"error": str(exc)[:160], "symbol": symbol}
+
     quotes = {q.get("symbol"): q for q in (scanned.get("quotes") or []) if q.get("symbol")}
     for extra in TAPE:
         if extra not in quotes:
             quotes[extra] = markets.quote(extra)
-    snap = feeds.snapshot()
     reg = regime(quotes)
-    spy = markets.analyze("SPY")
-    fg = _fear_greed()
-    beast = _beast(top, dte)
     picks = list(beast.get("picks") or [])
-    try:
-        from . import ibkr
-
-        perm = ibkr.permissions()
-        acct = None
-        if perm.get("ok") and not ibkr.busy():
-            from concurrent.futures import ThreadPoolExecutor
-
+    acct = None
+    if perm.get("ok") and not ib_busy() and ib_ok_port():
+        try:
             with ThreadPoolExecutor(max_workers=1) as pool:
-                fut = pool.submit(ibkr.account)
-                try:
-                    acct = fut.result(timeout=8)
-                except Exception:
-                    acct = None
+                acct = pool.submit(acct_fn).result(timeout=8)
             if acct and acct.get("error"):
                 acct = None
-    except Exception:
-        perm = {"can_trade": False, "ok": False}
-        acct = None
+        except Exception:
+            acct = None
     bp = None
     if acct:
         bp = _num(acct.get("buying_power")) or _num(acct.get("available_funds"))
-    ideas = _ideas(reg["bias"], picks, spy, bp)
+    chg = [q for q in quotes.values() if isinstance(q.get("change_pct"), (int, float))]
+    breadth = {"up": sum(1 for q in chg if q["change_pct"] > 0), "n": len(chg)}
+    ibkr_block = {
+        "can_trade": bool(perm.get("can_trade")),
+        "live": bool(perm.get("gateway_live")),
+        "hint": perm.get("hint") or perm.get("note"),
+        "net_liquidation": (acct or {}).get("net_liquidation") if acct else None,
+        "buying_power": (acct or {}).get("buying_power") if acct else None,
+        "positions": ((acct or {}).get("positions") or [])[:12] if acct else [],
+    }
+    ideas = _ideas(reg["bias"], picks if not symbol else (name.get("calls") if isinstance(name, dict) else []) or picks, spy, bp)
+    decision = decide(
+        regime=reg,
+        fear_greed=fg,
+        spy=spy,
+        picks=picks if not symbol else ((name or {}).get("calls") if isinstance(name, dict) else []) or [],
+        ibkr=ibkr_block,
+        breadth=breadth,
+        symbol=symbol,
+        name=name if isinstance(name, dict) else None,
+    )
+    if not decision["enter"]:
+        ideas = [
+            {
+                "action": "STAND DOWN",
+                "symbol": symbol or "SPY",
+                "vehicle": "cash",
+                "grade": "WATCH",
+                "ready": False,
+                "thesis": decision["headline"],
+                "invalidation": "Revisit when regime is risk-on and an A-grade call appears.",
+                "size": "flat",
+            }
+        ] + [i for i in ideas if i.get("ready")][:2]
     sectors = []
     for sym in UNIVERSES["sectors"]:
         q = quotes.get(sym) or {}
@@ -304,12 +447,13 @@ def advise(*, top: int = 6, dte: int = 7) -> dict[str, Any]:
     try:
         day = date.today().isoformat()
         lines = [
-            f"---\ntype: desk\ndate: {day}\nbias: {reg['bias']}\n---\n",
-            f"# Desk {day} — {reg['bias']}\n",
-            f"{reg['why']}\n",
+            f"---\ntype: desk\ndate: {day}\nbias: {reg['bias']}\nverdict: {decision['verdict']}\n---\n",
+            f"# Desk {day} — {decision['verdict']} ({reg['bias']})\n",
+            f"{decision['headline']}\n",
         ]
-        for idea in ideas:
-            lines.append(f"- [{idea.get('grade')}] {idea.get('action')} {idea.get('symbol')} — {idea.get('thesis')}")
+        for fac in decision.get("breakdown") or []:
+            mark = "PASS" if fac.get("pass") else "FAIL"
+            lines.append(f"- [{mark}] {fac.get('factor')}: {fac.get('detail')}")
         rel = f"Markets/{day}-desk.md"
         obsidian.write_note(rel, "\n".join(lines) + "\n")
         note = rel
@@ -319,8 +463,16 @@ def advise(*, top: int = 6, dte: int = 7) -> dict[str, Any]:
         "ok": True,
         "role": "desk-analyst",
         "disclaimer": "Public Yahoo + RSS + MarketBeast + IBKR overlay when TWS listens. Not Level 2, dark pools, or every paid wire. Advice, not a fill.",
+        "enter": decision["enter"],
+        "verdict": decision["verdict"],
+        "headline": decision["headline"],
+        "spoken": decision["spoken"],
+        "decision": decision,
+        "symbol": symbol,
+        "name": ({k: (name or {}).get(k) for k in ("symbol", "analysis", "calls", "error")} if name else None),
         "regime": reg,
         "fear_greed": fg,
+        "breadth": breadth,
         "tape": tape,
         "sectors": sectors[:11],
         "spy": {"quote": spy.get("quote"), "stats": spy.get("stats")},
@@ -328,18 +480,11 @@ def advise(*, top: int = 6, dte: int = 7) -> dict[str, Any]:
         "news": [{"source": n.get("source"), "title": n.get("title")} for n in news],
         "options": picks[:top],
         "ideas": ideas,
-        "ibkr": {
-            "can_trade": bool((perm or {}).get("can_trade")),
-            "live": bool((perm or {}).get("gateway_live")),
-            "hint": (perm or {}).get("hint") or (perm or {}).get("note"),
-            "net_liquidation": (acct or {}).get("net_liquidation") if acct else None,
-            "buying_power": (acct or {}).get("buying_power") if acct else None,
-            "positions": ((acct or {}).get("positions") or [])[:12] if acct else [],
-        },
+        "ibkr": ibkr_block,
         "vault": note,
         "next": (
-            "TWS live. Say confirm on a ticket to send."
-            if (perm or {}).get("can_trade")
-            else "Log into TWS on the desktop (not here). Port 7496 must listen before live tickets."
+            "ENTER is a ticket, not a fill. Say confirm to send via TWS."
+            if decision["enter"] and perm.get("can_trade")
+            else "NO-GO — do not enter. Log into TWS on the desktop if you still want a live ticket later."
         ),
     }

@@ -15,9 +15,9 @@ def session_config(session_id: str, voice: str | None = None) -> dict[str, Any]:
     mind = memory.snapshot(session_id, max_chars=8000)
     instructions = conductor_system(mind) + (
         "\nYou are speaking aloud as a beautiful, educated woman — calm, clear, unhurried."
-        "\nKeep turns tight — two to four sentences unless asked for more."
-        "\nNever repeat a sentence you just said. Do not restate the user's question."
-        "\nUse tools when the question needs the live world or GitHub."
+        "\nKeep turns tight — two sentences unless asked for more. Trade advice: first word ENTER or NO-GO, then one reason."
+        "\nNever repeat a sentence you just said. Do not restate the user's question. Do not read tables or JSON aloud."
+        "\nUse tools when the question needs the live world, markets, or GitHub. For should-I-enter, call market action=advise."
         "\nPronounce GitHub as Git Hub. Pronounce J.A.R.V.I.S. as Jarvis."
     )
     fn_tools = [t for t in tools.FUNCTION_TOOLS if t["name"] != "spawn_agents"]
@@ -29,7 +29,7 @@ def session_config(session_id: str, voice: str | None = None) -> dict[str, Any]:
             "turn_detection": {
                 "type": "server_vad",
                 "threshold": 0.75,
-                "silence_duration_ms": 900,
+                "silence_duration_ms": 550,
                 "prefix_padding_ms": 280,
             },
             "audio": {

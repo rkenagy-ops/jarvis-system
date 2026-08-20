@@ -466,9 +466,14 @@ def dispatch(action: str, **kwargs) -> Any:
     if action in {"advise", "desk", "thesis"}:
         from . import intel
 
+        symbol = kwargs.get("symbol") or ""
+        if not symbol:
+            hits = intel._tickers_in(str(kwargs.get("query") or kwargs.get("q") or ""))
+            symbol = hits[0] if hits else ""
         return intel.advise(
             top=int(kwargs.get("top") or 6),
             dte=int(kwargs.get("dte") or 7),
+            symbol=symbol or None,
         )
     if action == "ticket":
         from . import ibkr

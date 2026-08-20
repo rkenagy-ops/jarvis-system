@@ -414,11 +414,16 @@ function handleEvent(ev) {
     setStatus(ev.message);
     addMsg("assistant", ev.message, "SYSTEM");
   }
+  if (ev.type === "speak" && ev.text && !state.live) {
+    state.spokeEarly = true;
+    maybeSpeak(ev.text);
+  }
   if (ev.type === "done") {
     $("orb").classList.remove("talk");
     setAgentBusy(ev.agent || "jarvis", false);
     setStatus("systems ready");
-    if (ev.text && ev.speak !== false && !state.live) maybeSpeak(ev.text);
+    if (ev.text && ev.speak !== false && !state.live && !state.spokeEarly) maybeSpeak(ev.text);
+    state.spokeEarly = false;
   }
 }
 
@@ -451,7 +456,7 @@ async function sendText(text, { speak = true } = {}) {
   $("orb").classList.remove("talk");
 }
 
-function spokenExcerpt(text, limit = 420) {
+function spokenExcerpt(text, limit = 180) {
   const cleaned = String(text || "")
     .replace(/```[\s\S]*?```/g, " ")
     .replace(/[#*_>`]+/g, " ")
@@ -463,7 +468,7 @@ function spokenExcerpt(text, limit = 420) {
   for (const part of parts) {
     if (out.length && out[out.length - 1].toLowerCase() === part.toLowerCase()) continue;
     out.push(part);
-    if (out.join(" ").length >= limit || out.length >= 3) break;
+    if (out.join(" ").length >= limit || out.length >= 2) break;
   }
   return out.join(" ").slice(0, limit);
 }

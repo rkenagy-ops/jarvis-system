@@ -13,4 +13,4 @@ def test_spoken_excerpt_strips_and_dedupes():
     assert "Weather is fine." in out
     assert out.lower().count("weather is fine") == 1
     assert "```" not in out
-    assert len(out) <= 420
+    assert len(out) <= 180

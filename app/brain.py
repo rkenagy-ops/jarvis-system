@@ -352,6 +352,11 @@ def _think_ollama(
             payload = tools.execute(name, args, session_id=session_id, agent_id=agent_id)
             if emit:
                 emit({"type": "tool_result", "name": name, "result": payload})
+                spoken = payload.get("spoken") if isinstance(payload, dict) else None
+                if not spoken and isinstance(payload, dict):
+                    spoken = (payload.get("decision") or {}).get("spoken")
+                if spoken:
+                    emit({"type": "speak", "text": spoken})
             messages.append({"role": "tool", "content": tools.dumps(payload)})
     final = last or "Ollama is listening."
     memory.add_message(session_id, "assistant", final, agent=agent_id)
@@ -419,6 +424,11 @@ def _think_grok(
                 payload = tools.execute(name, args, session_id=session_id, agent_id=agent_id)
             if emit:
                 emit({"type": "tool_result", "name": name, "result": payload})
+                spoken = payload.get("spoken") if isinstance(payload, dict) else None
+                if not spoken and isinstance(payload, dict):
+                    spoken = (payload.get("decision") or {}).get("spoken")
+                if spoken:
+                    emit({"type": "speak", "text": spoken})
             outputs.append(
                 {
                     "type": "function_call_output",
