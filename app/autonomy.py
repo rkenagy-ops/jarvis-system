@@ -13,6 +13,19 @@ _thread: threading.Thread | None = None
 def run_job(job: dict[str, Any]) -> str:
     name = job.get("name") or ""
     prompt = (job.get("prompt") or "").lower()
+    alias = {
+        "bot-01-briefing": "morning-briefing",
+        "bot-02-watchlist": "watchlist-scan",
+        "bot-03-desk": "desk-advise",
+        "bot-04-options": "marketbeast-scan",
+        "bot-05-poly": "poly-scan",
+        "bot-06-calendar": "calendar-sync",
+        "bot-07-upgrade": "self-upgrade",
+        "bot-08-backup": "weekly-backup",
+    }
+    if name in alias:
+        name = alias[name]
+        job = {**job, "name": name}
     if name in {"morning-briefing", "briefing"} or "briefing" in prompt:
         summary = briefing()
         memory.mark_job(job["id"], summary[:400])
@@ -66,6 +79,103 @@ def run_job(job: dict[str, Any]) -> str:
 
         result = growth.cycle(6)
         summary = f"Self-upgrade: ingested {result.get('count') if 'count' in result else len(result.get('ingested') or [])} — {result.get('note')}"
+        memory.mark_job(job["id"], summary[:400])
+        return summary
+    if name in {"bot-09-news", "news-desk"} or "flag headlines" in prompt:
+        from . import intel
+
+        desk = intel.desk()
+        n = len(desk.get("linked") or [])
+        summary = f"News desk: {n} ticker-linked headlines"
+        memory.mark_job(job["id"], summary[:400])
+        return summary
+    if name in {"bot-10-social-draft", "social-draft"}:
+        from . import ops
+
+        item = ops.draft(
+            "Daily social",
+            "Hook.\n\nValue.\n\nCTA — reply confirm to publish.",
+            kind="post",
+            platforms=["x", "linkedin"],
+        )
+        summary = f"Social draft {item.get('id')} saved. Not published."
+        memory.mark_job(job["id"], summary[:400])
+        return summary
+    if name in {"bot-11-blog-draft", "blog-draft"}:
+        from . import ops
+
+        item = ops.draft(
+            "Draft blog",
+            "Outline only. Edit in vault/Blog then confirm to push WordPress.",
+            kind="blog",
+            platforms=["blog"],
+        )
+        summary = f"Blog draft {item.get('id')}"
+        memory.mark_job(job["id"], summary[:400])
+        return summary
+    if name in {"bot-12-publer"}:
+        from . import stack
+
+        st = stack.publer("me")
+        summary = "Publer ready" if st.get("ok") else f"Publer: {st.get('hint') or st.get('error') or 'keys missing'}"
+        memory.mark_job(job["id"], summary[:400])
+        return summary
+    if name in {"bot-13-klaviyo"}:
+        from . import stack
+
+        st = stack.klaviyo("lists")
+        summary = "Klaviyo lists ok" if st.get("ok") else f"Klaviyo: {st.get('hint') or st.get('error') or 'key missing'}"
+        memory.mark_job(job["id"], summary[:400])
+        return summary
+    if name in {"bot-14-manychat"}:
+        from . import stack
+
+        st = stack.manychat("info")
+        summary = "ManyChat page ok" if st.get("ok") else f"ManyChat: {st.get('hint') or st.get('error') or 'token missing'}"
+        memory.mark_job(job["id"], summary[:400])
+        return summary
+    if name in {"bot-15-clickfunnels"}:
+        from . import stack
+
+        st = stack.clickfunnels("status")
+        summary = "ClickFunnels ok" if st.get("ok") else f"ClickFunnels: {st.get('hint') or st.get('error') or 'key missing'}"
+        memory.mark_job(job["id"], summary[:400])
+        return summary
+    if name in {"bot-16-wordpress"}:
+        from . import ops as ops_mod
+
+        st = ops_mod.wordpress_probe()
+        summary = "WordPress REST ok" if st.get("ok") else f"WordPress: {st.get('reason') or st.get('hint') or 'blocked'}"
+        memory.mark_job(job["id"], summary[:400])
+        return summary
+    if name in {"bot-17-ibkr-watch"}:
+        from . import ibkr
+
+        p = ibkr.probe()
+        summary = (
+            f"IBKR {p.get('port_name')} live={p.get('gateway_live')} — {p.get('hint')}"
+        )
+        memory.mark_job(job["id"], summary[:400])
+        return summary[:400]
+    if name in {"bot-18-eval"}:
+        from . import eval as eval_mod
+
+        out = eval_mod.score("Scheduled briefing eval.")
+        summary = f"Eval score {out.get('score')}"
+        memory.mark_job(job["id"], summary[:400])
+        return summary
+    if name in {"bot-19-rag"}:
+        from . import rag
+
+        rag.reindex_vault()
+        summary = "Vault embeddings reindexed"
+        memory.mark_job(job["id"], summary[:400])
+        return summary
+    if name in {"bot-20-finish"}:
+        from . import finish
+
+        c = finish.checklist()
+        summary = f"Finish {c.get('done')}/{c.get('total')} next={c.get('next')}"
         memory.mark_job(job["id"], summary[:400])
         return summary
     if name == "watchlist-scan" or prompt.strip().startswith("scan the watchlist"):
@@ -245,6 +355,9 @@ def ensure_defaults() -> list[dict]:
         ("desk-advise", "Full desk briefing: tape, sectors, VIX, news, MarketBeast, IBKR, Polymarket.", 14400),
         ("poly-scan", "Scan Polymarket public Gamma for hot books. Paper Kelly only. One account.", 7200),
     ]
+    from . import bots
+
+    specs = list(specs) + list(bots.SPECS)
     for name, prompt, every in specs:
         if name in have:
             continue

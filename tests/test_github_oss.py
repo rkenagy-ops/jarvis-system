@@ -23,6 +23,7 @@ def test_oss_unknown_action():
     assert "jarvis_pack" in out["actions"]
     assert "desk_pack" in out["actions"]
     assert "social_pack" in out["actions"]
+    assert "stack_pack" in out["actions"]
 
 
 def test_desk_pack_listed():

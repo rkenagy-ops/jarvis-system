@@ -353,6 +353,10 @@ def capabilities() -> dict:
 
 
 def dispatch(action: str, **kwargs) -> Any:
+    if action in {"comment", "hamburger", "switch_account", "engage", "feed"}:
+        from . import stack
+
+        return stack.refuse_browser_farm()
     if action == "open":
         url = kwargs.get("url") or ""
         if url:

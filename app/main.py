@@ -89,6 +89,12 @@ class SettingsIn(BaseModel):
     ibkr_port: int | None = None
     ibkr_live: bool | None = None
     marketbeast_root: str | None = None
+    publer_api_key: str | None = None
+    publer_workspace_id: str | None = None
+    klaviyo_api_key: str | None = None
+    manychat_api_token: str | None = None
+    clickfunnels_api_key: str | None = None
+    clickfunnels_api_base: str | None = None
 
 
 class TradeIn(BaseModel):
@@ -287,6 +293,18 @@ def save_settings(body: SettingsIn) -> dict:
         updates["IBKR_LIVE"] = "false"
     if body.marketbeast_root:
         updates["MARKETBEAST_ROOT"] = body.marketbeast_root
+    if body.publer_api_key:
+        updates["PUBLER_API_KEY"] = body.publer_api_key
+    if body.publer_workspace_id:
+        updates["PUBLER_WORKSPACE_ID"] = body.publer_workspace_id
+    if body.klaviyo_api_key:
+        updates["KLAVIYO_API_KEY"] = body.klaviyo_api_key
+    if body.manychat_api_token:
+        updates["MANYCHAT_API_TOKEN"] = body.manychat_api_token
+    if body.clickfunnels_api_key:
+        updates["CLICKFUNNELS_API_KEY"] = body.clickfunnels_api_key
+    if body.clickfunnels_api_base:
+        updates["CLICKFUNNELS_API_BASE"] = body.clickfunnels_api_base
     if body.postiz_url:
         updates["POSTIZ_URL"] = body.postiz_url
     if body.alpaca_key_id:
@@ -462,6 +480,20 @@ def api_poly(q: str = "", limit: int = 8) -> dict:
     if q:
         return poly.scan(query=q, limit=limit)
     return poly.bounce(limit=limit)
+
+
+@app.get("/api/stack")
+def api_stack() -> dict:
+    from . import stack
+
+    return stack.status()
+
+
+@app.get("/api/bots")
+def api_bots() -> dict:
+    from . import bots
+
+    return bots.roster()
 
 
 class OptionOrderIn(BaseModel):

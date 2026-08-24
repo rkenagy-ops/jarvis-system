@@ -197,6 +197,19 @@ def desk_pack(limit: int = 12) -> dict:
     return out
 
 
+STACK_PACK = [
+    "klaviyo/klaviyo-api-python",
+    "gitroomhq/postiz-app",
+]
+
+
+def stack_pack(limit: int = 4) -> dict:
+    out = _ingest_many(STACK_PACK, limit)
+    out["pack"] = "stack"
+    out["note"] = "Official API READMEs. Publer docs are on publer.com/docs (not a GitHub clone)."
+    return out
+
+
 SOCIAL_PACK = [
     "InstaPy/InstaPy",
     "GramAddict/bot",
@@ -325,6 +338,8 @@ def dispatch(action: str, **kwargs) -> Any:
         return desk_pack(int(kwargs.get("limit") or 12))
     if action in {"social", "social_pack", "instagram_pack"}:
         return social_pack(int(kwargs.get("limit") or 8))
+    if action in {"stack", "stack_pack", "funnel_pack"}:
+        return stack_pack(int(kwargs.get("limit") or 4))
     if action in {"growth", "growth_pack"}:
         return growth_pack(int(kwargs.get("limit") or 10))
     if action in {"upgrade", "self_upgrade"}:
@@ -339,4 +354,4 @@ def dispatch(action: str, **kwargs) -> Any:
         return huggingface(kwargs.get("query") or "", kwargs.get("kind") or "models")
     if action == "youtube":
         return youtube_transcript(kwargs.get("url") or kwargs.get("query") or "")
-    return {"error": f"Unknown oss action {action}", "actions": ["search", "readme", "ingest", "starter_pack", "brain_pack", "jarvis_pack", "desk_pack", "social_pack", "growth_pack", "self_upgrade", "awesome", "public_apis", "huggingface", "youtube"]}
+    return {"error": f"Unknown oss action {action}", "actions": ["search", "readme", "ingest", "starter_pack", "brain_pack", "jarvis_pack", "desk_pack", "social_pack", "stack_pack", "growth_pack", "self_upgrade", "awesome", "public_apis", "huggingface", "youtube"]}

@@ -274,11 +274,36 @@ FUNCTION_TOOLS = [
         },
         ["action"],
     ),
+    _fn(
+        "stack",
+        "Official growth stack: Publer, Klaviyo, ManyChat, ClickFunnels, dashboards, bots. Live schedule/publish needs confirm_token. Will refuse hamburger/feed-comment farming.",
+        {
+            "action": {
+                "type": "string",
+                "enum": [
+                    "status", "dashboards", "bots",
+                    "publer", "accounts", "schedule",
+                    "klaviyo", "manychat", "clickfunnels",
+                    "comment", "hamburger",
+                ],
+            },
+            "mode": {"type": "string"},
+            "text": {"type": "string"},
+            "body": {"type": "string"},
+            "account_id": {"type": "string"},
+            "network": {"type": "string"},
+            "platform": {"type": "string"},
+            "when": {"type": "string"},
+            "confirm_token": {"type": "string"},
+        },
+        ["action"],
+    ),
 ]
 
 _GITHUB_AGENTS = {"jarvis", "sentinel", "scout"}
 _FILE_AGENTS = {"jarvis", "forge", "analyst", "archivist", "steward"}
 _MARKET_AGENTS = {"jarvis", "trader", "oracle", "analyst", "watcher"}
+_STACK_AGENTS = {"jarvis", "social", "merch", "publisher", "scheduler", "trader", "steward"}
 
 
 def tools_for(agent_id: str, *, allow_spawn: bool = False) -> list[dict]:
@@ -294,6 +319,8 @@ def tools_for(agent_id: str, *, allow_spawn: bool = False) -> list[dict]:
         if name == "github" and agent_id not in _GITHUB_AGENTS:
             continue
         if name == "market" and agent_id not in _MARKET_AGENTS:
+            continue
+        if name == "stack" and agent_id not in _STACK_AGENTS:
             continue
         if name == "workspace" and agent_id not in _FILE_AGENTS:
             continue
@@ -402,6 +429,13 @@ def execute(name: str, arguments: dict[str, Any], *, session_id: str, agent_id: 
         return extract_mod.dispatch(arguments.get("action") or "url", **{k: v for k, v in arguments.items() if k != "action"})
     if name == "content":
         return ops.dispatch(arguments.get("action") or "dashboard", **{k: v for k, v in arguments.items() if k != "action"})
+    if name == "stack":
+        from . import bots, stack
+
+        act = arguments.get("action") or "status"
+        if act == "bots":
+            return bots.roster()
+        return stack.dispatch(act, **{k: v for k, v in arguments.items() if k != "action"})
     if name == "vault_rag":
         from . import rag as rag_mod
 

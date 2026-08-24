@@ -207,6 +207,16 @@ def _push(platform: str, item: dict, *, live: bool = False) -> dict:
     if platform == "x":
         return _post_x(item)
     if platform in {"instagram", "facebook", "linkedin", "tiktok", "youtube", "pinterest", "threads"}:
+        from . import stack
+
+        if stack.publer_ready():
+            vault = _postiz(platform, item)
+            return {
+                "platform": platform,
+                "status": "publer-queued-local",
+                "hint": "Publer keys are on. Call stack action=accounts then action=schedule with account_id + confirm_token. No hamburger feed-commenting.",
+                "vault": vault,
+            }
         return _postiz(platform, item)
     if platform == "amazon":
         return {"platform": "amazon", "status": "draft-only", "note": "Listing saved. Connect SP-API for live catalog push."}

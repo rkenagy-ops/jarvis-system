@@ -90,6 +90,12 @@ IBKR_PORT = int(_clean(os.getenv("IBKR_PORT")) or "7496")
 IBKR_CLIENT_ID = int(_clean(os.getenv("IBKR_CLIENT_ID")) or "117")
 IBKR_LIVE = (_clean(os.getenv("IBKR_LIVE")) or "false").lower() == "true"
 MARKETBEAST_ROOT = _clean(os.getenv("MARKETBEAST_ROOT")) or str(ROOT / "vendor" / "marketbeast" / "hypertrader")
+PUBLER_API_KEY = _clean(os.getenv("PUBLER_API_KEY"))
+PUBLER_WORKSPACE_ID = _clean(os.getenv("PUBLER_WORKSPACE_ID"))
+KLAVIYO_API_KEY = _clean(os.getenv("KLAVIYO_API_KEY"))
+MANYCHAT_API_TOKEN = _clean(os.getenv("MANYCHAT_API_TOKEN"))
+CLICKFUNNELS_API_KEY = _clean(os.getenv("CLICKFUNNELS_API_KEY"))
+CLICKFUNNELS_API_BASE = _clean(os.getenv("CLICKFUNNELS_API_BASE"))
 
 XAI_BASE = "https://api.x.ai/v1"
 XAI_REALTIME = "wss://api.x.ai/v1/realtime"
@@ -106,6 +112,7 @@ def reload_env() -> None:
     global OLLAMA_HOST, OLLAMA_MODEL, OLLAMA_EMBED_MODEL, ALPACA_KEY_ID, ALPACA_SECRET_KEY, ALPACA_LIVE
     global MS_CLIENT_ID, MS_TENANT, MS_REFRESH_TOKEN
     global IBKR_PORT, IBKR_CLIENT_ID, IBKR_LIVE, MARKETBEAST_ROOT
+    global PUBLER_API_KEY, PUBLER_WORKSPACE_ID, KLAVIYO_API_KEY, MANYCHAT_API_TOKEN, CLICKFUNNELS_API_KEY, CLICKFUNNELS_API_BASE
     XAI_API_KEY = _clean(os.getenv("XAI_API_KEY"))
     GITHUB_TOKEN = _clean(os.getenv("GITHUB_TOKEN"))
     GITHUB_USERNAME = _clean(os.getenv("GITHUB_USERNAME")) or "rkenagy-ops"
@@ -143,6 +150,12 @@ def reload_env() -> None:
     IBKR_CLIENT_ID = int(_clean(os.getenv("IBKR_CLIENT_ID")) or "117")
     IBKR_LIVE = (_clean(os.getenv("IBKR_LIVE")) or "false").lower() == "true"
     MARKETBEAST_ROOT = _clean(os.getenv("MARKETBEAST_ROOT")) or str(ROOT / "vendor" / "marketbeast" / "hypertrader")
+    PUBLER_API_KEY = _clean(os.getenv("PUBLER_API_KEY"))
+    PUBLER_WORKSPACE_ID = _clean(os.getenv("PUBLER_WORKSPACE_ID"))
+    KLAVIYO_API_KEY = _clean(os.getenv("KLAVIYO_API_KEY"))
+    MANYCHAT_API_TOKEN = _clean(os.getenv("MANYCHAT_API_TOKEN"))
+    CLICKFUNNELS_API_KEY = _clean(os.getenv("CLICKFUNNELS_API_KEY"))
+    CLICKFUNNELS_API_BASE = _clean(os.getenv("CLICKFUNNELS_API_BASE"))
 
 
 def save_env(updates: dict[str, str]) -> None:
@@ -192,4 +205,8 @@ def status() -> dict:
         "ibkr_live": IBKR_LIVE,
         "ibkr_port": IBKR_PORT,
         "marketbeast_root": bool(MARKETBEAST_ROOT),
+        "publer": bool(PUBLER_API_KEY and PUBLER_WORKSPACE_ID),
+        "klaviyo": bool(KLAVIYO_API_KEY),
+        "manychat": bool(MANYCHAT_API_TOKEN),
+        "clickfunnels": bool(CLICKFUNNELS_API_KEY),
     }
