@@ -277,13 +277,19 @@ FUNCTION_TOOLS = [
     ),
     _fn(
         "stack",
-        "Official growth stack: Publer, Klaviyo, ManyChat, ClickFunnels, dashboards, bots. Live schedule/publish needs confirm_token. Will refuse hamburger/feed-comment farming.",
+        (
+            "Official growth stack: Publer, Klaviyo, ManyChat, ClickFunnels, dashboards, bots. "
+            "action=comment automates the follow-up ('first') comment on a post YOU publish via the "
+            "Publer API - it needs account_id + text + comment. Live schedule/publish/comment needs "
+            "confirm_token. Still refuses hamburger account-switching, feed-comment farming, and "
+            "commenting on other people's posts."
+        ),
         {
             "action": {
                 "type": "string",
                 "enum": [
                     "status", "dashboards", "bots",
-                    "publer", "accounts", "schedule",
+                    "publer", "accounts", "schedule", "job_status",
                     "klaviyo", "manychat", "clickfunnels",
                     "comment", "hamburger",
                 ],
@@ -296,6 +302,20 @@ FUNCTION_TOOLS = [
             "platform": {"type": "string"},
             "when": {"type": "string"},
             "confirm_token": {"type": "string"},
+            "comment": {
+                "type": "string",
+                "description": "Follow-up/first comment posted on your own post after it publishes.",
+            },
+            "comments": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Several follow-up comments, in order.",
+            },
+            "comment_delay": {
+                "type": "integer",
+                "description": "Minutes to wait after the post publishes before the follow-up comment.",
+            },
+            "job_id": {"type": "string", "description": "Publer job id returned by schedule/publish."},
         },
         ["action"],
     ),

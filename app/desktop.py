@@ -378,7 +378,10 @@ def dispatch(action: str, **kwargs) -> Any:
     if action in {"comment", "hamburger", "switch_account", "engage", "feed"}:
         from . import stack
 
-        return stack.refuse_browser_farm()
+        return {
+            **stack.refuse_browser_farm(),
+            "hint": "To automate your own first comment: stack action=comment account_id=... text=... comment=...",
+        }
     if action == "open":
         url = kwargs.get("url") or ""
         if url:
