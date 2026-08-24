@@ -15,6 +15,14 @@ def test_redact_secrets():
     assert "[REDACTED_EMAIL]" in out
 
 
+def test_claude_app_url(monkeypatch):
+    monkeypatch.setattr(desktop, "open_url", lambda url: {"ok": True, "opened": url})
+    out = desktop.claude_github_app()
+    assert out["ok"] is True
+    assert "github.com/apps/claude" in out["app"]
+    assert "ANTHROPIC_API_KEY" in " ".join(out["next"])
+
+
 def test_open_rejects_file():
     assert "error" in desktop.open_url("file:///C:/Windows/system32/cmd.exe")
 

@@ -196,6 +196,8 @@ FUNCTION_TOOLS = [
                     "open", "app", "youtube", "maps", "google", "notify", "sysinfo",
                     "email_draft", "email_send", "screenshot", "clipboard", "joke", "note", "remind",
                     "timer", "find", "plan_day", "skills", "situation", "vault", "daily", "calendar_sync",
+                    "claude_app",
+                ],
                 ],
             },
             "url": {"type": "string"},

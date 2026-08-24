@@ -352,7 +352,29 @@ def capabilities() -> dict:
     return {"skills": skills.catalog(), "apps": sorted(set(ALLOWED_APPS))}
 
 
+CLAUDE_APP_INSTALL = "https://github.com/apps/claude/installations/new"
+
+
+def claude_github_app() -> dict:
+    """Open Anthropic's Claude GitHub App install page. Does not replace Grok."""
+    opened = open_url(CLAUDE_APP_INSTALL)
+    return {
+        "ok": True,
+        "opened": opened,
+        "app": "https://github.com/apps/claude",
+        "repo": "rkenagy-ops/jarvis-system",
+        "next": [
+            "Install the app on jarvis-system only.",
+            "Add Actions secret ANTHROPIC_API_KEY.",
+            "Comment @claude on an issue or PR. HUD stays Grok.",
+        ],
+        "workflow": ".github/workflows/claude.yml",
+    }
+
+
 def dispatch(action: str, **kwargs) -> Any:
+    if action in {"claude_app", "claude_github", "install_claude"}:
+        return claude_github_app()
     if action in {"comment", "hamburger", "switch_account", "engage", "feed"}:
         from . import stack
 

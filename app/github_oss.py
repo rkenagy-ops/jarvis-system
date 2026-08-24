@@ -231,6 +231,7 @@ CAPABILITY_PACK = [
     "collective/icalendar",
     "home-assistant/core",
     "resend/resend-python",
+    "anthropics/claude-code-action",
 ]
 
 
