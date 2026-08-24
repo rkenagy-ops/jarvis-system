@@ -263,7 +263,7 @@ FUNCTION_TOOLS = [
         {
             "action": {
                 "type": "string",
-                "enum": ["search", "readme", "ingest", "starter_pack", "brain_pack", "jarvis_pack", "desk_pack", "social_pack", "growth_pack", "self_upgrade", "awesome", "public_apis", "huggingface", "youtube"],
+                "enum": ["search", "readme", "ingest", "starter_pack", "brain_pack", "jarvis_pack", "desk_pack", "social_pack", "stack_pack", "capability_pack", "growth_pack", "self_upgrade", "awesome", "public_apis", "huggingface", "youtube"],
             },
             "query": {"type": "string"},
             "repo": {"type": "string", "description": "owner/repo"},

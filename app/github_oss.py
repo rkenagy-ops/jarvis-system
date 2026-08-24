@@ -210,6 +210,41 @@ def stack_pack(limit: int = 4) -> dict:
     return out
 
 
+CAPABILITY_PACK = [
+    "erdewit/ib_insync",
+    "ib-api-reloaded/ib_async",
+    "OpenBB-finance/OpenBB",
+    "alpacahq/alpaca-py",
+    "stripe/stripe-python",
+    "twilio/twilio-python",
+    "ramnes/notion-sdk-py",
+    "SYSTRAN/faster-whisper",
+    "yt-dlp/yt-dlp",
+    "microsoft/playwright-python",
+    "slackapi/python-slack-sdk",
+    "praw-dev/praw",
+    "pola-rs/polars",
+    "python-pillow/Pillow",
+    "py-pdf/pypdf",
+    "kkroening/ffmpeg-python",
+    "duckdb/duckdb",
+    "collective/icalendar",
+    "home-assistant/core",
+    "resend/resend-python",
+]
+
+
+def capability_pack(limit: int = 16) -> dict:
+    """Hunt-selected official SDKs. Playbooks for 'handle more of what Rhett throws' — not every repo on GitHub."""
+    out = _ingest_many(CAPABILITY_PACK, limit)
+    out["pack"] = "capability"
+    out["note"] = (
+        "READMEs only. Playwright is for opening official dashboards, not hamburger feed-commenting. "
+        "IB/Alpaca live still needs confirm_token. She cannot literally do everything."
+    )
+    return out
+
+
 SOCIAL_PACK = [
     "InstaPy/InstaPy",
     "GramAddict/bot",
@@ -340,6 +375,8 @@ def dispatch(action: str, **kwargs) -> Any:
         return social_pack(int(kwargs.get("limit") or 8))
     if action in {"stack", "stack_pack", "funnel_pack"}:
         return stack_pack(int(kwargs.get("limit") or 4))
+    if action in {"capability", "capability_pack", "anything", "hunt"}:
+        return capability_pack(int(kwargs.get("limit") or 16))
     if action in {"growth", "growth_pack"}:
         return growth_pack(int(kwargs.get("limit") or 10))
     if action in {"upgrade", "self_upgrade"}:
@@ -354,4 +391,4 @@ def dispatch(action: str, **kwargs) -> Any:
         return huggingface(kwargs.get("query") or "", kwargs.get("kind") or "models")
     if action == "youtube":
         return youtube_transcript(kwargs.get("url") or kwargs.get("query") or "")
-    return {"error": f"Unknown oss action {action}", "actions": ["search", "readme", "ingest", "starter_pack", "brain_pack", "jarvis_pack", "desk_pack", "social_pack", "stack_pack", "growth_pack", "self_upgrade", "awesome", "public_apis", "huggingface", "youtube"]}
+    return {"error": f"Unknown oss action {action}", "actions": ["search", "readme", "ingest", "starter_pack", "brain_pack", "jarvis_pack", "desk_pack", "social_pack", "stack_pack", "capability_pack", "growth_pack", "self_upgrade", "awesome", "public_apis", "huggingface", "youtube"]}
