@@ -27,6 +27,7 @@ HUBS: list[dict[str, str]] = [
     {"repo": "public-apis/public-apis", "why": "Free public APIs by category — the fastest way to find a data source."},
     {"repo": "e2b-dev/awesome-ai-agents", "why": "Agent frameworks, tooling and infrastructure."},
     {"repo": "sindresorhus/awesome", "why": "Root index of every other awesome-list."},
+    {"repo": "punkpeye/awesome-mcp-servers", "why": "MCP servers by category — mcp_config.json only wires three."},
 ]
 
 # repo -> what it actually buys Jarvis. priority 1 = pull first.
@@ -213,6 +214,122 @@ INDEX: list[dict[str, Any]] = [
         "category": "voice",
         "priority": 2,
         "why": "4x faster local STT. voice_live.py has no local fallback when the realtime socket drops.",
+    },
+    # --- scheduling ------------------------------------------------------------
+    {
+        "repo": "agronholm/apscheduler",
+        "category": "scheduling",
+        "priority": 1,
+        "why": "autonomy.py is a hand-rolled time.sleep beat loop: a job due while Jarvis is off is simply missed, and nothing survives a restart. This is the reference for persistent, misfire-aware scheduling.",
+    },
+    {
+        "repo": "rq/rq",
+        "category": "scheduling",
+        "priority": 3,
+        "why": "Simple durable job queue — the pattern for work that must outlive the process that queued it.",
+    },
+    # --- social ----------------------------------------------------------------
+    {
+        "repo": "MarshalX/atproto",
+        "category": "social",
+        "priority": 1,
+        "why": "Bluesky SDK. engage.py has no Bluesky adapter, and Bluesky is the easiest fully-official auto-reply network to add.",
+    },
+    {
+        "repo": "tweepy/tweepy",
+        "category": "social",
+        "priority": 2,
+        "why": "X SDK. xpost.py hand-signs OAuth1 with hmac/base64 — this is the maintained version of that code.",
+    },
+    {
+        "repo": "halcy/Mastodon.py",
+        "category": "social",
+        "priority": 3,
+        "why": "Mastodon client; another network with a real reply API and no gatekeeping.",
+    },
+    # --- automation ------------------------------------------------------------
+    {
+        "repo": "n8n-io/n8n",
+        "category": "automation",
+        "priority": 1,
+        "why": "Workflow automation. config.status() already reports an n8n flag with nothing behind it.",
+    },
+    {
+        "repo": "windmill-labs/windmill",
+        "category": "automation",
+        "priority": 2,
+        "why": "Scripts-as-workflows with a job runner — closer to how the bot roster actually works than n8n's node graph.",
+    },
+    {
+        "repo": "pywinauto/pywinauto",
+        "category": "automation",
+        "priority": 2,
+        "why": "Windows UI automation done properly. desktop.py drives apps by launching executables and guessing.",
+    },
+    {
+        "repo": "ollama/ollama-python",
+        "category": "agents",
+        "priority": 2,
+        "why": "Official Ollama client. ollama.py talks to it over raw httpx and re-implements the streaming protocol.",
+    },
+    # --- options ---------------------------------------------------------------
+    {
+        "repo": "vollib/py_vollib",
+        "category": "options",
+        "priority": 1,
+        "why": "Black-Scholes greeks and implied vol. place_option and marketbeast trade options without computing a single greek — no delta, no IV, no way to size by risk.",
+    },
+    {
+        "repo": "lballabio/QuantLib",
+        "category": "options",
+        "priority": 3,
+        "why": "The full derivatives library. Heavy, but the reference for anything py_vollib cannot price.",
+    },
+    # --- risk ------------------------------------------------------------------
+    {
+        "repo": "dcajasn/Riskfolio-Lib",
+        "category": "risk",
+        "priority": 1,
+        "why": "Portfolio risk and allocation. ibkr.pnl() reports positions but nothing measures concentration, correlation or drawdown.",
+    },
+    {
+        "repo": "ranaroussi/quantstats",
+        "category": "risk",
+        "priority": 2,
+        "why": "Sharpe, drawdown, tear sheets — turns a trade log into an honest performance report.",
+    },
+    # --- persistent interface --------------------------------------------------
+    {
+        "repo": "zauberzeug/nicegui",
+        "category": "interface",
+        "priority": 1,
+        "why": "Python-native UI that can run in a real native window rather than a browser tab. The HUD is currently a FastAPI page you have to keep open at 127.0.0.1:8787 — this is the path to something always-on.",
+    },
+    {
+        "repo": "r0x0r/pywebview",
+        "category": "interface",
+        "priority": 2,
+        "why": "Wraps the existing web HUD in a native window with a tray icon — the smallest change that makes it persistent.",
+    },
+    # --- event-driven triggers -------------------------------------------------
+    {
+        "repo": "gorakhargosh/watchdog",
+        "category": "automation",
+        "priority": 1,
+        "why": "Filesystem events. autonomy.beat() polls on a timer, so a vault edit or a dropped file is noticed on the next tick rather than when it happens.",
+    },
+    # --- security --------------------------------------------------------------
+    {
+        "repo": "gitleaks/gitleaks",
+        "category": "security",
+        "priority": 1,
+        "why": "Secret scanning. The repo already has a .gitleaksignore but nothing runs gitleaks, and .env holds brokerage credentials.",
+    },
+    {
+        "repo": "Yelp/detect-secrets",
+        "category": "security",
+        "priority": 2,
+        "why": "Pre-commit secret detection — stops a key reaching a commit rather than finding it afterwards.",
     },
 ]
 

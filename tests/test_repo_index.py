@@ -40,6 +40,14 @@ def test_categories_line_up_with_learning_topics():
     assert not orphans, f"index categories with no learning topic: {sorted(orphans)}"
 
 
+def test_every_topic_has_indexed_repos():
+    """The reverse direction, and the one that was actually broken: a topic with no
+    indexed repo falls back to GitHub search, which needs a token — so with no token
+    that topic silently contributes nothing to a cycle."""
+    empty = set(learning.TOPICS) - set(repo_index.categories())
+    assert not empty, f"topics with no indexed repos (search-only): {sorted(empty)}"
+
+
 def test_for_topic_sorts_by_priority():
     rows = repo_index.for_topic("trading")
     assert rows
