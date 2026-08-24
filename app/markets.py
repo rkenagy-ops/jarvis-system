@@ -502,8 +502,12 @@ def dispatch(action: str, **kwargs) -> Any:
     if action == "ibkr":
         from . import ibkr
 
-        mode = str(kwargs.get("mode") or "account")
-        if mode not in {"permissions", "permit", "probe", "status", "quote", "quotes"}:
+        # Only guess the mode when the caller did not name one. Inferring over an
+        # explicit mode turned "bracket" (symbol+side present) into a plain "order",
+        # i.e. an entry with no stop attached.
+        explicit = str(kwargs.get("mode") or "").strip().lower()
+        mode = explicit or "account"
+        if not explicit:
             if kwargs.get("expiry") and kwargs.get("strike"):
                 mode = "option"
             elif kwargs.get("symbol") and kwargs.get("side"):

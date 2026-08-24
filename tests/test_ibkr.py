@@ -130,3 +130,161 @@ def test_bad_expiry():
     out = ibkr.place_option("NVDA", "08-21", 180, "C", 1)
     assert "error" in out
     _ = monkeypatch_port
+
+
+# --- bracket / cancel / close / pnl -----------------------------------------
+
+
+def test_bracket_rejects_inverted_stop_for_buy():
+    """A buy bracket with the stop above entry is not a bracket."""
+    out = ibkr.place_bracket("AAPL", "buy", 10, entry=100.0, stop=110.0, target=120.0)
+    assert "error" in out
+    assert "stop < entry < target" in out["error"]
+
+
+def test_bracket_rejects_inverted_stop_for_sell():
+    out = ibkr.place_bracket("AAPL", "sell", 10, entry=100.0, stop=90.0, target=80.0)
+    assert "error" in out
+    assert "target < entry < stop" in out["error"]
+
+
+def test_bracket_accepts_correct_sides(monkeypatch):
+    """Valid geometry should get past validation to the confirm gate."""
+    from app import memory as mem
+
+    monkeypatch.setattr(ibkr, "gateway_is_live", lambda: True)
+    monkeypatch.setattr(
+        mem, "create_pending", lambda kind, payload, ttl_sec=180: {"confirm_token": "tok", "kind": kind}
+    )
+    monkeypatch.setattr(mem, "set_fact", lambda *a, **k: None)
+
+    out = ibkr.place_bracket("AAPL", "buy", 10, entry=100.0, stop=95.0, target=110.0)
+    assert out.get("blocked") is True
+    assert out.get("confirm_token") == "tok"
+
+
+def test_bracket_rejects_bad_numbers():
+    assert "error" in ibkr.place_bracket("AAPL", "buy", 10, entry="x", stop=1, target=2)
+    assert "error" in ibkr.place_bracket("AAPL", "buy", 0, entry=1, stop=0.5, target=2)
+    assert "error" in ibkr.place_bracket("", "buy", 10, entry=1, stop=0.5, target=2)
+    assert "error" in ibkr.place_bracket("AAPL", "buy", 10, entry=0, stop=0, target=0)
+
+
+def test_cancel_needs_a_target(monkeypatch):
+    monkeypatch.setattr(ibkr, "port_open", lambda p: True)
+    out = ibkr.cancel_order()
+    assert "error" in out
+    assert "all_orders" in out["error"]
+
+
+def test_cancel_rejects_non_numeric_id(monkeypatch):
+    monkeypatch.setattr(ibkr, "port_open", lambda p: True)
+    out = ibkr.cancel_order("abc")
+    assert "error" in out and "numeric" in out["error"]
+
+
+def test_cancel_is_not_confirm_gated(monkeypatch):
+    """Pulling an order reduces exposure — it must not wait on a token."""
+    cancelled = []
+
+    class FakeOrder:
+        orderId = 7
+
+    class FakeTrade:
+        order = FakeOrder()
+
+    class FakeIB:
+        @staticmethod
+        def openTrades():
+            return [FakeTrade()]
+
+        @staticmethod
+        def cancelOrder(o):
+            cancelled.append(o.orderId)
+
+        @staticmethod
+        def sleep(_):
+            return None
+
+    monkeypatch.setattr(ibkr, "port_open", lambda p: True)
+    monkeypatch.setattr(ibkr, "_call", lambda fn, **k: fn(FakeIB()))
+    from app import memory as mem
+
+    monkeypatch.setattr(mem, "remember", lambda *a, **k: None)
+
+    out = ibkr.cancel_order(7)
+    assert out["ok"] is True
+    assert out["cancelled"] == [7]
+    assert cancelled == [7]
+
+
+def test_close_position_reports_when_flat(monkeypatch):
+    monkeypatch.setattr(ibkr, "port_open", lambda p: True)
+    monkeypatch.setattr(ibkr, "_call", lambda fn, **k: {})
+    out = ibkr.close_position("AAPL")
+    assert out["ok"] is False
+    assert "No open position" in out["error"]
+
+
+def test_close_position_requires_symbol():
+    assert "error" in ibkr.close_position("")
+
+
+def test_pnl_totals(monkeypatch):
+    class Item:
+        def __init__(self, sym, u, r):
+            self.contract = type("C", (), {"localSymbol": sym, "symbol": sym, "secType": "STK"})()
+            self.position = 10
+            self.averageCost = 100
+            self.marketPrice = 105
+            self.marketValue = 1050
+            self.unrealizedPNL = u
+            self.realizedPNL = r
+
+    class FakeIB:
+        @staticmethod
+        def portfolio():
+            return [Item("AAPL", 50.0, 10.0), Item("MSFT", -20.0, 5.0)]
+
+    monkeypatch.setattr(ibkr, "port_open", lambda p: True)
+    monkeypatch.setattr(ibkr, "_call", lambda fn, **k: fn(FakeIB()))
+    out = ibkr.pnl()
+    assert out["ok"] is True
+    assert out["total_unrealized"] == 30.0
+    assert out["total_realized"] == 15.0
+    # worst first
+    assert out["positions"][0]["symbol"] == "MSFT"
+
+
+def test_dispatch_routes_new_actions(monkeypatch):
+    monkeypatch.setattr(ibkr, "open_orders", lambda: {"ok": True, "marker": "orders"})
+    monkeypatch.setattr(ibkr, "pnl", lambda: {"ok": True, "marker": "pnl"})
+    assert ibkr.dispatch("orders")["marker"] == "orders"
+    assert ibkr.dispatch("pnl")["marker"] == "pnl"
+
+
+def test_explicit_mode_is_not_overridden_by_inference(monkeypatch):
+    """market action=ibkr mode=bracket must not be rewritten to a plain order."""
+    from app import markets
+
+    seen = {}
+
+    def fake_dispatch(action, **kwargs):
+        seen["mode"] = action
+        return {"ok": True}
+
+    monkeypatch.setattr(ibkr, "dispatch", fake_dispatch)
+    markets.dispatch(
+        "ibkr", mode="bracket", symbol="AAPL", side="buy", qty=10, entry=100, stop=95, target=110
+    )
+    assert seen["mode"] == "bracket"
+
+    # cancel with a stray side present must still cancel
+    markets.dispatch("ibkr", mode="cancel", symbol="AAPL", side="buy", order_id=3)
+    assert seen["mode"] == "cancel"
+
+    # with no explicit mode, inference still works as before
+    markets.dispatch("ibkr", symbol="AAPL", side="buy", qty=1)
+    assert seen["mode"] == "order"
+    markets.dispatch("ibkr", symbol="AAPL", expiry="20260101", strike=100)
+    assert seen["mode"] == "option"

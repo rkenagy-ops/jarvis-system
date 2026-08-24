@@ -553,6 +553,292 @@ def place_stock(
     return out
 
 
+def open_orders() -> dict[str, Any]:
+    """Working orders you can still cancel or amend."""
+    if not port_open(port()):
+        return _not_listening_error()
+
+    def read(ib) -> dict[str, Any]:
+        rows = []
+        for t in ib.openTrades():
+            c, o, st = t.contract, t.order, t.orderStatus
+            rows.append(
+                {
+                    "order_id": o.orderId,
+                    "symbol": c.localSymbol or c.symbol,
+                    "secType": c.secType,
+                    "action": o.action,
+                    "qty": float(o.totalQuantity or 0),
+                    "order_type": o.orderType,
+                    "limit": float(o.lmtPrice) if o.lmtPrice else None,
+                    "stop": float(o.auxPrice) if o.auxPrice else None,
+                    "status": st.status,
+                    "filled": float(st.filled or 0),
+                    "remaining": float(st.remaining or 0),
+                }
+            )
+        return {"ok": True, "count": len(rows), "orders": rows, "live": gateway_is_live()}
+
+    try:
+        return _call(read, timeout=12.0)
+    except Exception as exc:
+        return {"error": str(exc)[:300], **probe()}
+
+
+def cancel_order(order_id: int | str = 0, *, all_orders: bool = False) -> dict[str, Any]:
+    """Cancel one working order, or everything at once.
+
+    Cancelling reduces exposure, so unlike placing it is not confirm-gated — being
+    unable to pull an order quickly is its own risk.
+    """
+    if not port_open(port()):
+        return _not_listening_error()
+    try:
+        wanted = int(order_id or 0)
+    except (TypeError, ValueError):
+        return {"error": "order_id must be numeric."}
+    if not wanted and not all_orders:
+        return {"error": "Pass order_id=<id> or all_orders=true."}
+
+    def send(ib) -> dict[str, Any]:
+        cancelled, missed = [], []
+        for t in ib.openTrades():
+            if all_orders or t.order.orderId == wanted:
+                try:
+                    ib.cancelOrder(t.order)
+                    cancelled.append(t.order.orderId)
+                except Exception as exc:
+                    missed.append({"order_id": t.order.orderId, "error": str(exc)[:120]})
+        ib.sleep(0.5)
+        if not cancelled and not missed:
+            return {"ok": False, "error": f"No open order matching {wanted or 'any'}."}
+        return {"ok": True, "cancelled": cancelled, "failed": missed}
+
+    try:
+        out = _call(send, timeout=12.0)
+    except Exception as exc:
+        return {"error": str(exc)[:300], **probe()}
+    if out.get("ok"):
+        from . import memory
+
+        memory.remember(
+            f"IBKR cancelled orders {out.get('cancelled')}",
+            kind="trade",
+            tags=["trade", "ibkr", "cancel"],
+            importance=0.7,
+            source_agent="trader",
+        )
+    return out
+
+
+def place_bracket(
+    symbol: str,
+    side: str,
+    qty: float,
+    entry: float,
+    stop: float,
+    target: float,
+    *,
+    confirm_token: str | None = None,
+    confirmed: bool = False,
+) -> dict[str, Any]:
+    """Entry with a stop-loss and take-profit attached as one OCA bracket.
+
+    The stop rides in with the entry rather than being placed afterwards, so a fill
+    is never left sitting there unprotected if the follow-up call fails.
+    """
+    from . import memory
+
+    symbol = (symbol or "").strip().upper()
+    side = (side or "buy").lower()
+    try:
+        qty, entry, stop, target = float(qty), float(entry), float(stop), float(target)
+    except (TypeError, ValueError):
+        return {"error": "qty, entry, stop and target must all be numeric."}
+    if not symbol or qty <= 0 or side not in {"buy", "sell"}:
+        return {"error": "Need symbol, buy/sell, and qty > 0."}
+    if min(entry, stop, target) <= 0:
+        return {"error": "entry, stop and target must be positive prices."}
+
+    # A bracket whose stop is on the wrong side of entry is not a bracket.
+    if side == "buy" and not (stop < entry < target):
+        return {"error": f"For a buy, need stop < entry < target (got {stop} / {entry} / {target})."}
+    if side == "sell" and not (target < entry < stop):
+        return {"error": f"For a sell, need target < entry < stop (got {target} / {entry} / {stop})."}
+
+    gate = _need_confirm(
+        "ibkr_bracket",
+        {"symbol": symbol, "side": side, "qty": qty, "entry": entry, "stop": stop, "target": target},
+        confirmed=confirmed,
+        confirm_token=confirm_token,
+    )
+    if gate:
+        return gate
+    if config.IBKR_LIVE and not gateway_is_live():
+        return {"error": "IBKR_LIVE is on but TWS is paper. Log into live TWS (port 7496).", **probe()}
+    if not port_open(port()):
+        return _not_listening_error()
+
+    def send(ib) -> dict[str, Any]:
+        from ib_insync import Stock
+
+        contract = Stock(symbol, "SMART", "USD")
+        qualified = ib.qualifyContracts(contract)
+        if not qualified:
+            return {"error": f"IBKR could not qualify {symbol}"}
+        action = "BUY" if side == "buy" else "SELL"
+        bracket = ib.bracketOrder(action, qty, limitPrice=entry, takeProfitPrice=target, stopLossPrice=stop)
+        placed = [ib.placeOrder(qualified[0], o) for o in bracket]
+        parent = placed[0]
+        st = _wait_status(ib, parent)
+        return {
+            "ok": True,
+            "broker": "ibkr",
+            "live": gateway_is_live(),
+            "symbol": symbol,
+            "side": side,
+            "qty": qty,
+            "entry": entry,
+            "stop": stop,
+            "target": target,
+            "order_ids": [t.order.orderId for t in placed],
+            "parent_status": st.status,
+            "risk_per_share": round(abs(entry - stop), 4),
+            "reward_per_share": round(abs(target - entry), 4),
+            "r_multiple": round(abs(target - entry) / abs(entry - stop), 2) if entry != stop else None,
+        }
+
+    try:
+        out = _call(send, timeout=20.0)
+    except Exception as exc:
+        return {"error": str(exc)[:300], **probe()}
+    if out.get("ok"):
+        memory.remember(
+            f"IBKR bracket {side} {qty} {symbol} entry {entry} stop {stop} target {target}",
+            kind="trade",
+            tags=["trade", "ibkr", symbol, "bracket"],
+            importance=0.9,
+            source_agent="trader",
+        )
+    return out
+
+
+def close_position(
+    symbol: str,
+    *,
+    confirm_token: str | None = None,
+    confirmed: bool = False,
+) -> dict[str, Any]:
+    """Flatten an open stock position at market."""
+    from . import memory
+
+    symbol = (symbol or "").strip().upper()
+    if not symbol:
+        return {"error": "symbol required."}
+    if not port_open(port()):
+        return _not_listening_error()
+
+    def read_pos(ib) -> dict[str, Any]:
+        for p in ib.positions():
+            c = p.contract
+            if (c.localSymbol or c.symbol or "").upper() == symbol and float(p.position) != 0:
+                return {"qty": float(p.position), "secType": c.secType}
+        return {}
+
+    try:
+        held = _call(read_pos, timeout=12.0)
+    except Exception as exc:
+        return {"error": str(exc)[:300], **probe()}
+    if not held:
+        return {"ok": False, "error": f"No open position in {symbol}."}
+
+    qty = held["qty"]
+    gate = _need_confirm(
+        "ibkr_close",
+        {"symbol": symbol, "qty": qty},
+        confirmed=confirmed,
+        confirm_token=confirm_token,
+    )
+    if gate:
+        return {**gate, "closing": {"symbol": symbol, "qty": qty}}
+
+    def send(ib) -> dict[str, Any]:
+        from ib_insync import MarketOrder, Stock
+
+        contract = Stock(symbol, "SMART", "USD")
+        qualified = ib.qualifyContracts(contract)
+        if not qualified:
+            return {"error": f"IBKR could not qualify {symbol}"}
+        # Long position -> sell to flat; short -> buy to flat.
+        action = "SELL" if qty > 0 else "BUY"
+        trade = ib.placeOrder(qualified[0], MarketOrder(action, abs(qty), tif="DAY"))
+        st = _wait_status(ib, trade)
+        return {
+            "ok": True,
+            "symbol": symbol,
+            "closed_qty": abs(qty),
+            "action": action,
+            "order_id": trade.order.orderId,
+            "status": st.status,
+            "filled": st.filled,
+            "avg_fill": st.avgFillPrice,
+        }
+
+    try:
+        out = _call(send, timeout=15.0)
+    except Exception as exc:
+        return {"error": str(exc)[:300], **probe()}
+    if out.get("ok"):
+        memory.remember(
+            f"IBKR flattened {symbol} ({out.get('closed_qty')})",
+            kind="trade",
+            tags=["trade", "ibkr", symbol, "close"],
+            importance=0.85,
+            source_agent="trader",
+        )
+    return out
+
+
+def pnl() -> dict[str, Any]:
+    """Realized and unrealized P&L per position."""
+    if not port_open(port()):
+        return _not_listening_error()
+
+    def read(ib) -> dict[str, Any]:
+        rows, realized, unrealized = [], 0.0, 0.0
+        for item in ib.portfolio():
+            c = item.contract
+            u = float(item.unrealizedPNL or 0)
+            r = float(item.realizedPNL or 0)
+            unrealized += u
+            realized += r
+            rows.append(
+                {
+                    "symbol": c.localSymbol or c.symbol,
+                    "secType": c.secType,
+                    "qty": float(item.position or 0),
+                    "avg_cost": float(item.averageCost or 0),
+                    "market_price": float(item.marketPrice or 0),
+                    "market_value": float(item.marketValue or 0),
+                    "unrealized": round(u, 2),
+                    "realized": round(r, 2),
+                }
+            )
+        rows.sort(key=lambda r: r["unrealized"])
+        return {
+            "ok": True,
+            "live": gateway_is_live(),
+            "positions": rows,
+            "total_unrealized": round(unrealized, 2),
+            "total_realized": round(realized, 2),
+        }
+
+    try:
+        return _call(read, timeout=12.0)
+    except Exception as exc:
+        return {"error": str(exc)[:300], **probe()}
+
+
 def permissions() -> dict[str, Any]:
     """What Super Jarvis is allowed to do against TWS right now. Never asks for IBKR passwords."""
     info = probe()
@@ -627,6 +913,30 @@ def dispatch(action: str = "account", **kwargs: Any) -> dict[str, Any]:
         return {"ok": True, "quotes": stock_quotes(list(symbols))}
     if act in {"account", "summary"}:
         return account()
+    if act in {"orders", "open_orders", "working"}:
+        return open_orders()
+    if act in {"cancel", "kill", "pull"}:
+        return cancel_order(
+            kwargs.get("order_id") or 0,
+            all_orders=bool(kwargs.get("all_orders") or kwargs.get("all")),
+        )
+    if act in {"pnl", "positions"}:
+        return pnl()
+    if act in {"bracket", "bracket_order"}:
+        return place_bracket(
+            kwargs.get("symbol") or "",
+            kwargs.get("side") or "buy",
+            float(kwargs.get("qty") or 0),
+            float(kwargs.get("entry") or 0),
+            float(kwargs.get("stop") or 0),
+            float(kwargs.get("target") or 0),
+            confirm_token=kwargs.get("confirm_token"),
+        )
+    if act in {"close", "flatten", "exit"}:
+        return close_position(
+            kwargs.get("symbol") or "",
+            confirm_token=kwargs.get("confirm_token"),
+        )
     if act in {"option", "options", "call", "put", "ticket"}:
         return place_option(
             kwargs.get("symbol") or "",

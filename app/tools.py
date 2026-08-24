@@ -68,7 +68,15 @@ FUNCTION_TOOLS = [
     ),
     _fn(
         "market",
-        "Markets: quote, history, analyze, watchlist, scan, intel, advise, ticket, account, broker, trade, confirm, ibkr, options, poly. Advise = ENTER/NO-GO breakdown. poly = Polymarket public Gamma scan/bounce (one book, paper Kelly, no extra accounts, no wallet keys). IBKR live still needs confirm_token.",
+        (
+            "Markets: quote, history, analyze, watchlist, scan, intel, advise, ticket, account, broker, "
+            "trade, confirm, ibkr, options, poly. Advise = ENTER/NO-GO breakdown. poly = Polymarket public "
+            "Gamma scan/bounce (one book, paper Kelly, no extra accounts, no wallet keys). "
+            "action=ibkr takes mode=account|probe|permissions|quotes|orders|pnl|order|option|bracket|close|cancel. "
+            "bracket sends entry+stop+target as one OCA so a fill is never left unprotected; close flattens a "
+            "position; cancel pulls working orders and is NOT confirm-gated since it only reduces exposure. "
+            "Everything that opens or increases exposure still needs confirm_token."
+        ),
         {
             "action": {"type": "string", "enum": ["quote", "history", "analyze", "watchlist", "scan", "intel", "advise", "ticket", "account", "broker", "trade", "confirm", "ibkr", "options", "poly"]},
             "universe": {"type": "string"},
@@ -86,6 +94,11 @@ FUNCTION_TOOLS = [
             "top": {"type": "integer"},
             "mode": {"type": "string"},
             "limit": {"type": "number"},
+            "entry": {"type": "number", "description": "Bracket entry price."},
+            "stop": {"type": "number", "description": "Bracket stop-loss price."},
+            "target": {"type": "number", "description": "Bracket take-profit price."},
+            "order_id": {"type": "integer", "description": "Working order to cancel."},
+            "all_orders": {"type": "boolean", "description": "Cancel every working order."},
         },
         ["action"],
     ),
