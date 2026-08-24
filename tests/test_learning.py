@@ -30,7 +30,14 @@ def test_ledger_roundtrip(monkeypatch):
 
 
 def test_candidates_skip_already_learned(monkeypatch):
+    """Search results already in the ledger are dropped (index entries too)."""
     monkeypatch.setattr(learning, "_ledger", lambda: ["old/repo"])
+    monkeypatch.setattr(learning, "search_available", lambda: True)
+    monkeypatch.setattr(
+        learning,
+        "repo_index",
+        type("Stub", (), {"for_topic": staticmethod(lambda t: []), "HUBS": []})(),
+    )
     monkeypatch.setattr(
         learning.oss,
         "search",
@@ -44,9 +51,32 @@ def test_candidates_skip_already_learned(monkeypatch):
     assert [c["repo"] for c in out["candidates"]] == ["new/repo"]
 
 
-def test_candidates_propagates_search_failure(monkeypatch):
+def test_search_failure_no_longer_kills_discovery(monkeypatch):
+    """Previously a search error was returned as the whole result, so a missing
+    token meant zero candidates. The index must now carry the cycle regardless."""
+    monkeypatch.setattr(learning, "_ledger", lambda: [])
+    monkeypatch.setattr(learning, "search_available", lambda: True)
     monkeypatch.setattr(learning.oss, "search", lambda q, limit=10: {"error": "rate limited"})
-    assert "error" in learning.candidates("agents")
+    # limit above the index count, so search is actually attempted and fails
+    out = learning.candidates("agents", limit=20)
+    assert out["ok"] is True
+    assert "error" not in out
+    assert out["candidates"], "index must still produce candidates"
+    assert out["search_error"] == "rate limited"
+
+
+def test_search_skipped_when_index_fills_the_quota(monkeypatch):
+    """No point spending an authenticated API call the index already covered."""
+    monkeypatch.setattr(learning, "_ledger", lambda: [])
+    monkeypatch.setattr(learning, "search_available", lambda: True)
+
+    def must_not_search(*a, **k):
+        raise AssertionError("search should be skipped when the index already fills the limit")
+
+    monkeypatch.setattr(learning.oss, "search", must_not_search)
+    out = learning.candidates("agents", limit=1)
+    assert len(out["candidates"]) == 1
+    assert out["searched"] is False
 
 
 def test_study_validates_repo():
@@ -149,3 +179,97 @@ def test_cycle_accepts_topic_string(monkeypatch):
 def test_dispatch_routes():
     assert "error" in learning.dispatch("bogus")
     assert "actions" in learning.dispatch("bogus")
+
+
+# --- index-first discovery ---------------------------------------------------
+
+
+def test_candidates_work_without_a_github_token(monkeypatch):
+    """The original bug: no token meant no discovery at all."""
+    monkeypatch.setattr(learning, "_ledger", lambda: [])
+    monkeypatch.setattr(learning, "search_available", lambda: False)
+
+    def must_not_search(*a, **k):
+        raise AssertionError("should not call GitHub search without a token")
+
+    monkeypatch.setattr(learning.oss, "search", must_not_search)
+
+    out = learning.candidates("trading", limit=5)
+    assert out["ok"] is True
+    assert out["candidates"], "index must supply candidates with no credentials"
+    assert out["index_only"] is True
+    assert all(c["source"] == "index" for c in out["candidates"])
+
+
+def test_candidates_layer_search_on_top_when_token_present(monkeypatch):
+    monkeypatch.setattr(learning, "_ledger", lambda: [])
+    monkeypatch.setattr(learning, "search_available", lambda: True)
+    monkeypatch.setattr(
+        learning.oss,
+        "search",
+        lambda q, limit=10: {"ok": True, "repos": [{"repo": "extra/found", "stars": 10}]},
+    )
+    out = learning.candidates("trading", limit=20)
+    sources = {c["source"] for c in out["candidates"]}
+    assert sources == {"index", "search"}
+    assert out["searched"] is True
+    # indexed repos still rank ahead of search results
+    assert out["candidates"][0]["source"] == "index"
+
+
+def test_candidates_survive_search_failure(monkeypatch):
+    monkeypatch.setattr(learning, "_ledger", lambda: [])
+    monkeypatch.setattr(learning, "search_available", lambda: True)
+    monkeypatch.setattr(learning.oss, "search", lambda q, limit=10: {"error": "rate limited"})
+    out = learning.candidates("trading", limit=5)
+    assert out["ok"] is True
+    assert out["candidates"], "index results must survive a search failure"
+    assert out["search_error"] == "rate limited"
+
+
+def test_candidates_skip_studied_index_entries(monkeypatch):
+    from app import repo_index
+
+    first = repo_index.for_topic("trading")[0]["repo"]
+    monkeypatch.setattr(learning, "_ledger", lambda: [first])
+    monkeypatch.setattr(learning, "search_available", lambda: False)
+    out = learning.candidates("trading", limit=5)
+    assert first not in [c["repo"] for c in out["candidates"]]
+
+
+def test_cycle_reports_discovery_mode(monkeypatch):
+    monkeypatch.setattr(learning, "_ledger", lambda: [])
+    monkeypatch.setattr(learning, "search_available", lambda: False)
+    monkeypatch.setattr(learning, "candidates", lambda topic, limit=3: {"ok": True, "candidates": []})
+    out = learning.cycle(reindex=False)
+    assert out["search_enabled"] is False
+    assert out["discovery"] == "curated index only"
+
+
+def test_index_action_flags_missing_token(monkeypatch):
+    monkeypatch.setattr(learning, "_ledger", lambda: [])
+    monkeypatch.setattr(learning, "search_available", lambda: False)
+    out = learning.index()
+    assert out["search_enabled"] is False
+    assert "search_note" in out
+    assert out["unstudied"]
+
+
+def test_hubs_ingest_awesome_lists(monkeypatch):
+    from app import repo_index
+
+    done = []
+    monkeypatch.setattr(learning, "_ledger", lambda: [])
+    monkeypatch.setattr(
+        learning,
+        "study",
+        lambda repo, max_files=8: done.append(repo) or {"ok": True, "repo": repo, "files_ingested": 5},
+    )
+    out = learning.hubs(max_repos=2)
+    assert out["ok"] and len(out["hubs"]) == 2
+    assert done[0] == repo_index.HUBS[0]["repo"]
+
+
+def test_dispatch_exposes_index_and_hubs():
+    actions = learning.dispatch("bogus")["actions"]
+    assert "index" in actions and "hubs" in actions

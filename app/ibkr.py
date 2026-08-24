@@ -30,6 +30,35 @@ _probe_at = 0.0
 _probe_val: dict[str, Any] | None = None
 
 
+def _ib_names(*names: str) -> tuple:
+    """Resolve names from the IBKR client library.
+
+    ib_insync is archived upstream; ib-api-reloaded/ib_async is the maintained fork
+    with the same API surface. Prefer ib_async, fall back to ib_insync so existing
+    installs keep working untouched.
+    """
+    try:
+        import ib_async as mod  # type: ignore
+    except ImportError:  # pragma: no cover - depends on which is installed
+        import ib_insync as mod  # type: ignore
+    return tuple(getattr(mod, n) for n in names)
+
+
+def ib_backend() -> str:
+    """Which client library is actually in use — surfaced in probe()."""
+    try:
+        import ib_async  # type: ignore  # noqa: F401
+
+        return "ib_async"
+    except ImportError:
+        try:
+            import ib_insync  # type: ignore  # noqa: F401
+
+            return "ib_insync (archived — pip install ib_async)"
+        except ImportError:
+            return "none installed"
+
+
 def host() -> str:
     return "127.0.0.1"
 
@@ -168,7 +197,7 @@ def _ensure_worker() -> None:
 
 def _worker() -> None:
     global _ib, _ib_port, _ib_meta
-    from ib_insync import IB
+    (IB,) = _ib_names("IB")
 
     _ib = IB()
     while True:
@@ -341,7 +370,7 @@ def option_quotes(specs: list[dict]) -> dict[str, dict]:
         return {}
 
     def read(ib) -> dict[str, dict]:
-        from ib_insync import Option
+        (Option,) = _ib_names("Option")
 
         out: dict[str, dict] = {}
         for spec in specs[:8]:
@@ -439,7 +468,7 @@ def place_option(
         return {"error": "TWS/Gateway not listening", **probe()}
 
     def send(ib) -> dict[str, Any]:
-        from ib_insync import LimitOrder, MarketOrder, Option
+        LimitOrder, MarketOrder, Option = _ib_names("LimitOrder", "MarketOrder", "Option")
 
         contract = Option(symbol, expiry, float(strike), right, "SMART")
         qualified = ib.qualifyContracts(contract)
@@ -511,7 +540,7 @@ def place_stock(
         return {"error": "TWS/Gateway not listening", **probe()}
 
     def send(ib) -> dict[str, Any]:
-        from ib_insync import LimitOrder, MarketOrder, Stock
+        LimitOrder, MarketOrder, Stock = _ib_names("LimitOrder", "MarketOrder", "Stock")
 
         contract = Stock(symbol, "SMART", "USD")
         qualified = ib.qualifyContracts(contract)
@@ -680,7 +709,7 @@ def place_bracket(
         return _not_listening_error()
 
     def send(ib) -> dict[str, Any]:
-        from ib_insync import Stock
+        (Stock,) = _ib_names("Stock")
 
         contract = Stock(symbol, "SMART", "USD")
         qualified = ib.qualifyContracts(contract)
@@ -763,7 +792,7 @@ def close_position(
         return {**gate, "closing": {"symbol": symbol, "qty": qty}}
 
     def send(ib) -> dict[str, Any]:
-        from ib_insync import MarketOrder, Stock
+        MarketOrder, Stock = _ib_names("MarketOrder", "Stock")
 
         contract = Stock(symbol, "SMART", "USD")
         qualified = ib.qualifyContracts(contract)
@@ -853,6 +882,7 @@ def permissions() -> dict[str, Any]:
             "stocks": trading,
             "options": trading,
             "broker": "ibkr",
+            "client_library": ib_backend(),
             "note": (
                 "Live IBKR stock and option orders are armed. Each send still needs confirm_token. "
                 "Do not paste IBKR usernames or passwords into Jarvis."
@@ -869,7 +899,7 @@ def stock_quotes(symbols: list[str]) -> dict[str, dict]:
         return {}
 
     def read(ib) -> dict[str, dict]:
-        from ib_insync import Stock
+        (Stock,) = _ib_names("Stock")
 
         out: dict[str, dict] = {}
         for raw in symbols[:8]:

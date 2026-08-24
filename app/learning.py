@@ -24,11 +24,13 @@ from __future__ import annotations
 import time
 from typing import Any
 
-from . import config, memory, oss
+from . import config, memory, oss, repo_index
 
 # What Jarvis wants to get better at, and the search that finds it.
 TOPICS: dict[str, str] = {
     "trading": "interactive brokers python trading stars:>200",
+    "backtesting": "python backtesting framework stars:>1000",
+    "observability": "llm tracing observability python stars:>500",
     "market_data": "market data python library stars:>500",
     "prediction_markets": "prediction market api python stars:>50",
     "agents": "llm agent framework python stars:>1000",
@@ -68,15 +70,52 @@ def learned() -> dict[str, Any]:
     return {"ok": True, "count": len(seen), "repos": seen}
 
 
+def search_available() -> bool:
+    """GitHub's search API needs a token; codeload (fetching) does not."""
+    try:
+        from . import github_client
+
+        return bool(github_client.resolve_token())
+    except Exception:
+        return False
+
+
 def candidates(topic: str, limit: int = 5) -> dict[str, Any]:
-    """Repos on a topic that haven't been ingested yet."""
-    query = TOPICS.get(topic) or topic
-    found = oss.search(query, limit=limit * 3)
-    if not found.get("ok"):
-        return found
+    """Repos on a topic that haven't been ingested yet.
+
+    The curated index comes first and needs no credentials. GitHub search is layered
+    on top when a token exists — it widens the pool, it is not required for one.
+    """
     seen = set(_ledger())
-    fresh = [r for r in found.get("repos") or [] if r.get("repo") and r["repo"] not in seen]
-    return {"ok": True, "topic": topic, "query": query, "candidates": fresh[:limit]}
+    picks: list[dict[str, Any]] = []
+
+    for entry in repo_index.for_topic(topic):
+        if entry["repo"] not in seen:
+            picks.append({"repo": entry["repo"], "why": entry["why"], "source": "index", "priority": entry["priority"]})
+
+    searched = False
+    search_error = None
+    if len(picks) < limit and search_available():
+        found = oss.search(TOPICS.get(topic) or topic, limit=limit * 3)
+        if found.get("ok"):
+            searched = True
+            known = {p["repo"] for p in picks}
+            for r in found.get("repos") or []:
+                repo = r.get("repo")
+                if repo and repo not in seen and repo not in known:
+                    picks.append({"repo": repo, "stars": r.get("stars"), "source": "search", "priority": 9})
+        else:
+            search_error = found.get("error")
+
+    picks.sort(key=lambda p: p.get("priority", 9))
+    return {
+        "ok": True,
+        "topic": topic,
+        "candidates": picks[:limit],
+        "searched": searched,
+        "search_error": search_error,
+        "index_only": not searched,
+    }
 
 
 def study(repo: str, *, max_files: int = MAX_FILES_PER_REPO) -> dict[str, Any]:
@@ -121,6 +160,7 @@ def cycle(
     wanted = list(topics or TOPICS.keys())
 
     started = time.time()
+    has_search = search_available()
     studied: list[dict[str, Any]] = []
     skipped: list[dict[str, Any]] = []
 
@@ -129,11 +169,11 @@ def cycle(
             break
         found = candidates(topic, limit=3)
         if not found.get("ok"):
-            skipped.append({"topic": topic, "reason": found.get("error") or "search failed"})
+            skipped.append({"topic": topic, "reason": found.get("error") or "discovery failed"})
             continue
         picks = found.get("candidates") or []
         if not picks:
-            skipped.append({"topic": topic, "reason": "nothing new — all top repos already studied"})
+            skipped.append({"topic": topic, "reason": "nothing new — everything indexed for this topic is already studied"})
             continue
 
         for pick in picks:
@@ -156,13 +196,14 @@ def cycle(
             reindexed = f"reindex failed: {str(exc)[:150]}"
 
     total_files = sum(s.get("files_ingested") or 0 for s in studied)
-    summary = (
-        f"Learned {len(studied)} repo(s), {total_files} files"
-        + (f", reindexed" if reindexed is True else "")
-        + f". {len(_ledger())} studied all-time."
-        if studied
-        else f"Nothing new to learn ({len(_ledger())} repos already studied)."
-    )
+    if studied:
+        summary = (
+            f"Learned {len(studied)} repo(s), {total_files} files"
+            + (", reindexed" if reindexed is True else "")
+            + f". {len(_ledger())} studied all-time."
+        )
+    else:
+        summary = f"Nothing new to learn ({len(_ledger())} repos already studied)."
 
     return {
         "ok": True,
@@ -170,9 +211,49 @@ def cycle(
         "studied": studied,
         "skipped": skipped,
         "reindexed": reindexed,
+        "search_enabled": has_search,
+        "discovery": "index + GitHub search" if has_search else "curated index only",
         "elapsed_sec": round(time.time() - started, 1),
         "total_learned": len(_ledger()),
     }
+
+
+def hubs(max_repos: int = 3) -> dict[str, Any]:
+    """Ingest the awesome-list indexes. Small, and each one maps a whole field."""
+    seen = set(_ledger())
+    done, failed = [], []
+    for entry in repo_index.HUBS:
+        if len(done) >= max_repos:
+            break
+        if entry["repo"] in seen:
+            continue
+        out = study(entry["repo"], max_files=8)
+        if out.get("ok"):
+            done.append({**out, "why": entry["why"]})
+        else:
+            failed.append({"repo": entry["repo"], "reason": out.get("error")})
+    return {
+        "ok": True,
+        "summary": f"Ingested {len(done)} hub index(es).",
+        "hubs": done,
+        "failed": failed,
+        "remaining": [h["repo"] for h in repo_index.HUBS if h["repo"] not in set(_ledger())],
+    }
+
+
+def index() -> dict[str, Any]:
+    """What the curated index holds, and how much of it has been studied."""
+    seen = set(_ledger())
+    rows = repo_index.summary()
+    rows["studied"] = sorted(r for r in repo_index.all_repos() if r in seen)
+    rows["unstudied"] = sorted(r for r in repo_index.all_repos() if r not in seen)
+    rows["search_enabled"] = search_available()
+    if not rows["search_enabled"]:
+        rows["search_note"] = (
+            "No GITHUB_TOKEN, so GitHub search is off — the curated index is the whole "
+            "discovery pool. Fetching itself needs no credentials."
+        )
+    return rows
 
 
 def gaps() -> dict[str, Any]:
@@ -199,6 +280,10 @@ def dispatch(action: str = "status", **kwargs: Any) -> Any:
         return learned()
     if act in {"topics", "gaps"}:
         return gaps()
+    if act in {"index", "catalog", "repos"}:
+        return index()
+    if act in {"hubs", "awesome"}:
+        return hubs(int(kwargs.get("max_repos") or 3))
     if act in {"candidates", "find"}:
         return candidates(str(kwargs.get("topic") or ""), int(kwargs.get("limit") or 5))
     if act in {"study", "read"}:
@@ -214,5 +299,5 @@ def dispatch(action: str = "status", **kwargs: Any) -> Any:
         )
     return {
         "error": f"unknown learning action {act}",
-        "actions": ["status", "gaps", "candidates", "study", "cycle"],
+        "actions": ["status", "index", "hubs", "gaps", "candidates", "study", "cycle"],
     }

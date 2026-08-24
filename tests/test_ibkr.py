@@ -288,3 +288,42 @@ def test_explicit_mode_is_not_overridden_by_inference(monkeypatch):
     assert seen["mode"] == "order"
     markets.dispatch("ibkr", symbol="AAPL", expiry="20260101", strike=100)
     assert seen["mode"] == "option"
+
+
+def test_ib_names_prefers_ib_async(monkeypatch):
+    """ib_insync is archived; ib_async is the maintained fork with the same API."""
+    import sys as _sys
+    import types
+
+    fake_async = types.ModuleType("ib_async")
+    fake_async.Stock = "ASYNC_STOCK"
+    fake_insync = types.ModuleType("ib_insync")
+    fake_insync.Stock = "INSYNC_STOCK"
+
+    monkeypatch.setitem(_sys.modules, "ib_async", fake_async)
+    monkeypatch.setitem(_sys.modules, "ib_insync", fake_insync)
+    assert ibkr._ib_names("Stock") == ("ASYNC_STOCK",)
+    assert ibkr.ib_backend() == "ib_async"
+
+
+def test_ib_names_falls_back_to_ib_insync(monkeypatch):
+    """Existing installs with only ib_insync must keep working."""
+    import builtins
+    import sys as _sys
+    import types
+
+    fake_insync = types.ModuleType("ib_insync")
+    fake_insync.Stock = "INSYNC_STOCK"
+    monkeypatch.setitem(_sys.modules, "ib_insync", fake_insync)
+    _sys.modules.pop("ib_async", None)
+
+    real_import = builtins.__import__
+
+    def no_ib_async(name, *a, **k):
+        if name == "ib_async":
+            raise ImportError("no ib_async")
+        return real_import(name, *a, **k)
+
+    monkeypatch.setattr(builtins, "__import__", no_ib_async)
+    assert ibkr._ib_names("Stock") == ("INSYNC_STOCK",)
+    assert "archived" in ibkr.ib_backend()
