@@ -12,7 +12,7 @@ $req = if (Test-Path ".\requirements-core.txt") { ".\requirements-core.txt" } el
 
 if (-not (Test-Path ".\.env")) {
   Copy-Item ".\.env.example" ".\.env"
-  Write-Host "Created .env — add XAI_API_KEY and GITHUB_TOKEN, or paste them in the HUD."
+  Write-Host "Created .env - add XAI_API_KEY and GITHUB_TOKEN, or paste them in the HUD."
 }
 
 Write-Host "Starting Super Jarvis (rkenagy-ops/jarvis-system) on http://127.0.0.1:8787"
@@ -25,7 +25,7 @@ if (-not $ollama) {
   if ($cand) { $env:Path = (Split-Path $cand) + ";" + $env:Path }
 }
 if (Get-Command ollama -ErrorAction SilentlyContinue) {
-  Write-Host "Ollama on PATH — local brain available if a model is pulled (ollama pull llama3.2)"
+  Write-Host "Ollama on PATH - local brain available if a model is pulled (ollama pull llama3.2)"
 } else {
   Write-Host "Ollama not installed. HUD still runs on Grok. Install: winget install Ollama.Ollama"
 }
