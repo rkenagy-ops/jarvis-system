@@ -216,8 +216,154 @@ def bounce(*, query: str = "", limit: int = 8, bankroll: float = 1000.0) -> dict
     }
 
 
+PRIMER = {
+    "price_is_probability": (
+        "A YES share settles at $1 if the event happens and $0 if it doesn't. So a price of "
+        "0.62 IS the market's 62% probability. You are never betting on the event — you are "
+        "betting your probability estimate is better than the crowd's."
+    ),
+    "edge": (
+        "Edge = your probability minus the price. Buy YES at 0.62 only if you genuinely think "
+        "it's above 62%. If you can't say why your number differs, you have no edge and the "
+        "correct size is zero."
+    ),
+    "where_edge_comes_from": (
+        "Three places, realistically: you know something the market hasn't priced (news, "
+        "domain expertise), the market is thin and mispriced by inattention, or there is a "
+        "structural bias — longshots are chronically overpriced, heavy favourites underpriced."
+    ),
+    "kelly": (
+        "Kelly gives the bet size that maximises long-run growth: f = p - (1-p)/b, where b is "
+        "the payoff odds (1-price)/price. Full Kelly is far too aggressive when your probability "
+        "estimate is itself uncertain — and yours always is. This system uses quarter-Kelly and "
+        "caps any single position at 10% of bankroll."
+    ),
+    "when_not_to_bet": (
+        "Most of the time. If your estimate is within a couple of points of the price, the edge "
+        "is inside your own error bars. Forcing a bet there is how bankrolls bleed out."
+    ),
+    "costs": (
+        "The quoted price is not your fill. Thin books have wide spreads, and crossing the spread "
+        "on both entry and exit can eat several points of edge. Check volume before assuming your "
+        "size gets filled at the screen price."
+    ),
+    "resolution_risk": (
+        "You are also betting on the resolution wording, not just the real-world outcome. Read the "
+        "resolution criteria before sizing — ambiguous sources and disputes are a real loss mode "
+        "that has nothing to do with being right."
+    ),
+}
+
+
+def explain(topic: str = "") -> dict[str, Any]:
+    key = (topic or "").strip().lower()
+    if not key:
+        return {
+            "ok": True,
+            "primer": PRIMER,
+            "order": [
+                "price_is_probability",
+                "edge",
+                "where_edge_comes_from",
+                "kelly",
+                "costs",
+                "resolution_risk",
+                "when_not_to_bet",
+            ],
+            "next": "poly action=evaluate price=0.62 p=0.70 bankroll=1000 to work a real number.",
+        }
+    if key not in PRIMER:
+        return {"error": f"Unknown topic {key!r}.", "known": sorted(PRIMER)}
+    return {"ok": True, "topic": key, "explanation": PRIMER[key]}
+
+
+def evaluate(*, price: float, p: float, bankroll: float = 1000.0, question: str = "") -> dict[str, Any]:
+    """Work a single market end to end using YOUR probability, showing every step.
+
+    bounce() has no model — it says so — and without your own estimate there is no edge to
+    size. This is where you supply one and see exactly what it implies.
+    """
+    try:
+        price = float(price)
+        p = float(p)
+        bankroll = float(bankroll)
+    except (TypeError, ValueError):
+        return {"error": "price, p and bankroll must be numeric."}
+    if not 0 < price < 1:
+        return {"error": "price is a YES share in (0,1) — e.g. 0.62 for 62 cents."}
+    if not 0 < p < 1:
+        return {"error": "p is your probability in (0,1) — e.g. 0.70 for 70%."}
+    if bankroll <= 0:
+        return {"error": "bankroll must be positive."}
+
+    edge = p - price
+    side = "YES" if edge > 0 else "NO"
+    # Sizing is always done on the side you would actually take.
+    entry_price = price if side == "YES" else 1 - price
+    p_side = p if side == "YES" else 1 - p
+    k = kelly(p_side, entry_price)
+
+    stake = round(bankroll * float(k.get("f") or 0), 2)
+    shares = int(stake / entry_price) if entry_price > 0 and stake > 0 else 0
+    thin_edge = abs(edge) < 0.03
+
+    verdict = "NO-GO"
+    reason = ""
+    if thin_edge:
+        reason = (
+            f"Your {p:.0%} is only {abs(edge):.1%} from the market's {price:.0%}. That is inside "
+            "the error bar on your own estimate — no bet."
+        )
+    elif not k.get("f"):
+        reason = k.get("reason") or "Kelly returned zero."
+    elif stake < 5:
+        reason = f"Kelly says {stake} — too small to be worth the spread."
+    else:
+        verdict = "PAPER"
+        reason = (
+            f"{side} at {entry_price:.2f}, {abs(edge):.1%} edge. Quarter-Kelly sizes this at "
+            f"{stake} of a {bankroll:.0f} bankroll."
+        )
+
+    return {
+        "ok": True,
+        "question": question or None,
+        "market_price": round(price, 4),
+        "market_implied_prob": f"{price:.1%}",
+        "your_prob": f"{p:.1%}",
+        "edge": round(edge, 4),
+        "side": side,
+        "entry_price": round(entry_price, 4),
+        "kelly": k,
+        "stake_usd": stake if verdict == "PAPER" else 0.0,
+        "shares": shares if verdict == "PAPER" else 0,
+        "max_loss": stake if verdict == "PAPER" else 0.0,
+        "payoff_if_right": round(shares * (1 - entry_price), 2) if verdict == "PAPER" else 0.0,
+        "verdict": verdict,
+        "reasoning": reason,
+        "check_before_sizing": [
+            "Read the resolution criteria — you are betting on the wording, not just the outcome.",
+            "Check 24h volume; a thin book will not fill this at the screen price.",
+            "Write down WHY your number differs from the market. If you can't, there is no edge.",
+        ],
+        "disclaimer": (
+            "Paper sizing only. Live fills go through official Polymarket with your own wallet — "
+            "Jarvis does not custody keys or open extra accounts."
+        ),
+    }
+
+
 def dispatch(action: str = "scan", **kwargs: Any) -> dict[str, Any]:
     act = (action or "scan").lower()
+    if act in {"explain", "teach", "primer", "learn"}:
+        return explain(str(kwargs.get("topic") or ""))
+    if act in {"evaluate", "eval", "size", "edge"}:
+        return evaluate(
+            price=kwargs.get("price") or 0,
+            p=kwargs.get("p") or kwargs.get("prob") or kwargs.get("p_hat") or 0,
+            bankroll=float(kwargs.get("bankroll") or 1000.0),
+            question=str(kwargs.get("question") or ""),
+        )
     if act in {"kelly", "size"}:
         return kelly(float(kwargs.get("p") or kwargs.get("prob") or 0), float(kwargs.get("price") or 0))
     if act in {"bounce", "rotate", "grow"}:

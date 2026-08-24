@@ -71,7 +71,9 @@ FUNCTION_TOOLS = [
         (
             "Markets: quote, history, analyze, watchlist, scan, intel, advise, ticket, account, broker, "
             "trade, confirm, ibkr, options, poly. Advise = ENTER/NO-GO breakdown. poly = Polymarket public "
-            "Gamma scan/bounce (one book, paper Kelly, no extra accounts, no wallet keys). "
+            "Gamma scan/bounce plus mode=explain (how prediction-market pricing and Kelly work) and "
+            "mode=evaluate price=.. p=.. (work one market with YOUR probability). One book, paper "
+            "Kelly, no extra accounts, no wallet keys. "
             "action=ibkr takes mode=account|probe|permissions|quotes|orders|pnl|order|option|bracket|close|cancel. "
             "bracket sends entry+stop+target as one OCA so a fill is never left unprotected; close flattens a "
             "position; cancel pulls working orders and is NOT confirm-gated since it only reduces exposure. "
@@ -99,6 +101,11 @@ FUNCTION_TOOLS = [
             "target": {"type": "number", "description": "Bracket take-profit price."},
             "order_id": {"type": "integer", "description": "Working order to cancel."},
             "all_orders": {"type": "boolean", "description": "Cancel every working order."},
+            "price": {"type": "number", "description": "Polymarket YES share price in (0,1)."},
+            "p": {"type": "number", "description": "Your own probability estimate in (0,1)."},
+            "bankroll": {"type": "number"},
+            "topic": {"type": "string"},
+            "question": {"type": "string"},
         },
         ["action"],
     ),
@@ -272,6 +279,26 @@ FUNCTION_TOOLS = [
         ["action"],
     ),
     _fn(
+        "setups",
+        (
+            "Named market setups: which are live on a symbol, what each one IS and how it fails, "
+            "and a sized trade plan (entry/stop/target/shares from your risk budget) that feeds "
+            "straight into market action=ibkr mode=bracket. Technical heuristics off daily bars, "
+            "not forecasts - every plan carries its invalidation level."
+        ),
+        {
+            "action": {"type": "string", "enum": ["scan", "teach", "plan"]},
+            "symbol": {"type": "string"},
+            "setup": {
+                "type": "string",
+                "enum": ["trend_pullback", "breakout_20d", "oversold_in_uptrend", "momentum_cross", "range_fade"],
+            },
+            "risk": {"type": "number", "description": "Dollars you are willing to lose on this trade."},
+            "range": {"type": "string", "description": "History window, default 1y."},
+        },
+        ["action"],
+    ),
+    _fn(
         "oss",
         "Pull open-source from GitHub: search, readme, ingest, starter_pack, brain_pack (RAG/memory/LLM repos), awesome, public_apis, huggingface, youtube.",
         {
@@ -406,6 +433,8 @@ def tools_for(agent_id: str, *, allow_spawn: bool = False) -> list[dict]:
             continue
         if name == "market" and agent_id not in _MARKET_AGENTS:
             continue
+        if name == "setups" and agent_id not in _MARKET_AGENTS:
+            continue
         if name == "stack" and agent_id not in _STACK_AGENTS:
             continue
         if name == "engage" and agent_id not in _STACK_AGENTS:
@@ -517,6 +546,13 @@ def execute(name: str, arguments: dict[str, Any], *, session_id: str, agent_id: 
         return extract_mod.dispatch(arguments.get("action") or "url", **{k: v for k, v in arguments.items() if k != "action"})
     if name == "content":
         return ops.dispatch(arguments.get("action") or "dashboard", **{k: v for k, v in arguments.items() if k != "action"})
+    if name == "setups":
+        from . import setups as setups_mod
+
+        return setups_mod.dispatch(
+            arguments.get("action") or "scan",
+            **{k: v for k, v in arguments.items() if k != "action"},
+        )
     if name == "oss":
         from . import oss as oss_mod
 
