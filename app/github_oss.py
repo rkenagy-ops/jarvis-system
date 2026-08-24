@@ -197,6 +197,28 @@ def desk_pack(limit: int = 12) -> dict:
     return out
 
 
+SOCIAL_PACK = [
+    "InstaPy/InstaPy",
+    "GramAddict/bot",
+    "vvselijah/Claudegram",
+    "instaloader/instaloader",
+    "althonos/InstaLooter",
+    "subzeroid/instagrapi",
+]
+
+
+def social_pack(limit: int = 8) -> dict:
+    """Instagram OSS READMEs. Playbooks only — no unofficial login, no like/follow bots."""
+    out = _ingest_many(SOCIAL_PACK, limit)
+    out["pack"] = "social"
+    out["note"] = (
+        "READMEs only. InstaPy/GramAddict/instagrapi are unofficial bots — Jarvis will not log in, "
+        "farm follows, or scrape private accounts. Claudegram + Meta Graph API is the official path. "
+        "instaloader/instalooter inform public-media playbooks; live IG still goes through content+confirm."
+    )
+    return out
+
+
 def brain_pack(limit: int = 10) -> dict:
     out = _ingest_many(BRAIN_PACK, limit)
     out["pack"] = "brain"
@@ -301,6 +323,8 @@ def dispatch(action: str, **kwargs) -> Any:
         return jarvis_pack(int(kwargs.get("limit") or 16))
     if action in {"desk", "desk_pack"}:
         return desk_pack(int(kwargs.get("limit") or 12))
+    if action in {"social", "social_pack", "instagram_pack"}:
+        return social_pack(int(kwargs.get("limit") or 8))
     if action in {"growth", "growth_pack"}:
         return growth_pack(int(kwargs.get("limit") or 10))
     if action in {"upgrade", "self_upgrade"}:
@@ -315,4 +339,4 @@ def dispatch(action: str, **kwargs) -> Any:
         return huggingface(kwargs.get("query") or "", kwargs.get("kind") or "models")
     if action == "youtube":
         return youtube_transcript(kwargs.get("url") or kwargs.get("query") or "")
-    return {"error": f"Unknown oss action {action}", "actions": ["search", "readme", "ingest", "starter_pack", "brain_pack", "jarvis_pack", "desk_pack", "growth_pack", "self_upgrade", "awesome", "public_apis", "huggingface", "youtube"]}
+    return {"error": f"Unknown oss action {action}", "actions": ["search", "readme", "ingest", "starter_pack", "brain_pack", "jarvis_pack", "desk_pack", "social_pack", "growth_pack", "self_upgrade", "awesome", "public_apis", "huggingface", "youtube"]}

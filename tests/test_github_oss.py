@@ -22,11 +22,21 @@ def test_oss_unknown_action():
     assert "error" in out
     assert "jarvis_pack" in out["actions"]
     assert "desk_pack" in out["actions"]
+    assert "social_pack" in out["actions"]
 
 
 def test_desk_pack_listed():
     assert "Polymarket/py-clob-client" in github_oss.DESK_PACK
     assert "ccxt/ccxt" in github_oss.DESK_PACK
+
+
+def test_social_pack_listed():
+    assert "InstaPy/InstaPy" in github_oss.SOCIAL_PACK
+    assert "GramAddict/bot" in github_oss.SOCIAL_PACK
+    assert "vvselijah/Claudegram" in github_oss.SOCIAL_PACK
+    assert "subzeroid/instagrapi" in github_oss.SOCIAL_PACK
+    assert "instaloader/instaloader" in github_oss.SOCIAL_PACK
+    assert "althonos/InstaLooter" in github_oss.SOCIAL_PACK
 
 
 def test_jarvis_pack_covers_the_field():

@@ -8,6 +8,7 @@ from typing import Any
 from . import github_oss, memory, obsidian
 
 GROWTH_PACK = [
+    "vvselijah/Claudegram",
     "Polymarket/py-clob-client",
     "leon-ai/leon",
     "langchain-ai/langgraph",
