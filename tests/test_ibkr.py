@@ -327,3 +327,46 @@ def test_ib_names_falls_back_to_ib_insync(monkeypatch):
     monkeypatch.setattr(builtins, "__import__", no_ib_async)
     assert ibkr._ib_names("Stock") == ("INSYNC_STOCK",)
     assert "archived" in ibkr.ib_backend()
+
+
+def test_installed_ib_library_has_everything_we_call():
+    """ib_async reserves interface-breaking changes for major versions, so a future
+    bump could silently remove a method we depend on. Skips when neither is
+    installed (CI), runs for real wherever one is."""
+    import pytest
+
+    try:
+        mod = __import__("ib_async")
+    except ImportError:
+        try:
+            mod = __import__("ib_insync")
+        except ImportError:
+            pytest.skip("no IBKR client library installed")
+
+    for cls in ("IB", "Stock", "Option", "LimitOrder", "MarketOrder"):
+        assert hasattr(mod, cls), f"{mod.__name__} is missing {cls}"
+
+    # every ib.<method> app/ibkr.py calls, plus connect/disconnect
+    for method in (
+        "accountSummary", "accountValues", "bracketOrder", "cancelMktData", "cancelOrder",
+        "connect", "disconnect", "managedAccounts", "openTrades", "placeOrder", "portfolio",
+        "positions", "qualifyContracts", "reqAccountSummary", "reqMktData", "sleep",
+        "waitOnUpdate",
+    ):
+        assert hasattr(mod.IB, method), f"{mod.__name__}.IB is missing {method}"
+
+
+def test_bracket_order_signature_matches_our_call():
+    """place_bracket passes limitPrice/takeProfitPrice/stopLossPrice by keyword."""
+    import inspect
+
+    import pytest
+
+    try:
+        mod = __import__("ib_async")
+    except ImportError:
+        pytest.skip("ib_async not installed")
+
+    params = inspect.signature(mod.IB.bracketOrder).parameters
+    for name in ("action", "quantity", "limitPrice", "takeProfitPrice", "stopLossPrice"):
+        assert name in params, f"bracketOrder lost the {name} parameter"

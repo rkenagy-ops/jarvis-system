@@ -14,7 +14,9 @@ beautifulsoup4>=4.12.0
 yfinance>=0.2.40
 pandas>=2.2.0
 numpy>=2.0.0
-# ib_insync is archived upstream; ib_async is the maintained fork (same API).
+# ib_insync is archived upstream; ib_async is the maintained fork.
 # app/ibkr.py prefers ib_async and falls back to ib_insync if only that is present.
-ib_async>=1.0.1
+# Upper bound is deliberate: ib_async reserves interface-breaking changes for major
+# versions, so 3.x could break our call sites. Verified compatible against 2.1.0.
+ib_async>=2.1,<3
 markitdown>=0.1.0
