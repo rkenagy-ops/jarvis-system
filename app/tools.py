@@ -198,7 +198,6 @@ FUNCTION_TOOLS = [
                     "timer", "find", "plan_day", "skills", "situation", "vault", "daily", "calendar_sync",
                     "claude_app",
                 ],
-                ],
             },
             "url": {"type": "string"},
             "app": {"type": "string"},
