@@ -246,3 +246,27 @@ def test_bot_roster():
 def test_stack_tool_on_jarvis():
     names = {t.get("name") or t.get("type") for t in tools.tools_for("jarvis", allow_spawn=True)}
     assert "stack" in names
+
+
+def test_new_tools_are_registered():
+    jarvis = {t.get("name") or t.get("type") for t in tools.tools_for("jarvis", allow_spawn=True)}
+    for name in ("stack", "engage", "oss", "setups", "market"):
+        assert name in jarvis, f"{name} missing from jarvis toolset"
+
+
+def test_oss_is_ungated():
+    """Unrestricted access means every agent can reach it."""
+    for agent in ("jarvis", "scribe", "analyst", "trader", "designer"):
+        names = {t.get("name") or t.get("type") for t in tools.tools_for(agent, allow_spawn=False)}
+        assert "oss" in names, f"oss missing for {agent}"
+
+
+def test_setups_follows_market_gating():
+    scribe = {t.get("name") or t.get("type") for t in tools.tools_for("scribe", allow_spawn=False)}
+    assert ("setups" in scribe) == ("market" in scribe)
+
+
+def test_engage_follows_stack_gating():
+    for agent in ("jarvis", "social", "scribe", "analyst"):
+        names = {t.get("name") or t.get("type") for t in tools.tools_for(agent, allow_spawn=False)}
+        assert ("engage" in names) == ("stack" in names), f"engage/stack gating diverged for {agent}"
