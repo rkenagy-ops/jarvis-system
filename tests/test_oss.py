@@ -182,3 +182,48 @@ def test_install_runs_after_confirm(monkeypatch):
 
 def test_install_needs_a_target():
     assert "error" in oss.install()
+
+
+def test_fetch_builds_the_right_codeload_url(tmp_path, monkeypatch):
+    """The one thing only a live call would otherwise catch. Egress is blocked in CI,
+    so pin the URL shape instead of pretending the network was exercised."""
+    seen = {}
+
+    class FakeResponse:
+        status_code = 404
+        content = b""
+
+    def fake_fetch(url, **kw):
+        seen["url"] = url
+        return FakeResponse()
+
+    monkeypatch.setattr(oss, "OSS_ROOT", tmp_path / "oss")
+    monkeypatch.setattr(oss.guard, "fetch_public", fake_fetch)
+
+    oss.fetch("pola-rs/polars")
+    assert seen["url"] == "https://codeload.github.com/pola-rs/polars/tar.gz/HEAD"
+
+    oss.fetch("pola-rs/polars", "v1.2.3")
+    assert seen["url"] == "https://codeload.github.com/pola-rs/polars/tar.gz/v1.2.3"
+
+
+def test_fetch_reports_http_failure_cleanly(tmp_path, monkeypatch):
+    class FakeResponse:
+        status_code = 403
+        content = b""
+
+    monkeypatch.setattr(oss, "OSS_ROOT", tmp_path / "oss")
+    monkeypatch.setattr(oss.guard, "fetch_public", lambda url, **kw: FakeResponse())
+    out = oss.fetch("some/repo")
+    assert "error" in out
+    assert "403" in out["error"]
+
+
+def test_fetch_reports_transport_failure_cleanly(tmp_path, monkeypatch):
+    def boom(url, **kw):
+        raise ValueError("Blocked private/loopback URL")
+
+    monkeypatch.setattr(oss, "OSS_ROOT", tmp_path / "oss")
+    monkeypatch.setattr(oss.guard, "fetch_public", boom)
+    out = oss.fetch("some/repo")
+    assert "error" in out and "Blocked" in out["error"]
