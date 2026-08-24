@@ -320,6 +320,33 @@ FUNCTION_TOOLS = [
         ["action"],
     ),
     _fn(
+        "oss",
+        (
+            "Unrestricted open-source access: fetch, read, grep, vendor or ingest ANY public "
+            "GitHub repo - no allowlist, no curated pack, real source rather than just the README. "
+            "install runs pip on a fetched repo and takes a confirm_token."
+        ),
+        {
+            "action": {
+                "type": "string",
+                "enum": ["status", "search", "fetch", "tree", "read", "grep", "vendor", "ingest", "install"],
+            },
+            "repo": {"type": "string", "description": "owner/name of any public repo."},
+            "query": {"type": "string", "description": "search terms for action=search."},
+            "pattern": {"type": "string", "description": "regex for action=grep."},
+            "path": {"type": "string", "description": "file path inside the repo for action=read."},
+            "subdir": {"type": "string"},
+            "glob": {"type": "string"},
+            "ref": {"type": "string", "description": "branch/tag/sha. Defaults to the default branch."},
+            "package": {"type": "string", "description": "pip package name for action=install."},
+            "force": {"type": "boolean", "description": "re-download even if already fetched."},
+            "limit": {"type": "integer"},
+            "max_files": {"type": "integer"},
+            "confirm_token": {"type": "string"},
+        },
+        ["action"],
+    ),
+    _fn(
         "engage",
         (
             "Morning engagement run: find worthwhile posts and comment on them. Auto-posts only where "
@@ -477,6 +504,13 @@ def execute(name: str, arguments: dict[str, Any], *, session_id: str, agent_id: 
         return extract_mod.dispatch(arguments.get("action") or "url", **{k: v for k, v in arguments.items() if k != "action"})
     if name == "content":
         return ops.dispatch(arguments.get("action") or "dashboard", **{k: v for k, v in arguments.items() if k != "action"})
+    if name == "oss":
+        from . import oss as oss_mod
+
+        return oss_mod.dispatch(
+            arguments.get("action") or "status",
+            **{k: v for k, v in arguments.items() if k != "action"},
+        )
     if name == "engage":
         from . import engage as engage_mod
 
