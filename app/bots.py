@@ -31,6 +31,13 @@ SPECS: list[tuple[str, str, int]] = [
     ("bot-18-eval", "Score the latest briefing eval into Memory.", 86400),
     ("bot-19-rag", "Reindex vault embeddings if Ollama embed is up.", 21600),
     ("bot-20-finish", "Write finish checklist snapshot to daily note.", 86400),
+    (
+        "bot-21-engage",
+        "Morning engagement: engage action=run. Comment on 2-5 posts per network. "
+        "Auto-posts only on X/Threads/LinkedIn (official reply APIs). Instagram and Facebook "
+        "are drafted into the review queue — Meta has no endpoint for commenting on others' posts.",
+        86400,
+    ),
 ]
 
 

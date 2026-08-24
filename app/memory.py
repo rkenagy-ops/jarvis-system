@@ -112,6 +112,17 @@ def init() -> None:
                 expires_at REAL NOT NULL,
                 used INTEGER NOT NULL DEFAULT 0
             );
+            CREATE TABLE IF NOT EXISTS engagements (
+                network TEXT NOT NULL,
+                post_id TEXT NOT NULL,
+                account TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'posted',
+                comment TEXT NOT NULL DEFAULT '',
+                permalink TEXT NOT NULL DEFAULT '',
+                created_at REAL NOT NULL,
+                PRIMARY KEY (network, post_id)
+            );
+            CREATE INDEX IF NOT EXISTS engagements_created ON engagements(created_at);
             """
         )
         conn.executescript(
@@ -520,6 +531,49 @@ def set_job_enabled(job_id: str, enabled: bool) -> bool:
     with _db() as conn:
         cur = conn.execute("UPDATE jobs SET enabled=? WHERE id=?", (1 if enabled else 0, job_id))
         return cur.rowcount > 0
+
+
+def already_engaged(network: str, post_id: str) -> bool:
+    with _db() as conn:
+        row = conn.execute(
+            "SELECT 1 FROM engagements WHERE network=? AND post_id=?", (network, post_id)
+        ).fetchone()
+    return bool(row)
+
+
+def record_engagement(
+    network: str,
+    post_id: str,
+    *,
+    account: str = "",
+    status: str = "posted",
+    comment: str = "",
+    permalink: str = "",
+) -> None:
+    """Idempotent: the (network, post_id) primary key is what stops a repeat comment."""
+    with _db() as conn:
+        conn.execute(
+            """INSERT OR REPLACE INTO engagements(network, post_id, account, status, comment, permalink, created_at)
+               VALUES(?,?,?,?,?,?,?)""",
+            (network, post_id, account, status, comment[:2000], permalink, time.time()),
+        )
+
+
+def engagements_since(seconds: float) -> list[dict]:
+    cutoff = time.time() - seconds
+    with _db() as conn:
+        rows = conn.execute(
+            "SELECT * FROM engagements WHERE created_at >= ? ORDER BY created_at DESC", (cutoff,)
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def engagements_by_status(status: str, limit: int = 50) -> list[dict]:
+    with _db() as conn:
+        rows = conn.execute(
+            "SELECT * FROM engagements WHERE status=? ORDER BY created_at DESC LIMIT ?", (status, limit)
+        ).fetchall()
+    return [dict(r) for r in rows]
 
 
 def create_pending(kind: str, payload: dict, ttl_sec: int = 300) -> dict:

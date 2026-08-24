@@ -97,6 +97,23 @@ MANYCHAT_API_TOKEN = _clean(os.getenv("MANYCHAT_API_TOKEN"))
 CLICKFUNNELS_API_KEY = _clean(os.getenv("CLICKFUNNELS_API_KEY"))
 CLICKFUNNELS_API_BASE = _clean(os.getenv("CLICKFUNNELS_API_BASE"))
 
+# --- morning engagement run -------------------------------------------------
+# Threads and LinkedIn have official reply APIs; Instagram/Facebook do not, so
+# those two can only ever produce a review queue (see app/engage.py).
+THREADS_ACCESS_TOKEN = _clean(os.getenv("THREADS_ACCESS_TOKEN"))
+THREADS_USER_ID = _clean(os.getenv("THREADS_USER_ID"))
+LINKEDIN_ACCESS_TOKEN = _clean(os.getenv("LINKEDIN_ACCESS_TOKEN"))
+LINKEDIN_AUTHOR_URN = _clean(os.getenv("LINKEDIN_AUTHOR_URN"))
+IG_ACCESS_TOKEN = _clean(os.getenv("IG_ACCESS_TOKEN"))
+IG_USER_ID = _clean(os.getenv("IG_USER_ID"))
+FB_PAGE_TOKEN = _clean(os.getenv("FB_PAGE_TOKEN"))
+FB_PAGE_ID = _clean(os.getenv("FB_PAGE_ID"))
+ENGAGE_TOPICS = _clean(os.getenv("ENGAGE_TOPICS"))
+ENGAGE_VOICE = _clean(os.getenv("ENGAGE_VOICE"))
+ENGAGE_MAX_PER_NETWORK = int(_clean(os.getenv("ENGAGE_MAX_PER_NETWORK")) or "3")
+ENGAGE_DAILY_CAP = int(_clean(os.getenv("ENGAGE_DAILY_CAP")) or "15")
+ENGAGE_AUTO = (_clean(os.getenv("ENGAGE_AUTO")) or "false").lower() == "true"
+
 XAI_BASE = "https://api.x.ai/v1"
 XAI_REALTIME = "wss://api.x.ai/v1/realtime"
 GITHUB_API = "https://api.github.com"
@@ -113,6 +130,9 @@ def reload_env() -> None:
     global MS_CLIENT_ID, MS_TENANT, MS_REFRESH_TOKEN
     global IBKR_PORT, IBKR_CLIENT_ID, IBKR_LIVE, MARKETBEAST_ROOT
     global PUBLER_API_KEY, PUBLER_WORKSPACE_ID, KLAVIYO_API_KEY, MANYCHAT_API_TOKEN, CLICKFUNNELS_API_KEY, CLICKFUNNELS_API_BASE
+    global THREADS_ACCESS_TOKEN, THREADS_USER_ID, LINKEDIN_ACCESS_TOKEN, LINKEDIN_AUTHOR_URN
+    global IG_ACCESS_TOKEN, IG_USER_ID, FB_PAGE_TOKEN, FB_PAGE_ID
+    global ENGAGE_TOPICS, ENGAGE_VOICE, ENGAGE_MAX_PER_NETWORK, ENGAGE_DAILY_CAP, ENGAGE_AUTO
     XAI_API_KEY = _clean(os.getenv("XAI_API_KEY"))
     GITHUB_TOKEN = _clean(os.getenv("GITHUB_TOKEN"))
     GITHUB_USERNAME = _clean(os.getenv("GITHUB_USERNAME")) or "rkenagy-ops"
@@ -156,6 +176,19 @@ def reload_env() -> None:
     MANYCHAT_API_TOKEN = _clean(os.getenv("MANYCHAT_API_TOKEN"))
     CLICKFUNNELS_API_KEY = _clean(os.getenv("CLICKFUNNELS_API_KEY"))
     CLICKFUNNELS_API_BASE = _clean(os.getenv("CLICKFUNNELS_API_BASE"))
+    THREADS_ACCESS_TOKEN = _clean(os.getenv("THREADS_ACCESS_TOKEN"))
+    THREADS_USER_ID = _clean(os.getenv("THREADS_USER_ID"))
+    LINKEDIN_ACCESS_TOKEN = _clean(os.getenv("LINKEDIN_ACCESS_TOKEN"))
+    LINKEDIN_AUTHOR_URN = _clean(os.getenv("LINKEDIN_AUTHOR_URN"))
+    IG_ACCESS_TOKEN = _clean(os.getenv("IG_ACCESS_TOKEN"))
+    IG_USER_ID = _clean(os.getenv("IG_USER_ID"))
+    FB_PAGE_TOKEN = _clean(os.getenv("FB_PAGE_TOKEN"))
+    FB_PAGE_ID = _clean(os.getenv("FB_PAGE_ID"))
+    ENGAGE_TOPICS = _clean(os.getenv("ENGAGE_TOPICS"))
+    ENGAGE_VOICE = _clean(os.getenv("ENGAGE_VOICE"))
+    ENGAGE_MAX_PER_NETWORK = int(_clean(os.getenv("ENGAGE_MAX_PER_NETWORK")) or "3")
+    ENGAGE_DAILY_CAP = int(_clean(os.getenv("ENGAGE_DAILY_CAP")) or "15")
+    ENGAGE_AUTO = (_clean(os.getenv("ENGAGE_AUTO")) or "false").lower() == "true"
 
 
 def save_env(updates: dict[str, str]) -> None:
@@ -209,4 +242,9 @@ def status() -> dict:
         "klaviyo": bool(KLAVIYO_API_KEY),
         "manychat": bool(MANYCHAT_API_TOKEN),
         "clickfunnels": bool(CLICKFUNNELS_API_KEY),
+        "threads": bool(THREADS_ACCESS_TOKEN and THREADS_USER_ID),
+        "linkedin": bool(LINKEDIN_ACCESS_TOKEN and LINKEDIN_AUTHOR_URN),
+        "instagram_read": bool(IG_ACCESS_TOKEN and IG_USER_ID),
+        "facebook_read": bool(FB_PAGE_TOKEN and FB_PAGE_ID),
+        "engage_auto": ENGAGE_AUTO,
     }

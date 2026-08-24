@@ -319,6 +319,31 @@ FUNCTION_TOOLS = [
         },
         ["action"],
     ),
+    _fn(
+        "engage",
+        (
+            "Morning engagement run: find worthwhile posts and comment on them. Auto-posts only where "
+            "the network has an official reply API (X, Threads, LinkedIn-if-granted). Instagram and "
+            "Facebook have no such endpoint, so those are drafted into a review queue instead."
+        ),
+        {
+            "action": {
+                "type": "string",
+                "enum": ["status", "run", "draft", "queue", "done"],
+            },
+            "networks": {
+                "type": "string",
+                "description": "Comma separated: x,threads,linkedin,instagram,facebook. Default all.",
+            },
+            "per_network": {"type": "integer", "description": "How many posts per network (1-5)."},
+            "topics": {"type": "string", "description": "Comma separated topics/hashtags for discovery."},
+            "dry_run": {"type": "boolean", "description": "Draft everything, post nothing."},
+            "post_id": {"type": "string"},
+            "network": {"type": "string"},
+            "limit": {"type": "integer"},
+        },
+        ["action"],
+    ),
 ]
 
 _GITHUB_AGENTS = {"jarvis", "sentinel", "scout"}
@@ -342,6 +367,8 @@ def tools_for(agent_id: str, *, allow_spawn: bool = False) -> list[dict]:
         if name == "market" and agent_id not in _MARKET_AGENTS:
             continue
         if name == "stack" and agent_id not in _STACK_AGENTS:
+            continue
+        if name == "engage" and agent_id not in _STACK_AGENTS:
             continue
         if name == "workspace" and agent_id not in _FILE_AGENTS:
             continue
@@ -450,6 +477,13 @@ def execute(name: str, arguments: dict[str, Any], *, session_id: str, agent_id: 
         return extract_mod.dispatch(arguments.get("action") or "url", **{k: v for k, v in arguments.items() if k != "action"})
     if name == "content":
         return ops.dispatch(arguments.get("action") or "dashboard", **{k: v for k, v in arguments.items() if k != "action"})
+    if name == "engage":
+        from . import engage as engage_mod
+
+        return engage_mod.dispatch(
+            arguments.get("action") or "status",
+            **{k: v for k, v in arguments.items() if k != "action"},
+        )
     if name == "stack":
         from . import bots, stack
 

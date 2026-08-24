@@ -235,12 +235,12 @@ def test_publer_schedule_needs_confirm(monkeypatch):
     assert out.get("confirm_token") == "tok"
 
 
-def test_twenty_bots():
-    assert len(bots.SPECS) == 20
+def test_bot_roster():
+    assert len(bots.SPECS) == 21
     names = [s[0] for s in bots.SPECS]
     assert names[0].startswith("bot-01")
-    assert names[-1].startswith("bot-20")
-    assert len(set(names)) == 20
+    assert names[-1].startswith("bot-21")
+    assert len(set(names)) == 21
 
 
 def test_stack_tool_on_jarvis():
