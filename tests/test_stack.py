@@ -236,11 +236,11 @@ def test_publer_schedule_needs_confirm(monkeypatch):
 
 
 def test_bot_roster():
-    assert len(bots.SPECS) == 21
+    assert len(bots.SPECS) == 22
     names = [s[0] for s in bots.SPECS]
     assert names[0].startswith("bot-01")
-    assert names[-1].startswith("bot-21")
-    assert len(set(names)) == 21
+    assert names[-1].startswith("bot-22")
+    assert len(set(names)) == 22
 
 
 def test_stack_tool_on_jarvis():
@@ -250,7 +250,7 @@ def test_stack_tool_on_jarvis():
 
 def test_new_tools_are_registered():
     jarvis = {t.get("name") or t.get("type") for t in tools.tools_for("jarvis", allow_spawn=True)}
-    for name in ("stack", "engage", "oss", "setups", "market"):
+    for name in ("stack", "engage", "oss", "setups", "learning", "market"):
         assert name in jarvis, f"{name} missing from jarvis toolset"
 
 

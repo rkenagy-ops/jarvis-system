@@ -10,6 +10,231 @@ _stop = threading.Event()
 _thread: threading.Thread | None = None
 
 
+# --------------------------------------------------------------------------- job handlers
+#
+# Every scheduled bot resolves to a callable here. Before this registry existed the
+# mapping lived in a long if/elif chain inside run_job, and a bot added to bots.SPECS
+# without a matching branch fell through to the generic LLM fallback — so it would
+# *describe* doing its job instead of doing it. bot-21-engage shipped exactly that way.
+# test_every_bot_has_a_handler pins the two lists together.
+
+
+def _h_briefing() -> str:
+    return briefing()
+
+
+def _h_watchlist() -> str:
+    quotes = markets.watchlist()
+    movers = []
+    for q in quotes:
+        pct = q.get("change_pct")
+        if pct is not None and abs(pct) >= 1.5:
+            movers.append(f"{q['symbol']} {pct:+.2f}% @ {q.get('price')}")
+    summary = "Market pulse: " + (", ".join(movers) if movers else "no >1.5% movers on watchlist")
+    memory.remember(summary, kind="pulse", tags=["market", "autonomy"], importance=0.55, source_agent="trader")
+    try:
+        obsidian.daily(append=f"## Market pulse\n{summary}")
+    except Exception:
+        pass
+    return summary
+
+
+def _h_desk() -> str:
+    from . import intel
+
+    result = intel.advise(top=6)
+    bias = (result.get("regime") or {}).get("bias")
+    return f"Desk {bias}: {len(result.get('ideas') or [])} ideas → {result.get('vault')}"
+
+
+def _h_options() -> str:
+    from . import marketbeast
+
+    result = marketbeast.best_calls(top=8, universe="liquid")
+    return f"MarketBeast liquid scan: {len(result.get('picks') or [])} calls → {result.get('vault')}"
+
+
+def _h_poly() -> str:
+    from . import poly
+
+    result = poly.bounce()
+    return f"Polymarket {result.get('verdict')}: {len(result.get('ideas') or [])} books → {result.get('vault')}"
+
+
+def _h_calendar() -> str:
+    from . import msgraph
+
+    result = msgraph.sync_calendar()
+    if result.get("ok"):
+        return f"Calendar sync: {result.get('events', 0)} events, {result.get('reminders_added', 0)} reminders"
+    return f"Calendar sync: {result.get('error')}"
+
+
+def _h_upgrade() -> str:
+    from . import growth
+
+    result = growth.cycle(6)
+    count = result.get("count") if "count" in result else len(result.get("ingested") or [])
+    return f"Self-upgrade: ingested {count} — {result.get('note')}"
+
+
+def _h_backup() -> str:
+    from . import backup
+
+    result = backup.run()
+    return f"Backup {result.get('path')} ({result.get('files')} files)"
+
+
+def _h_news() -> str:
+    from . import intel
+
+    desk = intel.desk()
+    return f"News desk: {len(desk.get('linked') or [])} ticker-linked headlines"
+
+
+def _h_social_draft() -> str:
+    from . import ops
+
+    item = ops.draft(
+        "Daily social",
+        "Hook.\n\nValue.\n\nCTA — reply confirm to publish.",
+        kind="post",
+        platforms=["x", "linkedin"],
+    )
+    return f"Social draft {item.get('id')} saved. Not published."
+
+
+def _h_blog_draft() -> str:
+    from . import ops
+
+    item = ops.draft(
+        "Draft blog",
+        "Outline only. Edit in vault/Blog then confirm to push WordPress.",
+        kind="blog",
+        platforms=["blog"],
+    )
+    return f"Blog draft {item.get('id')}"
+
+
+def _h_publer() -> str:
+    from . import stack
+
+    st = stack.publer("me")
+    return "Publer ready" if st.get("ok") else f"Publer: {st.get('hint') or st.get('error') or 'keys missing'}"
+
+
+def _h_klaviyo() -> str:
+    from . import stack
+
+    st = stack.klaviyo("lists")
+    return "Klaviyo lists ok" if st.get("ok") else f"Klaviyo: {st.get('hint') or st.get('error') or 'key missing'}"
+
+
+def _h_manychat() -> str:
+    from . import stack
+
+    st = stack.manychat("info")
+    return "ManyChat page ok" if st.get("ok") else f"ManyChat: {st.get('hint') or st.get('error') or 'token missing'}"
+
+
+def _h_clickfunnels() -> str:
+    from . import stack
+
+    st = stack.clickfunnels("status")
+    return "ClickFunnels ok" if st.get("ok") else f"ClickFunnels: {st.get('hint') or st.get('error') or 'key missing'}"
+
+
+def _h_wordpress() -> str:
+    from . import ops as ops_mod
+
+    st = ops_mod.wordpress_probe()
+    return "WordPress REST ok" if st.get("ok") else f"WordPress: {st.get('reason') or st.get('hint') or 'blocked'}"
+
+
+def _h_ibkr_watch() -> str:
+    from . import ibkr
+
+    p = ibkr.probe()
+    return f"IBKR {p.get('port_name')} live={p.get('gateway_live')} — {p.get('hint')}"
+
+
+def _h_eval() -> str:
+    from . import eval as eval_mod
+
+    return f"Eval score {eval_mod.score('Scheduled briefing eval.').get('score')}"
+
+
+def _h_rag() -> str:
+    from . import rag
+
+    rag.reindex_vault()
+    return "Vault embeddings reindexed"
+
+
+def _h_finish() -> str:
+    from . import finish
+
+    c = finish.checklist()
+    return f"Finish {c.get('done')}/{c.get('total')} next={c.get('next')}"
+
+
+def _h_engage() -> str:
+    """The morning engagement pass — actually runs it rather than describing it."""
+    from . import engage
+
+    result = engage.run()
+    if not result.get("ok"):
+        return f"Engage failed: {result.get('error')}"
+    return (
+        f"Engage: {len(result.get('posted') or [])} posted, "
+        f"{len(result.get('queued_for_review') or [])} queued for review"
+    )
+
+
+def _h_learn() -> str:
+    from . import learning
+
+    result = learning.cycle()
+    return result.get("summary") or "Learning cycle finished."
+
+
+JOB_HANDLERS: dict[str, Any] = {
+    # canonical names
+    "morning-briefing": _h_briefing,
+    "briefing": _h_briefing,
+    "watchlist-scan": _h_watchlist,
+    "desk-advise": _h_desk,
+    "marketbeast-scan": _h_options,
+    "poly-scan": _h_poly,
+    "calendar-sync": _h_calendar,
+    "self-upgrade": _h_upgrade,
+    "weekly-backup": _h_backup,
+    # the numbered roster in bots.SPECS
+    "bot-01-briefing": _h_briefing,
+    "bot-02-watchlist": _h_watchlist,
+    "bot-03-desk": _h_desk,
+    "bot-04-options": _h_options,
+    "bot-05-poly": _h_poly,
+    "bot-06-calendar": _h_calendar,
+    "bot-07-upgrade": _h_upgrade,
+    "bot-08-backup": _h_backup,
+    "bot-09-news": _h_news,
+    "bot-10-social-draft": _h_social_draft,
+    "bot-11-blog-draft": _h_blog_draft,
+    "bot-12-publer": _h_publer,
+    "bot-13-klaviyo": _h_klaviyo,
+    "bot-14-manychat": _h_manychat,
+    "bot-15-clickfunnels": _h_clickfunnels,
+    "bot-16-wordpress": _h_wordpress,
+    "bot-17-ibkr-watch": _h_ibkr_watch,
+    "bot-18-eval": _h_eval,
+    "bot-19-rag": _h_rag,
+    "bot-20-finish": _h_finish,
+    "bot-21-engage": _h_engage,
+    "bot-22-learn": _h_learn,
+}
+
+
 def run_job(job: dict[str, Any]) -> str:
     name = job.get("name") or ""
     prompt = (job.get("prompt") or "").lower()
@@ -26,6 +251,15 @@ def run_job(job: dict[str, Any]) -> str:
     if name in alias:
         name = alias[name]
         job = {**job, "name": name}
+
+    handler = JOB_HANDLERS.get(job.get("name") or "") or JOB_HANDLERS.get(name)
+    if handler:
+        try:
+            summary = handler()
+        except Exception as exc:
+            summary = f"{name} failed: {type(exc).__name__}: {str(exc)[:200]}"
+        memory.mark_job(job["id"], summary[:400])
+        return summary
     if name in {"morning-briefing", "briefing"} or "briefing" in prompt:
         summary = briefing()
         memory.mark_job(job["id"], summary[:400])

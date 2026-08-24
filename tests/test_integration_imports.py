@@ -26,9 +26,9 @@ def test_every_app_module_imports():
 
 
 def test_new_modules_expose_dispatch():
-    from app import engage, oss, setups
+    from app import engage, learning, oss, setups
 
-    for mod in (engage, oss, setups):
+    for mod in (engage, learning, oss, setups):
         assert callable(mod.dispatch), f"{mod.__name__} has no dispatch"
         # an unknown action must be reported, never raise
         out = mod.dispatch("definitely-not-an-action")
@@ -41,10 +41,10 @@ def test_registered_tools_all_have_an_executor():
 
     names = {t.get("name") or (t.get("function") or {}).get("name") for t in tools.tools_for("jarvis", allow_spawn=True)}
     names.discard(None)
-    assert {"stack", "engage", "oss", "setups", "market"} <= names
+    assert {"stack", "engage", "oss", "setups", "learning", "market"} <= names
 
     source = (ROOT / "app" / "tools.py").read_text(encoding="utf-8")
-    for name in ("engage", "oss", "setups"):
+    for name in ("engage", "oss", "setups", "learning"):
         assert f'if name == "{name}":' in source, f"{name} is registered but has no executor branch"
 
 

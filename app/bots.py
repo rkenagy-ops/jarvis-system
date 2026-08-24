@@ -38,6 +38,13 @@ SPECS: list[tuple[str, str, int]] = [
         "are drafted into the review queue — Meta has no endpoint for commenting on others' posts.",
         86400,
     ),
+    (
+        "bot-22-learn",
+        "Learn from open source: search GitHub for repos filling a capability gap, read the "
+        "actual source, ingest it into the vault and reindex the RAG so every agent can "
+        "retrieve from it. Skips anything already studied. Never installs what it pulls.",
+        43200,
+    ),
 ]
 
 

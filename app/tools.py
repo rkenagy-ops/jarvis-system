@@ -279,6 +279,26 @@ FUNCTION_TOOLS = [
         ["action"],
     ),
     _fn(
+        "learning",
+        (
+            "Learn from open source. Searches GitHub for repos filling a capability gap, reads the "
+            "real source, ingests it into the vault and reindexes the RAG so every agent can retrieve "
+            "from it. Skips repos already studied. Reads and indexes only - never installs or runs "
+            "what it pulls."
+        ),
+        {
+            "action": {"type": "string", "enum": ["status", "gaps", "candidates", "study", "cycle"]},
+            "topic": {"type": "string", "description": "One topic key, or a raw GitHub search query."},
+            "topics": {"type": "string", "description": "Comma separated topics for a cycle."},
+            "repo": {"type": "string", "description": "owner/name to study directly."},
+            "max_repos": {"type": "integer"},
+            "max_files": {"type": "integer"},
+            "limit": {"type": "integer"},
+            "reindex": {"type": "boolean"},
+        },
+        ["action"],
+    ),
+    _fn(
         "setups",
         (
             "Named market setups: which are live on a symbol, what each one IS and how it fails, "
@@ -546,6 +566,13 @@ def execute(name: str, arguments: dict[str, Any], *, session_id: str, agent_id: 
         return extract_mod.dispatch(arguments.get("action") or "url", **{k: v for k, v in arguments.items() if k != "action"})
     if name == "content":
         return ops.dispatch(arguments.get("action") or "dashboard", **{k: v for k, v in arguments.items() if k != "action"})
+    if name == "learning":
+        from . import learning as learning_mod
+
+        return learning_mod.dispatch(
+            arguments.get("action") or "status",
+            **{k: v for k, v in arguments.items() if k != "action"},
+        )
     if name == "setups":
         from . import setups as setups_mod
 
