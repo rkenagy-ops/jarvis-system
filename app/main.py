@@ -26,6 +26,14 @@ except Exception:
     pass
 autonomy.start()
 try:
+    # The event half of autonomy. beat() handles timers; this makes a vault edit
+    # fire immediately instead of waiting for the next tick.
+    from . import events as _events
+
+    _events.watch_vault()
+except Exception:
+    pass
+try:
     from . import daily as daily_mod
 
     daily_mod.seed_owner()

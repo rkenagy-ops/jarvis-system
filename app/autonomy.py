@@ -601,6 +601,24 @@ def ensure_defaults() -> list[dict]:
     return seeded
 
 
+def emit(event: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Fire subscribed jobs now, instead of waiting for the next beat.
+
+    beat() is the timer half of autonomy; this is the event half. Both run jobs
+    through JOB_HANDLERS, so an event-fired job is the same code path as a
+    scheduled one and lands the same way in mark_job.
+    """
+    from . import events
+
+    return events.emit(event, payload)
+
+
+def subscribe(event: str, job_name: str) -> dict[str, Any]:
+    from . import events
+
+    return events.subscribe(event, job_name)
+
+
 def beat() -> list[str]:
     if not config.AUTONOMY_ENABLED:
         return []

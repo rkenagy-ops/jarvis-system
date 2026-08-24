@@ -279,6 +279,33 @@ FUNCTION_TOOLS = [
         ["action"],
     ),
     _fn(
+        "gaps",
+        (
+            "Capability gap audit. Each gap carries a probe that inspects the running system; "
+            "action=sync sets the tracked goals from those probes. A goal only closes when its "
+            "probe confirms the capability, and reopens if the capability disappears - never on "
+            "assertion."
+        ),
+        {"action": {"type": "string", "enum": ["audit", "sync"]}},
+        ["action"],
+    ),
+    _fn(
+        "events",
+        (
+            "Event-driven autonomy: subscribe jobs to named events and fire them immediately "
+            "instead of waiting for the next timer beat. action=watch starts a vault file "
+            "watcher (watchdog if installed, polling fallback otherwise). Event-fired jobs run "
+            "through the same JOB_HANDLERS registry as scheduled ones."
+        ),
+        {
+            "action": {"type": "string", "enum": ["status", "subscribe", "unsubscribe", "emit", "watch", "stop"]},
+            "event": {"type": "string", "description": "Event name, e.g. vault.changed."},
+            "job": {"type": "string", "description": "Job/bot name to run when the event fires."},
+            "payload": {"type": "object", "description": "Arbitrary context passed with the event."},
+        },
+        ["action"],
+    ),
+    _fn(
         "trust",
         (
             "Standing authorizations: let a bounded slice of live operations skip the confirm "
@@ -598,6 +625,17 @@ def execute(name: str, arguments: dict[str, Any], *, session_id: str, agent_id: 
         return extract_mod.dispatch(arguments.get("action") or "url", **{k: v for k, v in arguments.items() if k != "action"})
     if name == "content":
         return ops.dispatch(arguments.get("action") or "dashboard", **{k: v for k, v in arguments.items() if k != "action"})
+    if name == "gaps":
+        from . import gaps as gaps_mod
+
+        return gaps_mod.dispatch(arguments.get("action") or "audit")
+    if name == "events":
+        from . import events as events_mod
+
+        return events_mod.dispatch(
+            arguments.get("action") or "status",
+            **{k: v for k, v in arguments.items() if k != "action"},
+        )
     if name == "trust":
         from . import trust as trust_mod
 
