@@ -20,3 +20,10 @@ numpy>=2.0.0
 # versions, so 3.x could break our call sites. Verified compatible against 2.1.0.
 ib_async>=2.1,<3
 markitdown>=0.1.0
+
+# --- optional but used by shipped features -----------------------------------
+# events.py: real filesystem events. Without it the vault watcher silently
+# degrades to 30s polling, which still works but is not event-driven.
+watchdog>=4.0.0
+# desktop.py: CPU/RAM/battery in the HUD. Falls back to a Windows-only shim.
+psutil>=5.9.0
