@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import importlib
 import inspect
+import re
 from typing import Any, Callable
 
 from . import memory
@@ -128,26 +129,46 @@ GAPS: list[dict[str, Any]] = [
         "title": "Streamlined confirm tokens for trusted operations",
         "detail": "Bounded, expiring, audited standing grants so routine operations skip the token without removing the gate.",
         "probe": _probe_trusted_confirm,
+        "match": [{"confirm", "token"}, {"trust", "grant"}, {"confirm", "trusted"}],
     },
     {
         "key": "event_driven_autonomy",
         "title": "Event-driven autonomy instead of pure timers",
         "detail": "Jobs fire on events (file change, webhook, threshold) rather than waiting for the next beat.",
         "probe": _probe_event_driven,
+        "match": [{"event", "driven"}, {"event", "trigger"}, {"timer", "event"}],
     },
     {
         "key": "persistent_hud",
         "title": "Persistent visual HUD",
         "detail": "A native always-on window rather than a browser tab you must keep open at 127.0.0.1:8787.",
         "probe": _probe_persistent_hud,
+        "match": [{"persistent", "hud"}, {"persistent", "visual"}, {"native", "hud"}, {"persistent", "interface"}],
     },
     {
         "key": "native_device_control",
         "title": "Native device control beyond the desktop bridge",
         "detail": "Real Windows UI automation via pywinauto instead of launching executables and guessing.",
         "probe": _probe_device_control,
+        "match": [{"device", "control"}, {"native", "device"}, {"desktop", "bridge"}],
     },
 ]
+
+
+def _matches(gap: dict[str, Any], title: str) -> bool:
+    """Does an existing goal describe this gap, whatever it happens to be called?
+
+    sync() used to key on its own exact title, so a goal Jarvis had already written
+    for the same gap was never found — sync created a second one beside it and the
+    original stayed open forever. Every AND-group must match in full, which keeps
+    this from swallowing unrelated goals.
+    """
+    words = set(re.findall(r"[a-z]+", (title or "").lower()))
+    if not words:
+        return False
+    if gap["title"].lower() in (title or "").lower():
+        return True
+    return any(group <= words for group in gap.get("match", []))
 
 
 # --------------------------------------------------------------------------- audit
@@ -190,31 +211,37 @@ def sync() -> dict[str, Any]:
     result = audit()
     # list_goals(None) caps at 30 rows, which would silently create a duplicate goal
     # on a busy vault. The per-status queries are unbounded, so union those instead.
-    existing: dict[str, Any] = {}
+    everything: list[dict[str, Any]] = []
     for status in ("open", "done"):
-        for g in memory.list_goals(status):
-            existing.setdefault(g.get("title"), g)
+        everything.extend(memory.list_goals(status))
 
-    closed, opened, unchanged = [], [], []
+    closed, opened, unchanged, adopted = [], [], [], []
     for row in result["gaps"]:
-        title = GOAL_PREFIX + row["title"]
-        goal = existing.get(title)
-
-        if goal is None:
-            goal = memory.add_goal(
-                title,
-                next(g["detail"] for g in GAPS if g["key"] == row["key"]),
-                0.75,
-            )
-            existing[title] = goal
-
+        gap = next(g for g in GAPS if g["key"] == row["key"])
         want = "done" if row["closed"] else "open"
-        have = goal.get("status")
-        if have == want:
+
+        # Every goal describing this gap, whatever it is titled. A gap Jarvis had
+        # already logged under its own wording is adopted rather than duplicated —
+        # otherwise sync closes its own copy and the original stays open forever,
+        # which is exactly what happened.
+        targets = [g for g in everything if _matches(gap, g.get("title") or "")]
+        if not targets:
+            targets = [memory.add_goal(GOAL_PREFIX + row["title"], gap["detail"], 0.75)]
+            everything.extend(targets)
+        elif not any((g.get("title") or "").startswith(GOAL_PREFIX) for g in targets):
+            adopted.extend(g.get("title") for g in targets)
+
+        moved = False
+        for goal in targets:
+            if goal.get("status") == want:
+                continue
+            memory.update_goal(goal["id"], want)
+            goal["status"] = want
+            moved = True
+
+        if not moved:
             unchanged.append(row["key"])
             continue
-
-        memory.update_goal(goal["id"], want)
         (closed if row["closed"] else opened).append(row["key"])
         memory.remember(
             f"Capability gap {row['key']} -> {want}: {row['evidence']}",
@@ -229,7 +256,28 @@ def sync() -> dict[str, Any]:
         "goals_closed": closed,
         "goals_reopened": opened,
         "unchanged": unchanged,
+        "adopted_existing_goals": adopted or None,
         "note": "Goals are set from probes, never from assertion — a deleted capability reopens its goal.",
+    }
+
+
+def goals() -> dict[str, Any]:
+    """Every tracked goal and which gap, if any, it maps to.
+
+    Use this when the audit and the goal list disagree: it shows exactly which goals
+    each gap will move, and which goals no gap owns.
+    """
+    rows = []
+    for status in ("open", "done"):
+        for g in memory.list_goals(status):
+            title = g.get("title") or ""
+            owner = next((gap["key"] for gap in GAPS if _matches(gap, title)), None)
+            rows.append({"title": title, "status": status, "gap": owner})
+    return {
+        "ok": True,
+        "goals": rows,
+        "unowned": [r["title"] for r in rows if not r["gap"]],
+        "note": "A goal with gap=None is not managed by the audit and will never be closed by it.",
     }
 
 
@@ -239,4 +287,6 @@ def dispatch(action: str = "audit", **kwargs: Any) -> Any:
         return audit()
     if act in {"sync", "refresh", "update"}:
         return sync()
-    return {"error": f"unknown gaps action {act}", "actions": ["audit", "sync"]}
+    if act in {"goals", "tracked", "why"}:
+        return goals()
+    return {"error": f"unknown gaps action {act}", "actions": ["audit", "sync", "goals"]}
