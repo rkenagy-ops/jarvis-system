@@ -112,6 +112,27 @@ def init() -> None:
                 expires_at REAL NOT NULL,
                 used INTEGER NOT NULL DEFAULT 0
             );
+            CREATE TABLE IF NOT EXISTS trust_grants (
+                id TEXT PRIMARY KEY,
+                kind TEXT NOT NULL,
+                constraints TEXT NOT NULL DEFAULT '{}',
+                max_uses INTEGER NOT NULL DEFAULT 1,
+                used INTEGER NOT NULL DEFAULT 0,
+                created_at REAL NOT NULL,
+                expires_at REAL NOT NULL,
+                revoked INTEGER NOT NULL DEFAULT 0,
+                note TEXT NOT NULL DEFAULT ''
+            );
+            CREATE TABLE IF NOT EXISTS trust_audit (
+                id TEXT PRIMARY KEY,
+                grant_id TEXT NOT NULL DEFAULT '',
+                kind TEXT NOT NULL,
+                decision TEXT NOT NULL,
+                reason TEXT NOT NULL DEFAULT '',
+                payload TEXT NOT NULL DEFAULT '{}',
+                created_at REAL NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS trust_audit_created ON trust_audit(created_at);
             CREATE TABLE IF NOT EXISTS engagements (
                 network TEXT NOT NULL,
                 post_id TEXT NOT NULL,
@@ -531,6 +552,111 @@ def set_job_enabled(job_id: str, enabled: bool) -> bool:
     with _db() as conn:
         cur = conn.execute("UPDATE jobs SET enabled=? WHERE id=?", (1 if enabled else 0, job_id))
         return cur.rowcount > 0
+
+
+def add_trust_grant(kind: str, *, constraints: dict, max_uses: int, ttl_sec: float, note: str = "") -> dict:
+    now = time.time()
+    item = {
+        "id": uuid.uuid4().hex[:12],
+        "kind": kind,
+        "constraints": json.dumps(constraints or {}),
+        "max_uses": int(max_uses),
+        "used": 0,
+        "created_at": now,
+        "expires_at": now + float(ttl_sec),
+        "revoked": 0,
+        "note": note[:400],
+    }
+    with _db() as conn:
+        conn.execute(
+            """INSERT INTO trust_grants(id, kind, constraints, max_uses, used, created_at, expires_at, revoked, note)
+               VALUES(:id,:kind,:constraints,:max_uses,:used,:created_at,:expires_at,:revoked,:note)""",
+            item,
+        )
+    item["constraints"] = constraints or {}
+    return item
+
+
+def _grant_rows(rows) -> list[dict]:
+    out = []
+    for r in rows:
+        d = dict(r)
+        try:
+            d["constraints"] = json.loads(d.get("constraints") or "{}")
+        except json.JSONDecodeError:
+            d["constraints"] = {}
+        out.append(d)
+    return out
+
+
+def live_trust_grants(kind: str | None = None) -> list[dict]:
+    now = time.time()
+    sql = "SELECT * FROM trust_grants WHERE revoked=0 AND expires_at > ? AND used < max_uses"
+    args: list = [now]
+    if kind:
+        sql += " AND kind=?"
+        args.append(kind)
+    sql += " ORDER BY created_at DESC"
+    with _db() as conn:
+        return _grant_rows(conn.execute(sql, args).fetchall())
+
+
+def all_trust_grants() -> list[dict]:
+    with _db() as conn:
+        return _grant_rows(conn.execute("SELECT * FROM trust_grants ORDER BY created_at DESC LIMIT 100").fetchall())
+
+
+def use_trust_grant(grant_id: str) -> bool:
+    """Atomically spend one use. False if it expired, was revoked or was exhausted in between."""
+    with _db() as conn:
+        cur = conn.execute(
+            """UPDATE trust_grants SET used = used + 1
+               WHERE id=? AND revoked=0 AND expires_at > ? AND used < max_uses""",
+            (grant_id, time.time()),
+        )
+        return cur.rowcount > 0
+
+
+def revoke_trust_grant(grant_id: str) -> bool:
+    with _db() as conn:
+        return conn.execute("UPDATE trust_grants SET revoked=1 WHERE id=? AND revoked=0", (grant_id,)).rowcount > 0
+
+
+def revoke_all_trust_grants() -> int:
+    with _db() as conn:
+        return conn.execute("UPDATE trust_grants SET revoked=1 WHERE revoked=0").rowcount
+
+
+def log_trust_decision(
+    kind: str, decision: str, *, reason: str = "", grant_id: str = "", payload: dict | None = None
+) -> None:
+    with _db() as conn:
+        conn.execute(
+            "INSERT INTO trust_audit(id, grant_id, kind, decision, reason, payload, created_at) VALUES(?,?,?,?,?,?,?)",
+            (
+                uuid.uuid4().hex[:12],
+                grant_id,
+                kind,
+                decision,
+                reason[:400],
+                json.dumps(payload or {})[:2000],
+                time.time(),
+            ),
+        )
+
+
+def trust_audit(limit: int = 50) -> list[dict]:
+    with _db() as conn:
+        rows = conn.execute("SELECT * FROM trust_audit ORDER BY created_at DESC LIMIT ?", (limit,)).fetchall()
+    out = []
+    for r in rows:
+        d = dict(r)
+        try:
+            d["payload"] = json.loads(d.get("payload") or "{}")
+        except json.JSONDecodeError:
+            d["payload"] = {}
+        out.append(d)
+    return out
 
 
 def already_engaged(network: str, post_id: str) -> bool:

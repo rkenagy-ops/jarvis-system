@@ -279,6 +279,34 @@ FUNCTION_TOOLS = [
         ["action"],
     ),
     _fn(
+        "trust",
+        (
+            "Standing authorizations: let a bounded slice of live operations skip the confirm "
+            "token. A grant names ONE kind and carries a hard expiry, use count, order-value cap "
+            "and optional symbol/network scope - ceilings are enforced in code. Every decision is "
+            "audited whether it auto-approved or fell through to a confirm. No grants live (the "
+            "default) means everything confirms. oss_install can never carry a grant."
+        ),
+        {
+            "action": {"type": "string", "enum": ["status", "kinds", "grant", "revoke", "check", "audit"]},
+            "kind": {
+                "type": "string",
+                "enum": ["ibkr_stock", "ibkr_option", "ibkr_bracket", "ibkr_close", "publer_post", "engage_reply"],
+            },
+            "max_uses": {"type": "integer", "description": "How many operations this covers (capped at 25)."},
+            "ttl_sec": {"type": "integer", "description": "Lifetime in seconds (capped at 12h)."},
+            "minutes": {"type": "integer", "description": "Lifetime in minutes, if easier than ttl_sec."},
+            "max_notional": {"type": "number", "description": "Per-order value ceiling (capped at 25000)."},
+            "symbols": {"type": "string", "description": "Comma separated symbols this grant is limited to."},
+            "networks": {"type": "string", "description": "Comma separated networks, for engage_reply."},
+            "note": {"type": "string"},
+            "grant_id": {"type": "string"},
+            "all_grants": {"type": "boolean", "description": "Revoke every live grant."},
+            "limit": {"type": "integer"},
+        },
+        ["action"],
+    ),
+    _fn(
         "learning",
         (
             "Learn from open source. Searches GitHub for repos filling a capability gap, reads the "
@@ -455,6 +483,10 @@ def tools_for(agent_id: str, *, allow_spawn: bool = False) -> list[dict]:
             continue
         if name == "setups" and agent_id not in _MARKET_AGENTS:
             continue
+        # trust mints standing authorizations for live orders — control surface, not
+        # something every specialist should be able to reach.
+        if name == "trust" and agent_id not in {"jarvis", "trader"}:
+            continue
         if name == "stack" and agent_id not in _STACK_AGENTS:
             continue
         if name == "engage" and agent_id not in _STACK_AGENTS:
@@ -566,6 +598,13 @@ def execute(name: str, arguments: dict[str, Any], *, session_id: str, agent_id: 
         return extract_mod.dispatch(arguments.get("action") or "url", **{k: v for k, v in arguments.items() if k != "action"})
     if name == "content":
         return ops.dispatch(arguments.get("action") or "dashboard", **{k: v for k, v in arguments.items() if k != "action"})
+    if name == "trust":
+        from . import trust as trust_mod
+
+        return trust_mod.dispatch(
+            arguments.get("action") or "status",
+            **{k: v for k, v in arguments.items() if k != "action"},
+        )
     if name == "learning":
         from . import learning as learning_mod
 

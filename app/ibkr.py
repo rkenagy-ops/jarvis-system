@@ -421,6 +421,16 @@ def _need_confirm(kind: str, payload: dict, *, confirmed: bool, confirm_token: s
         if not consumed or consumed.get("kind") != kind:
             return {"error": "Invalid or expired confirm token. No IBKR order sent."}
         return None
+
+    # A standing grant can cover this without a token — bounded by kind, symbol,
+    # order value, use count and expiry, and audited either way. With no grants
+    # live (the default) this is a no-op and everything below still runs.
+    from . import trust
+
+    verdict = trust.check_and_spend(kind, payload)
+    if verdict.get("trusted"):
+        return None
+
     pending = memory.create_pending(kind, payload, ttl_sec=180)
     try:
         memory.set_fact("ibkr.last_confirm", pending["confirm_token"], source_agent="trader")
@@ -429,6 +439,7 @@ def _need_confirm(kind: str, payload: dict, *, confirmed: bool, confirm_token: s
     return {
         "blocked": True,
         "reason": "LIVE TWS. Reply confirm with this confirm_token to send the order.",
+        "trust": verdict.get("reason"),
         **pending,
     }
 
