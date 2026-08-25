@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
-from . import config, memory, obsidian, reminders, skills, widgets
+from . import memory, obsidian, reminders, skills, widgets
 
 OBSIDIAN_CANDIDATES = (
     Path.home() / "AppData/Local/Obsidian/Obsidian.exe",

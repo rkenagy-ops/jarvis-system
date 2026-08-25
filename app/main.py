@@ -39,6 +39,16 @@ try:
     daily_mod.seed_owner()
 except Exception:
     pass
+try:
+    # Reconcile the tracked capability goals against what is actually installed.
+    # Nothing called this before, so a capability could ship and the goal stayed
+    # open forever — which is precisely what kept happening. Runs last, after the
+    # event sources are up, or the event-driven probe would read an empty registry.
+    from . import gaps as _gaps
+
+    _BOOT_GAPS = _gaps.sync()
+except Exception as _exc:  # pragma: no cover - boot must never die on this
+    _BOOT_GAPS = {"error": str(_exc)[:200]}
 
 app = FastAPI(title="Super Jarvis", version=__version__, docs_url=None, redoc_url=None, openapi_url=None)
 app.mount("/static", StaticFiles(directory=config.WEB_DIR), name="static")

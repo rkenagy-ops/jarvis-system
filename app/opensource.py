@@ -8,7 +8,6 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
 from urllib.parse import urljoin, urlparse
-from xml.etree import ElementTree as ET
 
 import httpx
 

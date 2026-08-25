@@ -236,11 +236,11 @@ def test_publer_schedule_needs_confirm(monkeypatch):
 
 
 def test_bot_roster():
-    assert len(bots.SPECS) == 22
+    assert len(bots.SPECS) == 23
     names = [s[0] for s in bots.SPECS]
     assert names[0].startswith("bot-01")
-    assert names[-1].startswith("bot-22")
-    assert len(set(names)) == 22
+    assert names[-1].startswith("bot-23")
+    assert len(set(names)) == 23
 
 
 def test_stack_tool_on_jarvis():

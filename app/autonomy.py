@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import threading
-import time
 from typing import Any
 
 from . import config, markets, memory, obsidian, widgets
@@ -191,6 +190,14 @@ def _h_engage() -> str:
     )
 
 
+def _h_gaps() -> str:
+    from . import gaps
+
+    out = gaps.sync()
+    moved = (out.get("goals_closed") or []) + (out.get("goals_reopened") or [])
+    return f"{out.get('summary')} Goals moved: {', '.join(moved) if moved else 'none'}."
+
+
 def _h_learn() -> str:
     from . import learning
 
@@ -232,6 +239,7 @@ JOB_HANDLERS: dict[str, Any] = {
     "bot-20-finish": _h_finish,
     "bot-21-engage": _h_engage,
     "bot-22-learn": _h_learn,
+    "bot-23-gaps": _h_gaps,
 }
 
 

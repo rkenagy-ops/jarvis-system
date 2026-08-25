@@ -24,7 +24,7 @@ from __future__ import annotations
 import time
 from typing import Any
 
-from . import config, memory, oss, repo_index
+from . import memory, oss, repo_index
 
 # What Jarvis wants to get better at, and the search that finds it.
 TOPICS: dict[str, str] = {

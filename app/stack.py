@@ -11,7 +11,7 @@ from urllib.parse import urlparse
 
 import httpx
 
-from . import config, desktop, memory, obsidian
+from . import config, desktop, memory
 
 PUBLER = "https://app.publer.com/api/v1"
 # Networks where Publer can post a scheduled follow-up ("first") comment on YOUR OWN post.
@@ -457,7 +457,7 @@ def dashboards() -> dict[str, Any]:
         "wordpress": (config.WORDPRESS_URL.rstrip("/") + "/wp-admin") if config.WORDPRESS_URL else "https://wordpress.org",
     }
     opened = []
-    for name, url in urls.items():
+    for url in urls.values():
         parsed = urlparse(url)
         if parsed.scheme in {"http", "https"}:
             opened.append(desktop.open_url(url))

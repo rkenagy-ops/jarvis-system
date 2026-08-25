@@ -6,7 +6,7 @@ from typing import Any
 import websockets
 from fastapi import WebSocket, WebSocketDisconnect
 
-from . import config, memory, tools, xai
+from . import config, memory, tools
 from .agents import conductor_system
 from .brain import _parse_args
 

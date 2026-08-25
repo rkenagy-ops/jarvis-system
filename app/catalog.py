@@ -318,8 +318,10 @@ def holidays(query: str = "US") -> dict:
 
 
 def earthquakes(query: str = "week") -> dict:
+    # The chosen feed was computed and then dropped, so every call hit the same
+    # generic endpoint and "significant" returned the same thing as "day".
     feed = "significant_week" if "sig" in query or "week" in query else "4.5_day"
-    data = _get(f"https://earthquake.usgs.gov/fdsnws/event/1/query", params={"format": "geojson", "limit": 8, "orderby": "time", "minmagnitude": 4.5})
+    data = _get(f"https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/{feed}.geojson")
     feats = []
     for f in (data.get("features") or [])[:8]:
         p = f.get("properties") or {}

@@ -45,6 +45,13 @@ SPECS: list[tuple[str, str, int]] = [
         "retrieve from it. Skips anything already studied. Never installs what it pulls.",
         43200,
     ),
+    (
+        "bot-23-gaps",
+        "Reconcile tracked capability goals against what is actually installed. Probes each "
+        "capability and closes or reopens its goal from the evidence, so a shipped capability "
+        "stops being reported as an open gap.",
+        21600,
+    ),
 ]
 
 

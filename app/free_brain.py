@@ -6,7 +6,7 @@ import json
 import re
 from typing import Any
 
-from . import autonomy, catalog, github_oss, markets, memory, obsidian, widgets
+from . import autonomy, catalog, github_oss, markets, obsidian, widgets
 
 TICKER = re.compile(r"\b([A-Z]{1,5}(?:-USD)?)\b")
 

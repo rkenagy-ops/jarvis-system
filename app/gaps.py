@@ -281,6 +281,73 @@ def goals() -> dict[str, Any]:
     }
 
 
+def doctor() -> dict[str, Any]:
+    """Everything needed to diagnose a stuck gap, in one payload worth pasting.
+
+    Guessing at somebody else's machine is slow. This reports what is installed,
+    what the probes saw, what the goals say, and where the two disagree.
+    """
+    import platform
+    import sys
+
+    installed = {}
+    for mod in ("watchdog", "psutil", "ib_async", "ib_insync", "webview", "nicegui", "pywinauto"):
+        try:
+            importlib.import_module(mod)
+            installed[mod] = True
+        except ImportError:
+            installed[mod] = False
+
+    modules = {}
+    for mod in ("trust", "events", "gaps", "learning", "repo_index", "oss", "setups", "engage"):
+        try:
+            importlib.import_module(f"app.{mod}")
+            modules[mod] = True
+        except ImportError:
+            modules[mod] = False
+
+    sources: dict[str, Any] = {}
+    try:
+        events = importlib.import_module("app.events")
+        sources = {k: v.get("kind") for k, v in (getattr(events, "SOURCES", {}) or {}).items()}
+    except ImportError:
+        sources = {"error": "app.events not importable"}
+
+    audit_now = audit()
+    tracked = goals()
+
+    # The disagreement that matters: a gap the probe says is closed, but whose goal
+    # is still open — meaning sync has not run since the capability landed.
+    stale = []
+    by_gap = {}
+    for row in tracked["goals"]:
+        if row["gap"]:
+            by_gap.setdefault(row["gap"], []).append(row)
+    for row in audit_now["gaps"]:
+        for goal in by_gap.get(row["key"], []):
+            want = "done" if row["closed"] else "open"
+            if goal["status"] != want:
+                stale.append(f"{goal['title']!r} is {goal['status']} but the probe says {want}")
+
+    return {
+        "ok": True,
+        "python": sys.version.split()[0],
+        "platform": platform.platform(),
+        "packages": installed,
+        "app_modules": modules,
+        "event_sources": sources,
+        "audit": audit_now,
+        "tracked_goals": tracked["goals"],
+        "unowned_goals": tracked["unowned"],
+        "stale": stale or None,
+        "verdict": (
+            "Run gaps action=sync — the goals disagree with the probes."
+            if stale
+            else "Goals and probes agree."
+        ),
+    }
+
+
 def dispatch(action: str = "audit", **kwargs: Any) -> Any:
     act = (action or "audit").lower()
     if act in {"audit", "status", "check"}:
@@ -289,4 +356,6 @@ def dispatch(action: str = "audit", **kwargs: Any) -> Any:
         return sync()
     if act in {"goals", "tracked", "why"}:
         return goals()
-    return {"error": f"unknown gaps action {act}", "actions": ["audit", "sync", "goals"]}
+    if act in {"doctor", "diagnose", "debug"}:
+        return doctor()
+    return {"error": f"unknown gaps action {act}", "actions": ["audit", "sync", "goals", "doctor"]}

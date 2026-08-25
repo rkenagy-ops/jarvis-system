@@ -6,7 +6,6 @@ import json
 import re
 import sqlite3
 import threading
-from pathlib import Path
 
 from . import config, obsidian
 
@@ -127,7 +126,6 @@ def embed_vault(*, limit_files: int = 200) -> dict:
             return {"ok": False, "reason": "empty_embed"}
     except Exception as exc:
         return {"ok": False, "reason": str(exc)[:200]}
-    root = obsidian.vault()
     n = 0
     with _lock:
         conn = _conn()

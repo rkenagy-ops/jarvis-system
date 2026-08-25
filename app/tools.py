@@ -5,9 +5,8 @@ import re
 from typing import Any
 from urllib.parse import urlparse
 
-import httpx
 
-from . import catalog, config, github_client, github_oss, markets, memory, obsidian, opensource, ops, widgets, workspace
+from . import catalog, github_client, github_oss, markets, memory, obsidian, opensource, ops, widgets, workspace
 from .agents import AGENTS
 
 BUILTIN_TOOLS = [
@@ -88,7 +87,6 @@ FUNCTION_TOOLS = [
             "range": {"type": "string"},
             "symbols": {"type": "string"},
             "confirm_token": {"type": "string"},
-            "universe": {"type": "string"},
             "dte": {"type": "integer"},
             "expiry": {"type": "string"},
             "strike": {"type": "number"},
@@ -282,11 +280,13 @@ FUNCTION_TOOLS = [
         "gaps",
         (
             "Capability gap audit. Each gap carries a probe that inspects the running system; "
-            "action=sync sets the tracked goals from those probes. A goal only closes when its "
-            "probe confirms the capability, and reopens if the capability disappears - never on "
-            "assertion."
+            "action=sync sets the tracked goals from those probes and runs at boot and on "
+            "bot-23. A goal only closes when its probe confirms the capability, and reopens if "
+            "the capability disappears - never on assertion. action=goals shows which goal each "
+            "gap owns; action=doctor dumps packages, modules, event sources, probe evidence and "
+            "any goal that disagrees with its probe."
         ),
-        {"action": {"type": "string", "enum": ["audit", "sync"]}},
+        {"action": {"type": "string", "enum": ["audit", "sync", "goals", "doctor"]}},
         ["action"],
     ),
     _fn(
