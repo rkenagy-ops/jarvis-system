@@ -287,6 +287,17 @@ FUNCTION_TOOLS = [
         ["action"],
     ),
     _fn(
+        "health",
+        (
+            "Is Jarvis actually operational? Probes each subsystem for real and reports which "
+            "path a chat request would take right now (grok / ollama / free_brain) and why, every "
+            "prerequisite for live voice separately, and memory/autonomy/events/ibkr/vault/tools. "
+            "Each problem comes with the fix. Read-only; no probe can raise."
+        ),
+        {"action": {"type": "string", "enum": ["check", "brain", "voice", "subsystems"]}},
+        ["action"],
+    ),
+    _fn(
         "gaps",
         (
             "Capability gap audit. Each gap carries a probe that inspects the running system; "
@@ -662,6 +673,10 @@ def execute(name: str, arguments: dict[str, Any], *, session_id: str, agent_id: 
         return extract_mod.dispatch(arguments.get("action") or "url", **{k: v for k, v in arguments.items() if k != "action"})
     if name == "content":
         return ops.dispatch(arguments.get("action") or "dashboard", **{k: v for k, v in arguments.items() if k != "action"})
+    if name == "health":
+        from . import health as health_mod
+
+        return health_mod.dispatch(arguments.get("action") or "check")
     if name == "gaps":
         from . import gaps as gaps_mod
 

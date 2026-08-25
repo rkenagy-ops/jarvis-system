@@ -53,7 +53,7 @@ except Exception as _exc:  # pragma: no cover - boot must never die on this
 app = FastAPI(title="Super Jarvis", version=__version__, docs_url=None, redoc_url=None, openapi_url=None)
 app.mount("/static", StaticFiles(directory=config.WEB_DIR), name="static")
 
-_OPEN_PATHS = {"/", "/favicon.ico", "/api/health", "/api/guard/bootstrap"}
+_OPEN_PATHS = {"/", "/favicon.ico", "/api/health", "/api/health/full", "/api/guard/bootstrap"}
 
 
 @app.middleware("http")
@@ -237,6 +237,19 @@ def health() -> dict:
         "ollama": ollama_mod.probe(),
         "fortress": guard.posture(),
     }
+
+
+@app.get("/api/health/full")
+def health_full() -> dict:
+    """Deep check: which brain path is live and why, every voice prerequisite, subsystems.
+
+    Deliberately on the open-paths list beside /api/health. When the brain is degraded
+    the HUD chat is exactly what you cannot use to ask why, so this has to be reachable
+    from a browser without one.
+    """
+    from . import health as health_mod
+
+    return health_mod.check()
 
 
 @app.get("/api/status")
