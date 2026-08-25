@@ -285,6 +285,49 @@ INDEX: list[dict[str, Any]] = [
         "priority": 3,
         "why": "The full derivatives library. Heavy, but the reference for anything py_vollib cannot price.",
     },
+    {
+        "repo": "marketcalls/opengreeks",
+        "category": "options",
+        "priority": 2,
+        "why": "Rust core with a Python API, 5-180x faster than vollib, actively maintained. Worth swapping app/greeks.py for if a whole chain ever needs pricing at once.",
+    },
+    {
+        "repo": "ArturSepp/VanillaOptionPricers",
+        "category": "options",
+        "priority": 3,
+        "why": "Numba-vectorised greeks and IV fits over NumPy arrays - the pattern for pricing a full chain rather than one contract at a time.",
+    },
+    # --- systems close enough to Jarvis to steal from --------------------------
+    {
+        "repo": "HKUDS/Vibe-Trading",
+        "category": "trading",
+        "priority": 1,
+        "why": "A personal trading agent with backtesting and multi-agent orchestration - the nearest published thing to what Jarvis is trying to be on the trading side.",
+    },
+    {
+        "repo": "HKUDS/nanobot",
+        "category": "agents",
+        "priority": 1,
+        "why": "Self-hosted personal AI agent framework: WebUI, memory, MCP, multi-agent, workflow automation. Structurally the closest analogue to Jarvis itself.",
+    },
+    {
+        "repo": "Panniantong/Agent-Reach",
+        "category": "social",
+        "priority": 1,
+        "why": "Reads and searches Twitter, Reddit, YouTube and GitHub without API fees. Directly addresses engage.py's hard limit - no official API means no feed to read.",
+    },
+    {
+        "repo": "lsdefine/GenericAgent",
+        "category": "automation",
+        "priority": 2,
+        "why": "Self-evolving agent with a skill tree and real desktop/computer control - the direction desktop.py's pywinauto layer could grow in.",
+    },
+    {
+        "repo": "leon-ai/leon",
+        "category": "interface",
+        "priority": 3,
+        "why": "Long-running open-source personal assistant with offline speech in and out; useful reference for voice_live.py.",
+    },
     # --- risk ------------------------------------------------------------------
     {
         "repo": "dcajasn/Riskfolio-Lib",

@@ -364,6 +364,31 @@ FUNCTION_TOOLS = [
         ["action"],
     ),
     _fn(
+        "greeks",
+        (
+            "Black-Scholes greeks and implied volatility for options. analyze gives delta/gamma/"
+            "vega/theta per share AND per contract (x100), solves IV from a premium, and reports "
+            "delta-shares - the equivalent stock exposure, which is what to size against rather "
+            "than the contract count. size computes how many contracts fit a dollar risk budget. "
+            "Pure stdlib maths, no dependency, works offline."
+        ),
+        {
+            "action": {"type": "string", "enum": ["analyze", "iv", "size"]},
+            "symbol": {"type": "string"},
+            "spot": {"type": "number", "description": "Current underlying price."},
+            "strike": {"type": "number"},
+            "days": {"type": "number", "description": "Calendar days to expiry."},
+            "right": {"type": "string", "enum": ["C", "P"]},
+            "premium": {"type": "number", "description": "Market price per share; solves IV when sigma is absent."},
+            "sigma": {"type": "number", "description": "Volatility as a decimal (0.25 = 25%). Omit to solve from premium."},
+            "rate": {"type": "number", "description": "Risk-free rate, default 0.045."},
+            "dividend": {"type": "number"},
+            "qty": {"type": "integer", "description": "Contracts."},
+            "risk": {"type": "number", "description": "Dollar risk budget for action=size."},
+        },
+        ["action"],
+    ),
+    _fn(
         "setups",
         (
             "Named market setups: which are live on a symbol, what each one IS and how it fails, "
@@ -520,6 +545,8 @@ def tools_for(agent_id: str, *, allow_spawn: bool = False) -> list[dict]:
             continue
         if name == "setups" and agent_id not in _MARKET_AGENTS:
             continue
+        if name == "greeks" and agent_id not in _MARKET_AGENTS:
+            continue
         # trust mints standing authorizations for live orders — control surface, not
         # something every specialist should be able to reach.
         if name == "trust" and agent_id not in {"jarvis", "trader"}:
@@ -658,6 +685,13 @@ def execute(name: str, arguments: dict[str, Any], *, session_id: str, agent_id: 
 
         return learning_mod.dispatch(
             arguments.get("action") or "status",
+            **{k: v for k, v in arguments.items() if k != "action"},
+        )
+    if name == "greeks":
+        from . import greeks as greeks_mod
+
+        return greeks_mod.dispatch(
+            arguments.get("action") or "analyze",
             **{k: v for k, v in arguments.items() if k != "action"},
         )
     if name == "setups":
