@@ -8,6 +8,7 @@ const state = {
   chunks: [],
   ws: null,
   audioCtx: null,
+  playCtx: null,
   playTime: 0,
   useBrowserVoice: true,
 };
@@ -614,10 +615,28 @@ function pcmToBase64(float32) {
   return btoa(bin);
 }
 
+// state.playTime is a timestamp on ONE AudioContext's clock, but it lived on as
+// global state across contexts. toggleLive builds a fresh AudioContext every time it
+// is switched on, and a fresh context restarts currentTime at zero — so on the second
+// live session playTime still held a large value from the first one. Nothing reset it
+// (the "playTime < now" branch is false precisely when the value is stale-large), and
+// both gates that read it then failed closed: every incoming audio chunk was dropped
+// as "too far ahead", and the microphone gate decided Jarvis was still speaking and
+// sent silence upstream. She went deaf and mute together, until a page reload.
+// Binding the clock to the context that owns it is the fix.
+function audioClock() {
+  if (state.playCtx !== state.audioCtx) {
+    state.playCtx = state.audioCtx;
+    state.playTime = 0;
+  }
+  return state.playTime;
+}
+
 function playPcm16(b64) {
   const ctx = state.audioCtx || new AudioContext({ sampleRate: 24000 });
   state.audioCtx = ctx;
   if (ctx.state === "suspended") ctx.resume();
+  audioClock();
   const raw = atob(b64);
   const buf = new ArrayBuffer(raw.length);
   const view = new Uint8Array(buf);
@@ -631,7 +650,9 @@ function playPcm16(b64) {
   src.connect(ctx.destination);
   const now = ctx.currentTime;
   if (!state.playTime || state.playTime < now) state.playTime = now;
-  if (state.playTime > now + 0.9) return;
+  // Cap the queue so latency cannot grow without bound, but 0.9s was tight enough to
+  // start discarding the middle of an ordinary sentence.
+  if (state.playTime > now + 2.5) return;
   src.start(state.playTime);
   state.playTime += audio.duration;
   $("orb").classList.add("talk");
@@ -647,6 +668,18 @@ async function toggleLive() {
     setStatus("live voice offline");
     return;
   }
+  // Built here, inside the click. By the time ws.onopen fires the user gesture is
+  // over, and Chrome's autoplay policy starts a context created then in "suspended" —
+  // where nothing plays and onaudioprocess never fires.
+  const liveCtx = new AudioContext({ sampleRate: 24000 });
+  state.audioCtx = liveCtx;
+  state.playCtx = liveCtx;
+  state.playTime = 0;
+  try { await liveCtx.resume(); } catch {}
+  if (liveCtx.state !== "running") {
+    setStatus("browser blocked audio - click the page, then try live again");
+    return;
+  }
   const proto = location.protocol === "https:" ? "wss" : "ws";
   const ws = new WebSocket(`${proto}://${location.host}/ws/live?session_id=${state.sessionId}&token=${encodeURIComponent(state.token || "")}`);
   state.ws = ws;
@@ -654,10 +687,18 @@ async function toggleLive() {
     state.live = true;
     $("btn-live").classList.add("on");
     setStatus("live voice online");
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+    } catch (err) {
+      // A denied or missing microphone used to reject inside onopen and vanish.
+      setStatus(`microphone refused: ${err && err.name ? err.name : "unknown"}`);
+      addMsg("assistant", "The browser refused the microphone, so live voice has nothing to send. Allow the mic for 127.0.0.1 and try again.", "SYSTEM");
+      ws.close();
+      return;
+    }
     state.media = stream;
-    const ctx = new AudioContext({ sampleRate: 24000 });
-    state.audioCtx = ctx;
+    const ctx = liveCtx;
     const src = ctx.createMediaStreamSource(stream);
     const proc = ctx.createScriptProcessor(4096, 1, 1);
     const mute = ctx.createGain();
@@ -669,7 +710,7 @@ async function toggleLive() {
       if (!state.live || ws.readyState !== 1) return;
       const data = e.inputBuffer.getChannelData(0);
       const now = ctx.currentTime;
-      if ((state.playTime || 0) > now + 0.08) {
+      if (audioClock() > now + 0.08) {
         ws.send(JSON.stringify({ type: "audio", data: pcmToBase64(new Float32Array(data.length)) }));
         return;
       }
