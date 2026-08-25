@@ -15,6 +15,35 @@ if (-not (Test-Path ".\.env")) {
   Write-Host "Created .env - add XAI_API_KEY and GITHUB_TOKEN, or paste them in the HUD."
 }
 
+# An instance already on 8787 means the new process binds nothing, exits, and the
+# HUD keeps serving the OLD code -- so a pull looks applied but nothing changes.
+# Uvicorn's WinError 10048 does not say that, so say it here.
+$busy = $null
+try {
+  $busy = Get-NetTCPConnection -LocalPort 8787 -State Listen -ErrorAction SilentlyContinue
+} catch {
+  $busy = $null
+}
+if ($busy) {
+  $owner = $busy | Select-Object -First 1 -ExpandProperty OwningProcess
+  $proc = Get-Process -Id $owner -ErrorAction SilentlyContinue
+  $label = if ($proc) { "$($proc.ProcessName) (PID $owner)" } else { "PID $owner" }
+  Write-Host ""
+  Write-Host "Port 8787 is already in use by $label." -ForegroundColor Yellow
+  Write-Host "That is an older Super Jarvis still running. If it keeps serving, the HUD" -ForegroundColor Yellow
+  Write-Host "shows the OLD code and any git pull looks like it did nothing." -ForegroundColor Yellow
+  Write-Host ""
+  $answer = Read-Host "Stop it and start the updated build? [Y/n]"
+  if ($answer -eq "" -or $answer -match "^[Yy]") {
+    Stop-Process -Id $owner -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Seconds 2
+    Write-Host "Stopped $label." -ForegroundColor Green
+  } else {
+    Write-Host "Leaving it running. The updated code will NOT load." -ForegroundColor Red
+    exit 1
+  }
+}
+
 Write-Host "Starting Super Jarvis (rkenagy-ops/jarvis-system) on http://127.0.0.1:8787"
 $ollama = Get-Command ollama -ErrorAction SilentlyContinue
 if (-not $ollama) {
