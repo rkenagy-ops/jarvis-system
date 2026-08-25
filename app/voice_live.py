@@ -51,6 +51,12 @@ def session_config(session_id: str, voice: str | None = None) -> dict[str, Any]:
                 "threshold": 0.75,
                 "silence_duration_ms": 550,
                 "prefix_padding_ms": 280,
+                # Stated outright rather than left to the server default. Auto-response
+                # after a committed turn is the single thing standing between "she
+                # transcribed me" and "she answered me", and a default is not something
+                # to be relying on for it.
+                "create_response": True,
+                "interrupt_response": True,
             },
             "audio": {
                 "input": {"format": {"type": "audio/pcm", "rate": 24000}},
@@ -86,6 +92,7 @@ async def selftest(timeout: float = 12.0) -> dict[str, Any]:
 
     import asyncio
 
+    loop = asyncio.get_running_loop()
     url = f"{config.XAI_REALTIME}?model={config.VOICE_MODEL or 'grok-voice-think-fast-2.0'}"
     headers = {"Authorization": f"Bearer {config.XAI_API_KEY}"}
     seen: list[str] = []
@@ -93,9 +100,9 @@ async def selftest(timeout: float = 12.0) -> dict[str, Any]:
         async with websockets.connect(url, additional_headers=headers, max_size=8_000_000) as upstream:
             cfg = session_config("selftest")
             await upstream.send(json.dumps(cfg))
-            deadline = asyncio.get_event_loop().time() + timeout
-            while asyncio.get_event_loop().time() < deadline:
-                remaining = deadline - asyncio.get_event_loop().time()
+            deadline = loop.time() + timeout
+            while loop.time() < deadline:
+                remaining = deadline - loop.time()
                 raw = await asyncio.wait_for(upstream.recv(), timeout=max(0.1, remaining))
                 if isinstance(raw, bytes):
                     continue

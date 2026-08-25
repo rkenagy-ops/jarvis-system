@@ -88,3 +88,24 @@ def test_health_can_still_report_the_missing_package(monkeypatch):
     out = health.voice()
     assert out["ok"] is False
     assert any("websockets" in b for b in out["blockers"])
+
+
+def test_auto_response_is_declared_not_assumed():
+    """Auto-response after a committed turn is what separates "she transcribed me"
+    from "she answered me". Leaving it to a server default is how you get a session
+    that hears perfectly and never speaks."""
+    from app import voice_live
+
+    td = voice_live.session_config("s")["session"]["turn_detection"]
+    assert td["create_response"] is True
+    assert td["interrupt_response"] is True
+
+
+def test_the_session_still_carries_the_tools():
+    """No tools in the session means she answers but never runs anything."""
+    from app import voice_live
+
+    names = {t.get("name") or t.get("type") for t in voice_live.session_config("s")["session"]["tools"]}
+    assert "web_search" in names
+    assert len(names) > 10, "the function tools must ride along with the voice session"
+    assert "spawn_agents" not in names, "voice must not spawn a swarm mid-sentence"

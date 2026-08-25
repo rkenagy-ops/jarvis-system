@@ -119,3 +119,16 @@ def test_selftest_reports_a_stage_so_you_know_how_far_it_got():
     assert body["stage"] in {"config", "import", "connect", "session"}
     if not body["ok"]:
         assert body.get("error"), "a failure has to say what failed"
+
+
+def test_a_mistyped_path_suggests_the_real_one():
+    """A missing letter sent a real session chasing a git pull. Check the near miss first."""
+    body = client.get("/api/voice/selftes").json()
+    assert "/api/voice/selftest" in body["hint"]
+    assert "git pull" not in body["hint"], "a typo is not a stale process"
+
+
+def test_a_genuinely_unknown_path_still_blames_staleness():
+    """The near-miss check must not swallow the case it was built around."""
+    body = client.get("/api/nothing-remotely-like-a-route-here").json()
+    assert "git pull and restart" in body["hint"]

@@ -63,6 +63,25 @@ _OPEN_PATHS = {
 }
 
 
+def _closest_route(path: str) -> str | None:
+    """Did they just mistype it?
+
+    "/api/voice/selftes" is not a route, so the guard correctly refused it and then
+    sent the user off to git pull — for a missing letter. A near-miss against the real
+    route table is a far more likely explanation than a stale process, and it is
+    cheap to check.
+    """
+    import difflib
+
+    candidates = {
+        r.path
+        for r in app.routes
+        if getattr(r, "path", "").startswith("/api/") and "{" not in getattr(r, "path", "")
+    }
+    match = difflib.get_close_matches(path, candidates, n=1, cutoff=0.8)
+    return match[0] if match else None
+
+
 def _route_exists(path: str) -> bool:
     """Does this build actually serve this path?
 
@@ -106,6 +125,7 @@ async def fortress(request: Request, call_next):
             # there. Say what is missing and how to get it. The token itself is
             # never echoed — only the ways to obtain one.
             known = _route_exists(path)
+            near = None if known else _closest_route(path)
             return JSONResponse(
                 {
                     "error": "jarvis locked",
@@ -125,6 +145,8 @@ async def fortress(request: Request, call_next):
                     "hint": (
                         None
                         if known
+                        else f"Did you mean {near}? That route exists on this build."
+                        if near
                         else "If you expected this path to be open, the running process predates it — "
                         "git pull and restart, since the old build is still serving."
                     ),
