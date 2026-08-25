@@ -27,3 +27,9 @@ markitdown>=0.1.0
 watchdog>=4.0.0
 # desktop.py: CPU/RAM/battery in the HUD. Falls back to a Windows-only shim.
 psutil>=5.9.0
+# app/hud.py: wraps the HUD in a native OS window instead of a browser tab.
+pywebview>=5.0
+# app/desktop.py: real Windows UI automation (focus, type, read a window).
+# Windows-only, so the marker keeps it from breaking installs anywhere else.
+pywinauto>=0.6.8; sys_platform == "win32"
+

@@ -206,7 +206,14 @@ FUNCTION_TOOLS = [
     ),
     _fn(
         "desktop",
-        "PC/room assistant: open URL/app, YouTube, maps, google, notify, sysinfo, screenshot, clipboard, joke, note, remind, timer, find, plan_day, email_draft, situation, skills.",
+        (
+            "PC/room assistant: open URL/app, YouTube, maps, google, notify, sysinfo, screenshot, "
+            "clipboard, joke, note, remind, timer, find, plan_day, email_draft, situation, skills. "
+            "Real Windows UI control via pywinauto: windows (list titles), focus (bring one "
+            "forward), type (send keys into a named window), read (pull visible text out of one) - "
+            "action=ui reports whether that is available. hud_launch opens the HUD in a persistent "
+            "native window instead of a browser tab; action=hud reports whether it can."
+        ),
         {
             "action": {
                 "type": "string",
@@ -214,18 +221,21 @@ FUNCTION_TOOLS = [
                     "open", "app", "youtube", "maps", "google", "notify", "sysinfo",
                     "email_draft", "email_send", "screenshot", "clipboard", "joke", "note", "remind",
                     "timer", "find", "plan_day", "skills", "situation", "vault", "daily", "calendar_sync",
-                    "claude_app",
+                    "claude_app", "ui", "windows", "focus", "type", "read", "hud", "hud_launch",
                 ],
             },
             "url": {"type": "string"},
             "app": {"type": "string"},
             "query": {"type": "string"},
-            "title": {"type": "string"},
+            "title": {"type": "string", "description": "Window title (partial match) for focus/type/read."},
+            "window": {"type": "string", "description": "Alias for title."},
+            "keys": {"type": "string", "description": "Text to type into a window. Capped at 500 chars."},
             "body": {"type": "string"},
             "to": {"type": "string"},
             "subject": {"type": "string"},
             "when": {"type": "string"},
             "minutes": {"type": "integer"},
+            "limit": {"type": "integer"},
             "mode": {"type": "string"},
             "name": {"type": "string"},
         },

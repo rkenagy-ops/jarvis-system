@@ -93,6 +93,142 @@ def open_app(name: str) -> dict:
     return {"ok": True, "app": key, "exe": resolved}
 
 
+# --------------------------------------------------------------------------- pywinauto
+#
+# open_app() launches an executable and hopes. It cannot tell whether the window
+# appeared, cannot bring an already-running app forward, and cannot touch anything
+# inside it. pywinauto talks to the Windows UI Automation tree, so these do.
+#
+# Everything here degrades: no pywinauto, or not Windows, and each returns a clear
+# error rather than raising. The launch-and-hope path stays exactly as it was.
+
+
+def ui_available() -> bool:
+    if platform.system() != "Windows":
+        return False
+    try:
+        import pywinauto  # noqa: F401
+
+        return True
+    except ImportError:
+        return False
+
+
+def _ui_unavailable() -> dict:
+    if platform.system() != "Windows":
+        return {"error": f"UI automation is Windows-only; this is {platform.system()}."}
+    return {"error": "pywinauto not installed.", "fix": "pip install pywinauto"}
+
+
+def list_windows(limit: int = 30) -> dict:
+    """Every top-level window with a title, so the caller can name one."""
+    if not ui_available():
+        return _ui_unavailable()
+    try:
+        from pywinauto import Desktop
+
+        rows = []
+        for w in Desktop(backend="uia").windows():
+            try:
+                title = w.window_text()
+            except Exception:
+                continue
+            if title and title.strip():
+                rows.append({"title": _safe(title, 120), "class": w.class_name()})
+            if len(rows) >= limit:
+                break
+        return {"ok": True, "count": len(rows), "windows": rows}
+    except Exception as exc:
+        return {"error": str(exc)[:300]}
+
+
+def focus_window(title: str) -> dict:
+    """Bring a window forward by (partial) title. open_app cannot do this."""
+    title = (title or "").strip()
+    if not title:
+        return {"error": "title required."}
+    if not ui_available():
+        return _ui_unavailable()
+    try:
+        from pywinauto import Desktop
+
+        win = Desktop(backend="uia").window(title_re=f".*{re.escape(title)}.*")
+        win.wait("exists", timeout=5)
+        win.set_focus()
+        return {"ok": True, "focused": _safe(win.window_text(), 120)}
+    except Exception as exc:
+        return {"error": f"no window matching {title!r}: {str(exc)[:200]}"}
+
+
+def send_keys(keys: str, *, window: str = "") -> dict:
+    """Type into the focused window, or into one named by title.
+
+    Deliberately NOT a general keyboard driver: the text is capped, and a window has
+    to be focusable first, so this cannot quietly type into whatever happens to be in
+    front of it.
+    """
+    keys = (keys or "").strip()
+    if not keys:
+        return {"error": "keys required."}
+    if len(keys) > 500:
+        return {"error": f"refusing to send {len(keys)} characters; cap is 500."}
+    if not ui_available():
+        return _ui_unavailable()
+
+    if window:
+        focused = focus_window(window)
+        if not focused.get("ok"):
+            return focused
+    try:
+        from pywinauto.keyboard import send_keys as _send
+
+        _send(keys, with_spaces=True)
+        return {"ok": True, "sent": len(keys), "window": window or "focused"}
+    except Exception as exc:
+        return {"error": str(exc)[:300]}
+
+
+def window_text(title: str, limit: int = 4000) -> dict:
+    """Read the visible text out of a window — see what an app is showing."""
+    title = (title or "").strip()
+    if not title:
+        return {"error": "title required."}
+    if not ui_available():
+        return _ui_unavailable()
+    try:
+        from pywinauto import Desktop
+
+        win = Desktop(backend="uia").window(title_re=f".*{re.escape(title)}.*")
+        win.wait("exists", timeout=5)
+        chunks = []
+        for ctrl in win.descendants():
+            try:
+                t = ctrl.window_text()
+            except Exception:
+                continue
+            if t and t.strip():
+                chunks.append(t.strip())
+            if sum(len(c) for c in chunks) > limit:
+                break
+        return {"ok": True, "window": _safe(win.window_text(), 120), "text": "\n".join(chunks)[:limit]}
+    except Exception as exc:
+        return {"error": str(exc)[:300]}
+
+
+def ui_status() -> dict:
+    return {
+        "ok": True,
+        "platform": platform.system(),
+        "pywinauto": ui_available(),
+        "actions": ["windows", "focus", "type", "read"] if ui_available() else [],
+        "note": (
+            "Real UI automation via pywinauto."
+            if ui_available()
+            else _ui_unavailable().get("error")
+        ),
+    }
+
+
 def notify(title: str, body: str = "") -> dict:
     title = _safe(title or "Jarvis", 80)
     body = _safe(body or "", 200)
@@ -375,6 +511,29 @@ def claude_github_app() -> dict:
 def dispatch(action: str, **kwargs) -> Any:
     if action in {"claude_app", "claude_github", "install_claude"}:
         return claude_github_app()
+    # --- real UI control, beyond launch-and-hope
+    if action in {"ui", "ui_status"}:
+        return ui_status()
+    if action in {"windows", "list_windows"}:
+        return list_windows(int(kwargs.get("limit") or 30))
+    if action in {"focus", "focus_window"}:
+        return focus_window(str(kwargs.get("title") or kwargs.get("window") or ""))
+    if action in {"type", "send_keys"}:
+        return send_keys(
+            str(kwargs.get("keys") or kwargs.get("text") or ""),
+            window=str(kwargs.get("window") or kwargs.get("title") or ""),
+        )
+    if action in {"read", "window_text"}:
+        return window_text(str(kwargs.get("title") or kwargs.get("window") or ""))
+    # --- persistent native window
+    if action in {"hud", "hud_status"}:
+        from . import hud
+
+        return hud.status()
+    if action in {"hud_launch", "window"}:
+        from . import hud
+
+        return hud.launch_detached(str(kwargs.get("url") or ""))
     if action in {"comment", "hamburger", "switch_account", "engage", "feed"}:
         from . import stack
 
