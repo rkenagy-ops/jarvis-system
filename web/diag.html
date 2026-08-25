@@ -1,0 +1,179 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>Jarvis diagnostics</title>
+<style>
+  body { background:#0b0e13; color:#dfe6f0; font:14px/1.5 ui-monospace,Consolas,monospace; margin:0; padding:24px; }
+  h1 { font-size:18px; letter-spacing:.14em; text-transform:uppercase; color:#7fd7ff; margin:0 0 4px; }
+  p.lede { color:#8ea1b8; margin:0 0 20px; }
+  .row { display:flex; gap:12px; padding:9px 12px; border-left:3px solid #2a3242; background:#121722; margin-bottom:6px; align-items:flex-start; }
+  .row.pass { border-left-color:#3ddc84; }
+  .row.fail { border-left-color:#ff5c5c; }
+  .row.run  { border-left-color:#f5c451; }
+  .tag { width:64px; flex:none; font-weight:700; }
+  .pass .tag { color:#3ddc84; } .fail .tag { color:#ff5c5c; } .run .tag { color:#f5c451; }
+  .name { width:230px; flex:none; color:#b9c7da; }
+  .detail { flex:1; color:#8ea1b8; white-space:pre-wrap; word-break:break-word; }
+  button { background:#1b2534; color:#dfe6f0; border:1px solid #33405a; padding:9px 16px; cursor:pointer; font:inherit; margin-right:8px; }
+  button:hover { background:#243044; }
+  #out { margin-top:20px; width:100%; height:200px; background:#0e131c; color:#8ea1b8; border:1px solid #2a3242; font:12px/1.4 ui-monospace,monospace; padding:10px; }
+</style>
+</head>
+<body>
+<h1>Jarvis diagnostics</h1>
+<p class="lede">Runs the whole chain from inside this browser — the half the server cannot see. Copy the summary at the bottom.</p>
+<div>
+  <button id="run">Run all checks</button>
+  <button id="mic">Include microphone + audio</button>
+</div>
+<div id="rows"></div>
+<textarea id="out" readonly placeholder="The copyable summary appears here."></textarea>
+
+<script>
+const rows = document.getElementById("rows");
+const results = [];
+
+function row(name) {
+  const el = document.createElement("div");
+  el.className = "row run";
+  el.innerHTML = `<div class="tag">…</div><div class="name"></div><div class="detail">running</div>`;
+  el.querySelector(".name").textContent = name;
+  rows.appendChild(el);
+  return {
+    pass(detail) { el.className = "row pass"; el.querySelector(".tag").textContent = "PASS";
+                   el.querySelector(".detail").textContent = detail || ""; results.push(`PASS  ${name}  ${detail || ""}`); },
+    fail(detail) { el.className = "row fail"; el.querySelector(".tag").textContent = "FAIL";
+                   el.querySelector(".detail").textContent = detail || ""; results.push(`FAIL  ${name}  ${detail || ""}`); },
+  };
+}
+
+let token = localStorage.getItem("jarvis.token") || "";
+const H = () => (token ? { "X-Jarvis-Token": token } : {});
+
+async function checkBootstrap() {
+  const r = row("guard token");
+  try {
+    const res = await fetch("/api/guard/bootstrap");
+    const data = await res.json();
+    if (!data.token) return r.fail("bootstrap returned no token");
+    const changed = token && token !== data.token;
+    token = data.token;
+    localStorage.setItem("jarvis.token", token);
+    r.pass(changed ? "refreshed - the stored token was STALE, which alone breaks every call" : "ok");
+  } catch (e) { r.fail(String(e)); }
+}
+
+async function checkHealth() {
+  const r = row("GET /api/health/full");
+  try {
+    const res = await fetch("/api/health/full");
+    const d = await res.json();
+    d.ok ? r.pass(`${d.brain.active_path} brain, voice ok`) : r.fail(JSON.stringify(d.problems));
+  } catch (e) { r.fail(String(e)); }
+}
+
+async function checkChat() {
+  const r = row("POST /api/chat");
+  try {
+    const res = await fetch("/api/chat", {
+      method: "POST", headers: { "Content-Type": "application/json", ...H() },
+      body: JSON.stringify({ message: "reply with the single word pong", session_id: "diag" }),
+    });
+    if (!res.ok) return r.fail(`HTTP ${res.status} - ${(await res.text()).slice(0, 200)}`);
+    const d = await res.json();
+    d.text ? r.pass(`brain=${d.brain} - ${String(d.text).slice(0, 90)}`) : r.fail(JSON.stringify(d).slice(0, 200));
+  } catch (e) { r.fail(String(e)); }
+}
+
+async function checkStream() {
+  const r = row("POST /api/chat/stream");
+  try {
+    const res = await fetch("/api/chat/stream", {
+      method: "POST", headers: { "Content-Type": "application/json", ...H() },
+      body: JSON.stringify({ message: "reply with the single word pong", session_id: "diag" }),
+    });
+    if (!res.ok) return r.fail(`HTTP ${res.status} - ${(await res.text()).slice(0, 200)}`);
+    if (!res.body) return r.fail("no body to stream");
+    const reader = res.body.getReader(); const dec = new TextDecoder();
+    let buf = "", n = 0, kinds = [], first = null; const t0 = performance.now();
+    while (true) {
+      const { value, done } = await reader.read(); if (done) break;
+      buf += dec.decode(value, { stream: true });
+      const parts = buf.split("\n\n"); buf = parts.pop();
+      for (const p of parts) {
+        const line = p.replace(/^data: /, ""); if (!line) continue;
+        try { const ev = JSON.parse(line); n++; if (first === null) first = Math.round(performance.now() - t0); kinds.push(ev.type); } catch {}
+      }
+    }
+    n ? r.pass(`${n} events, first at ${first}ms: ${kinds.join(" ")}`) : r.fail("stream closed without a single event");
+  } catch (e) { r.fail(String(e)); }
+}
+
+async function checkSocket() {
+  const r = row("WebSocket /ws/live");
+  return new Promise((resolve) => {
+    let ws, settled = false;
+    const done = (fn, msg) => { if (settled) return; settled = true; fn(msg); try { ws.close(); } catch {} resolve(); };
+    try {
+      const proto = location.protocol === "https:" ? "wss" : "ws";
+      ws = new WebSocket(`${proto}://${location.host}/ws/live?session_id=diag&token=${encodeURIComponent(token)}`);
+      const timer = setTimeout(() => done(r.fail, "no 'ready' within 15s - the upstream socket never came up"), 15000);
+      ws.onmessage = (m) => {
+        if (typeof m.data !== "string") return;
+        let ev; try { ev = JSON.parse(m.data); } catch { return; }
+        if (ev.type === "ready") { clearTimeout(timer); done(r.pass, `ready, voice=${ev.voice}`); }
+        if (ev.type === "error") { clearTimeout(timer); done(r.fail, JSON.stringify(ev.message).slice(0, 300)); }
+      };
+      ws.onclose = (e) => { clearTimeout(timer);
+        done(r.fail, e.code === 4401 ? "closed 4401: the token was rejected" : `closed with code ${e.code}`); };
+      ws.onerror = () => { clearTimeout(timer); done(r.fail, "socket error before any message"); };
+    } catch (e) { done(r.fail, String(e)); }
+  });
+}
+
+async function checkAudio() {
+  const r = row("AudioContext");
+  try {
+    const ctx = new AudioContext({ sampleRate: 24000 });
+    await ctx.resume().catch(() => {});
+    if (ctx.state !== "running") return r.fail(`state=${ctx.state} - the browser is blocking audio, so nothing can play`);
+    const osc = ctx.createOscillator(); const gain = ctx.createGain();
+    gain.gain.value = 0.08; osc.frequency.value = 660;
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.start(); osc.stop(ctx.currentTime + 0.25);
+    r.pass("running - you should have heard a short beep. No beep means the tab or system is muted.");
+  } catch (e) { r.fail(String(e)); }
+}
+
+async function checkMic() {
+  const r = row("microphone");
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const label = (stream.getAudioTracks()[0] || {}).label || "unnamed device";
+    stream.getTracks().forEach((t) => t.stop());
+    r.pass(label);
+  } catch (e) { r.fail(`${e.name}: ${e.message} - live voice has nothing to send`); }
+}
+
+function summarise() {
+  document.getElementById("out").value =
+    [`Jarvis diagnostics — ${new Date().toISOString()}`, `page: ${location.href}`, `ua: ${navigator.userAgent}`, "", ...results].join("\n");
+}
+
+async function runAll(withAudio) {
+  rows.innerHTML = ""; results.length = 0;
+  await checkBootstrap();
+  await checkHealth();
+  await checkChat();
+  await checkStream();
+  await checkSocket();
+  if (withAudio) { await checkMic(); await checkAudio(); }
+  summarise();
+}
+
+document.getElementById("run").addEventListener("click", () => runAll(false));
+document.getElementById("mic").addEventListener("click", () => runAll(true));
+</script>
+</body>
+</html>

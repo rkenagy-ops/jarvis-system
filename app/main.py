@@ -60,6 +60,7 @@ _OPEN_PATHS = {
     "/api/health/full",
     "/api/voice/selftest",
     "/api/guard/bootstrap",
+    "/diag",
 }
 
 
@@ -329,6 +330,22 @@ def health_full() -> dict:
     from . import health as health_mod
 
     return health_mod.check()
+
+
+@app.get("/diag")
+def diagnostics_page() -> Response:
+    """The browser half of the diagnosis, which the server cannot see.
+
+    /api/health/full and /api/voice/selftest both come back clean while the HUD still
+    says nothing — because the remaining failures live in the browser: a stale token in
+    localStorage, a suspended AudioContext, a refused microphone, a stream that closes
+    without an event. This page runs the whole chain from inside the browser and prints
+    a copyable result, instead of another round of guessing.
+    """
+    return Response(
+        (config.WEB_DIR / "diag.html").read_text(encoding="utf-8"),
+        media_type="text/html",
+    )
 
 
 @app.get("/api/voice/selftest")

@@ -449,27 +449,64 @@ async function sendText(text, { speak = true } = {}) {
   $("input").value = "";
   setStatus("thinking");
   $("orb").classList.add("talk");
-  const res = await fetch("/api/chat/stream", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message: text, session_id: state.sessionId }),
-  });
-  const reader = res.body.getReader();
-  const dec = new TextDecoder();
-  let buf = "";
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    buf += dec.decode(value, { stream: true });
-    const parts = buf.split("\n\n");
-    buf = parts.pop();
-    for (const part of parts) {
-      const line = part.replace(/^data: /, "");
-      if (!line) continue;
-      try { handleEvent({ speak, ...JSON.parse(line) }); } catch {}
+  // Every failure below used to be silent. There was no res.ok check, no catch, and
+  // the caller does not await this — so a 401, a 500, a dropped connection or a null
+  // body became an unhandled rejection: the orb kept spinning on THINKING and nothing
+  // ever appeared. "Jarvis isn't responding" was, much of the time, this.
+  const post = () =>
+    fetch("/api/chat/stream", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: text, session_id: state.sessionId }),
+    });
+
+  try {
+    let res = await post();
+    if (res.status === 401) {
+      // A token from a previous run of the server is stale, not wrong. Get a new one.
+      await bootstrapGuard();
+      res = await post();
     }
+    if (!res.ok) {
+      let detail = `HTTP ${res.status}`;
+      try {
+        const body = await res.json();
+        if (body && body.error) detail = body.reason ? `${body.error} - ${body.reason}` : body.error;
+      } catch {}
+      throw new Error(detail);
+    }
+    if (!res.body) throw new Error("the response carried no body to stream");
+
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    let buf = "";
+    let seen = 0;
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      const parts = buf.split("\n\n");
+      buf = parts.pop();
+      for (const part of parts) {
+        const line = part.replace(/^data: /, "");
+        if (!line) continue;
+        let ev;
+        try { ev = JSON.parse(line); } catch { continue; }
+        seen++;
+        // A handler that throws must not kill the rest of the stream, and must not
+        // disappear either.
+        try { handleEvent({ speak, ...ev }); } catch (err) { console.error("event handler failed", ev, err); }
+      }
+    }
+    if (!seen) throw new Error("the stream closed without sending a single event");
+  } catch (err) {
+    const msg = (err && err.message) || String(err);
+    setStatus(`chat failed: ${msg}`);
+    addMsg("assistant", `I could not answer: ${msg}`, "SYSTEM");
+    console.error("sendText failed", err);
+  } finally {
+    $("orb").classList.remove("talk");
   }
-  $("orb").classList.remove("talk");
 }
 
 function spokenExcerpt(text, limit = 180) {
