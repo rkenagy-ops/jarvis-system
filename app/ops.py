@@ -14,6 +14,11 @@ import httpx
 
 from . import config, memory, obsidian
 
+# Hoisted out of the f-string it used to live in: a backslash inside an f-string
+# expression is a syntax error before Python 3.12, which made this module refuse to
+# import on 3.11 and took the whole app down with it.
+_ORDERED = re.compile(r"^\d+\. ")
+
 PLATFORMS = ("x", "instagram", "facebook", "linkedin", "tiktok", "youtube", "pinterest", "threads", "blog", "amazon", "email")
 
 
@@ -67,8 +72,8 @@ def md_to_html(md: str) -> str:
             out.append(f"<h1>{_inline(line[2:])}</h1>")
         elif line.startswith("- "):
             out.append(f"<li>{_inline(line[2:])}</li>")
-        elif re.match(r"^\d+\. ", line):
-            out.append(f"<li>{_inline(re.sub(r'^\d+\. ', '', line))}</li>")
+        elif _ORDERED.match(line):
+            out.append(f"<li>{_inline(_ORDERED.sub('', line))}</li>")
         else:
             out.append(f"<p>{_inline(line)}</p>")
     html_body = "\n".join(out)

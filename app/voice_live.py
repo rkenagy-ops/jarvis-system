@@ -1,14 +1,34 @@
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any
 
-import websockets
 from fastapi import WebSocket, WebSocketDisconnect
 
 from . import config, memory, tools
 from .agents import conductor_system
 from .brain import _parse_args
+
+# Voice failures used to reach only the browser console. The server log is what
+# gets pasted when something is wrong, and it said nothing about voice at all.
+log = logging.getLogger("jarvis.voice")
+
+
+def _websockets():
+    """Import the client library on demand.
+
+    This used to be a module-level import, and main.py imports this module at the top
+    of its own import block — so a missing or broken `websockets` did not merely
+    disable voice, it stopped the whole app from starting. That is the difference
+    between "Jarvis lost her voice" and "Jarvis is not responding", and it made the
+    two indistinguishable. Worse, health.voice() reports exactly this condition and
+    could never run to report it. Now the failure stays inside voice, and the answer
+    arrives over the socket that asked for it.
+    """
+    import websockets  # noqa: PLC0415 - deliberately deferred
+
+    return websockets
 
 
 def session_config(session_id: str, voice: str | None = None) -> dict[str, Any]:
@@ -46,10 +66,81 @@ def session_config(session_id: str, voice: str | None = None) -> dict[str, Any]:
     }
 
 
+async def selftest(timeout: float = 12.0) -> dict[str, Any]:
+    """Open the real realtime socket, send our real session config, report the answer.
+
+    health.voice() checks prerequisites — a key, a URL, the package. It cannot tell you
+    whether xAI *accepted* the session, and that is the failure that looks like "she
+    hears me but never answers": the transcript comes back because the socket is up,
+    while the session.update that carries the voice and the 38 tools was rejected, so
+    no response is ever generated. This asks the question directly.
+    """
+    if not config.XAI_API_KEY:
+        return {"ok": False, "stage": "config", "error": "XAI_API_KEY is not set."}
+    if config.OFFLINE:
+        return {"ok": False, "stage": "config", "error": "OFFLINE is true, so the socket is never opened."}
+    try:
+        websockets = _websockets()
+    except Exception as exc:
+        return {"ok": False, "stage": "import", "error": f"websockets will not import: {exc}"}
+
+    import asyncio
+
+    url = f"{config.XAI_REALTIME}?model={config.VOICE_MODEL or 'grok-voice-think-fast-2.0'}"
+    headers = {"Authorization": f"Bearer {config.XAI_API_KEY}"}
+    seen: list[str] = []
+    try:
+        async with websockets.connect(url, additional_headers=headers, max_size=8_000_000) as upstream:
+            cfg = session_config("selftest")
+            await upstream.send(json.dumps(cfg))
+            deadline = asyncio.get_event_loop().time() + timeout
+            while asyncio.get_event_loop().time() < deadline:
+                remaining = deadline - asyncio.get_event_loop().time()
+                raw = await asyncio.wait_for(upstream.recv(), timeout=max(0.1, remaining))
+                if isinstance(raw, bytes):
+                    continue
+                event = json.loads(raw)
+                etype = event.get("type") or ""
+                seen.append(etype)
+                if etype == "session.updated":
+                    return {
+                        "ok": True,
+                        "stage": "session",
+                        "events": seen,
+                        "tools_offered": len(cfg["session"]["tools"]),
+                        "voice": cfg["session"]["voice"],
+                        "note": "xAI accepted the session. If voice is still silent the problem is in the browser: microphone permission, or the tab is muted.",
+                    }
+                if etype == "error":
+                    return {
+                        "ok": False,
+                        "stage": "session",
+                        "events": seen,
+                        "error": event.get("error") or event,
+                        "note": "The socket opened but xAI rejected our session config, so no response is ever generated. That is why she transcribes you and never answers.",
+                    }
+    except Exception as exc:
+        return {"ok": False, "stage": "connect", "events": seen, "error": f"{type(exc).__name__}: {str(exc)[:300]}"}
+    return {"ok": False, "stage": "session", "events": seen, "error": f"No session.updated within {timeout}s."}
+
+
 async def handle_live(ws: WebSocket, session_id: str, voice: str | None = None) -> None:
     await ws.accept()
     if not config.XAI_API_KEY:
         await ws.send_json({"type": "error", "message": "XAI_API_KEY is not set."})
+        await ws.close()
+        return
+
+    try:
+        websockets = _websockets()
+    except Exception as exc:
+        await ws.send_json({
+            "type": "error",
+            "message": (
+                f"Live voice needs the websockets package and it will not import ({exc}). "
+                "Run: .venv\\Scripts\\python.exe -m pip install websockets"
+            ),
+        })
         await ws.close()
         return
 
@@ -59,6 +150,7 @@ async def handle_live(ws: WebSocket, session_id: str, voice: str | None = None) 
 
     try:
         async with websockets.connect(url, additional_headers=headers, max_size=8_000_000) as upstream:
+            log.info("live voice connected to %s", config.XAI_REALTIME)
             await upstream.send(json.dumps(session_config(session_id, voice)))
             await ws.send_json({"type": "ready", "voice": voice or config.VOICE})
 
@@ -155,8 +247,11 @@ async def handle_live(ws: WebSocket, session_id: str, voice: str | None = None) 
                         # Wait is handled client-side; request continuation.
                         await upstream.send(json.dumps({"type": "response.create"}))
                     elif etype == "error":
-                        await ws.send_json({"type": "error", "message": event.get("error") or event})
+                        detail = event.get("error") or event
+                        log.error("xai realtime error: %s", detail)
+                        await ws.send_json({"type": "error", "message": detail})
                     elif etype in ("session.updated", "session.created", "conversation.created"):
+                        log.info("xai realtime %s", etype)
                         await ws.send_json({"type": "status", "event": etype})
 
             import asyncio
@@ -171,6 +266,7 @@ async def handle_live(ws: WebSocket, session_id: str, voice: str | None = None) 
                 if exc and not isinstance(exc, (WebSocketDisconnect, websockets.ConnectionClosed)):
                     await ws.send_json({"type": "error", "message": str(exc)})
     except Exception as exc:
+        log.exception("live voice failed: %s", exc)
         try:
             await ws.send_json({"type": "error", "message": str(exc)})
         except Exception:

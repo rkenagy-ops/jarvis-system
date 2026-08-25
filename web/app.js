@@ -408,6 +408,21 @@ function handleEvent(ev) {
     last.textContent += ev.text;
     $("transcript").scrollTop = $("transcript").scrollHeight;
   }
+  if (ev.type === "assistant_delta" && ev.text) {
+    // Live voice streams its transcript through this event; nothing consumed it,
+    // so the spoken answer left no trace on screen until the turn ended.
+    $("orb").classList.add("talk");
+    let last = $("transcript").querySelector(".msg.assistant:last-child .stream");
+    if (!last) {
+      const wrap = document.createElement("div");
+      wrap.className = "msg assistant";
+      wrap.innerHTML = `<div class="who">JARVIS</div><div class="stream"></div>`;
+      $("transcript").appendChild(wrap);
+      last = wrap.querySelector(".stream");
+    }
+    last.textContent += ev.text;
+    $("transcript").scrollTop = $("transcript").scrollHeight;
+  }
   if (ev.type === "assistant") addMsg("assistant", ev.text, "JARVIS");
   if (ev.type === "user") addMsg("user", ev.text, "YOU");
   if (ev.type === "error") {
@@ -663,14 +678,25 @@ async function toggleLive() {
     state.processor = proc;
   };
   ws.onmessage = (m) => {
-    const ev = JSON.parse(m.data);
+    // The server relays upstream binary frames as-is, and a Blob is not JSON.
+    // Parsing it unconditionally threw and silently dropped the message.
+    if (typeof m.data !== "string") return;
+    let ev;
+    try { ev = JSON.parse(m.data); } catch { return; }
     if (ev.type === "audio" && ev.data) playPcm16(ev.data);
     else handleEvent(ev);
   };
-  ws.onclose = () => {
+  ws.onerror = () => setStatus("live voice socket error - see the server log");
+  ws.onclose = (e) => {
     state.live = false;
     $("btn-live").classList.remove("on");
-    setStatus("live voice closed");
+    // 4401 is our own code for a rejected token. "closed" told you nothing.
+    if (e && e.code === 4401) {
+      setStatus("live voice refused: bad token - reload the HUD");
+      addMsg("assistant", "Live voice was refused because the token was rejected. Reload the HUD to pick up a fresh one.", "SYSTEM");
+    } else {
+      setStatus("live voice closed");
+    }
   };
 }
 

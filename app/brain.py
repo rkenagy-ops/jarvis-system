@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import queue
+import threading
 from collections.abc import Callable, Iterator
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
@@ -9,6 +11,27 @@ from . import config, free_brain, memory, ollama as ollama_mod, tools, xai
 from .agents import AGENTS, conductor_system, get, specialist_system
 
 EventFn = Callable[[dict[str, Any]], None]
+
+
+def _run_tool(name: str, args: dict[str, Any], *, session_id: str, agent_id: str) -> Any:
+    """Run a tool and turn its failure into an answer instead of a dead turn.
+
+    tools.execute was called bare at every site. Tools reach the network, brokerages
+    and third-party keys, so they raise for perfectly ordinary reasons — a timeout, a
+    revoked token, an argument the model guessed wrong. That exception propagated out
+    of think(), so the model never received a function_call_output, never got to
+    recover or explain, and the whole turn died: she picks the right tool, the tool
+    throws, and nothing comes back. Handing the error to the model as the tool's
+    result lets her say what went wrong, or try another way.
+    """
+    try:
+        return tools.execute(name, args, session_id=session_id, agent_id=agent_id)
+    except Exception as exc:
+        return {
+            "error": f"{type(exc).__name__}: {str(exc)[:300]}",
+            "tool": name,
+            "note": "The tool failed. Tell the user plainly what broke, or try another approach.",
+        }
 
 
 def _parse_args(raw: Any) -> dict[str, Any]:
@@ -349,7 +372,7 @@ def _think_ollama(
             raw_args = fn.get("arguments") or {}
             args = raw_args if isinstance(raw_args, dict) else _parse_args(raw_args)
             all_calls.append({"name": name, "arguments": args})
-            payload = tools.execute(name, args, session_id=session_id, agent_id=agent_id)
+            payload = _run_tool(name, args, session_id=session_id, agent_id=agent_id)
             if emit:
                 emit({"type": "tool_result", "name": name, "result": payload})
                 spoken = payload.get("spoken") if isinstance(payload, dict) else None
@@ -421,7 +444,7 @@ def _think_grok(
                 spawned = _handle_spawn(args.get("task") or user_text, args.get("agents") or [], session_id, emit)
                 payload = spawned
             else:
-                payload = tools.execute(name, args, session_id=session_id, agent_id=agent_id)
+                payload = _run_tool(name, args, session_id=session_id, agent_id=agent_id)
             if emit:
                 emit({"type": "tool_result", "name": name, "result": payload})
                 spoken = payload.get("spoken") if isinstance(payload, dict) else None
@@ -448,15 +471,34 @@ def _think_grok(
 
 
 def think_events(user_text: str, session_id: str, agent_id: str = "jarvis") -> Iterator[dict[str, Any]]:
-    queue: list[dict[str, Any]] = []
+    """Stream the turn as it happens.
+
+    This used to append every event to a list and yield the list at the very end, so
+    /api/chat/stream was a stream in name only: the HUD received nothing — no tokens,
+    no tool_call, no status — until the entire turn had finished. A turn that reaches
+    the network through several tools takes long enough that she simply looked dead.
+    Running think() on a worker and handing events across a real queue means the first
+    token shows the moment it exists.
+    """
+    events: "queue.Queue[dict[str, Any] | None]" = queue.Queue()
 
     def emit(ev: dict[str, Any]) -> None:
-        queue.append(ev)
+        events.put(ev)
 
-    try:
-        think(user_text, session_id=session_id, agent_id=agent_id, emit=emit)
-    except Exception as exc:
-        queue.append({"type": "error", "message": str(exc)})
-        queue.append({"type": "done", "text": f"I hit a problem: {exc}", "agent": agent_id})
+    def run() -> None:
+        try:
+            think(user_text, session_id=session_id, agent_id=agent_id, emit=emit)
+        except Exception as exc:
+            events.put({"type": "error", "message": str(exc)})
+            events.put({"type": "done", "text": f"I hit a problem: {exc}", "agent": agent_id})
+        finally:
+            events.put(None)  # sentinel: the worker is finished, never lost to an exception
 
-    yield from queue
+    worker = threading.Thread(target=run, name=f"think-{agent_id}", daemon=True)
+    worker.start()
+
+    while True:
+        ev = events.get()
+        if ev is None:
+            break
+        yield ev

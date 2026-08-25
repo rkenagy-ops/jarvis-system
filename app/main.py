@@ -53,7 +53,36 @@ except Exception as _exc:  # pragma: no cover - boot must never die on this
 app = FastAPI(title="Super Jarvis", version=__version__, docs_url=None, redoc_url=None, openapi_url=None)
 app.mount("/static", StaticFiles(directory=config.WEB_DIR), name="static")
 
-_OPEN_PATHS = {"/", "/favicon.ico", "/api/health", "/api/health/full", "/api/guard/bootstrap"}
+_OPEN_PATHS = {
+    "/",
+    "/favicon.ico",
+    "/api/health",
+    "/api/health/full",
+    "/api/voice/selftest",
+    "/api/guard/bootstrap",
+}
+
+
+def _route_exists(path: str) -> bool:
+    """Does this build actually serve this path?
+
+    The guard runs before routing, so a 401 cannot tell you whether the endpoint is
+    token-protected or simply absent. That distinction is the whole point of the
+    message: "needs a token" and "your process predates this route, pull and restart"
+    are different problems, and blaming staleness for an ordinary guarded endpoint
+    sends people chasing a pull they do not need.
+
+    Matched against the compiled route regexes so parameterised routes
+    (/api/thing/{id}) count as existing.
+    """
+    for route in app.routes:
+        rx = getattr(route, "path_regex", None)
+        if rx is not None:
+            if rx.fullmatch(path):
+                return True
+        elif getattr(route, "path", None) == path:
+            return True
+    return False
 
 
 @app.middleware("http")
@@ -73,7 +102,35 @@ async def fortress(request: Request, call_next):
     if path.startswith("/api/"):
         given = request.headers.get("x-jarvis-token") or request.query_params.get("token")
         if not guard.token_ok(given):
-            return JSONResponse({"error": "jarvis locked"}, status_code=401)
+            # "jarvis locked" alone sent people hunting for a crash that was not
+            # there. Say what is missing and how to get it. The token itself is
+            # never echoed — only the ways to obtain one.
+            known = _route_exists(path)
+            return JSONResponse(
+                {
+                    "error": "jarvis locked",
+                    "reason": (
+                        "This endpoint needs the fortress token."
+                        if known
+                        else f"No token supplied, and {path} is not a route on this build "
+                        "(it is not an open path either)."
+                    ),
+                    "how_to_unlock": [
+                        "Open the HUD at http://127.0.0.1:8787 — it carries the token for you.",
+                        "Or append ?token=<JARVIS_TOKEN> to the URL.",
+                        "Or send it as the x-jarvis-token header.",
+                        "The token is JARVIS_TOKEN in .env, or GET /api/guard/bootstrap from this machine.",
+                    ],
+                    "open_paths": sorted(_OPEN_PATHS),
+                    "hint": (
+                        None
+                        if known
+                        else "If you expected this path to be open, the running process predates it — "
+                        "git pull and restart, since the old build is still serving."
+                    ),
+                },
+                status_code=401,
+            )
     return await call_next(request)
 
 
@@ -250,6 +307,19 @@ def health_full() -> dict:
     from . import health as health_mod
 
     return health_mod.check()
+
+
+@app.get("/api/voice/selftest")
+async def voice_selftest() -> dict:
+    """Ask xAI directly whether it accepts our live-voice session.
+
+    Open beside the health checks on purpose: this is what you reach for when voice is
+    the thing that is broken, and the whole point is that it works without the HUD.
+    It makes one outbound socket to xAI and reads config; it changes nothing.
+    """
+    from .voice_live import selftest
+
+    return await selftest()
 
 
 @app.get("/api/status")
