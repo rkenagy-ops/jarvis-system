@@ -76,16 +76,39 @@ def _websockets():
     return websockets
 
 
-def session_config(session_id: str, voice: str | None = None) -> dict[str, Any]:
-    mind = memory.snapshot(session_id, max_chars=8000)
-    instructions = conductor_system(mind) + (
-        "\nYou are speaking aloud as a beautiful, educated woman — calm, clear, unhurried."
-        "\nKeep turns tight — two sentences unless asked for more. Trade advice: first word ENTER or NO-GO, then one reason."
-        "\nNever repeat a sentence you just said. Do not restate the user's question. Do not read tables or JSON aloud."
-        "\nUse tools when the question needs the live world, markets, or GitHub. For should-I-enter, call market action=advise."
-        "\nPronounce GitHub as Git Hub. Pronounce J.A.R.V.I.S. as Jarvis."
-    )
-    fn_tools = [t for t in tools.FUNCTION_TOOLS if t["name"] != "spawn_agents"]
+# The full voice session carries every function tool and an 8k memory snapshot —
+# roughly 32KB of session.update. That is a lot to ask a realtime voice model to carry
+# on every turn, and when generation fails with a bare "internal error" there is nothing
+# in the reply that says which part it choked on. These profiles are the ladder we climb
+# down, and each rung is still a usable assistant rather than a stub.
+VOICE_PROFILES = ("full", "lean", "minimal")
+
+# The tools worth having in a spoken conversation. Anything that returns a wall of JSON
+# to read aloud, or that reaches for a brokerage, is deliberately not here.
+LEAN_TOOLS = frozenset({
+    "now", "calc", "weather", "news_headlines", "market", "memory_search",
+    "memory_remember", "obsidian", "vault_rag", "schedule_job", "health",
+})
+
+_VOICE_STYLE = (
+    "\nYou are speaking aloud as a beautiful, educated woman — calm, clear, unhurried."
+    "\nKeep turns tight — two sentences unless asked for more. Trade advice: first word ENTER or NO-GO, then one reason."
+    "\nNever repeat a sentence you just said. Do not restate the user's question. Do not read tables or JSON aloud."
+    "\nUse tools when the question needs the live world, markets, or GitHub. For should-I-enter, call market action=advise."
+    "\nPronounce GitHub as Git Hub. Pronounce J.A.R.V.I.S. as Jarvis."
+)
+
+
+def session_config(session_id: str, voice: str | None = None, *, profile: str = "full") -> dict[str, Any]:
+    if profile == "minimal":
+        instructions = "You are Jarvis, speaking aloud." + _VOICE_STYLE
+        fn_tools: list[dict[str, Any]] = []
+    elif profile == "lean":
+        instructions = conductor_system(memory.snapshot(session_id, max_chars=1500)) + _VOICE_STYLE
+        fn_tools = [t for t in tools.FUNCTION_TOOLS if t["name"] in LEAN_TOOLS]
+    else:
+        instructions = conductor_system(memory.snapshot(session_id, max_chars=8000)) + _VOICE_STYLE
+        fn_tools = [t for t in tools.FUNCTION_TOOLS if t["name"] != "spawn_agents"]
     return {
         "type": "session.update",
         "session": {
@@ -117,7 +140,7 @@ def session_config(session_id: str, voice: str | None = None) -> dict[str, Any]:
     }
 
 
-async def selftest(timeout: float = 20.0, probe_response: bool = True) -> dict[str, Any]:
+async def selftest(timeout: float = 20.0, probe_response: bool = True, profile: str = "full") -> dict[str, Any]:
     """Open the real realtime socket, send our real session config, report the answer.
 
     health.voice() checks prerequisites — a key, a URL, the package. It cannot tell you
@@ -143,7 +166,7 @@ async def selftest(timeout: float = 20.0, probe_response: bool = True) -> dict[s
     seen: list[str] = []
     try:
         async with websockets.connect(url, additional_headers=headers, max_size=8_000_000) as upstream:
-            cfg = session_config("selftest")
+            cfg = session_config("selftest", profile=profile)
             await upstream.send(json.dumps(cfg))
             deadline = loop.time() + timeout
             while loop.time() < deadline:
@@ -184,6 +207,7 @@ async def selftest(timeout: float = 20.0, probe_response: bool = True) -> dict[s
                         "stage": "response",
                         "events": seen,
                         "tools_offered": len(cfg["session"]["tools"]),
+                        "profile": profile,
                         "voice": cfg["session"]["voice"],
                         "note": "xAI generated a complete response. Voice works end to end on the server; anything still silent is in the browser - microphone permission, or a muted tab.",
                     }
@@ -196,6 +220,12 @@ async def selftest(timeout: float = 20.0, probe_response: bool = True) -> dict[s
                         "events": seen,
                         "error": detail,
                         "tools_offered": len(cfg["session"]["tools"]),
+                        "profile": profile,
+                        "next_step": (
+                            "Try /api/voice/selftest?profile=lean, then ?profile=minimal. "
+                            "If minimal succeeds the full session is too heavy; if even minimal "
+                            "fails the fault is on xAI's side, not in our payload."
+                        ),
                         "note": (
                             "The session was accepted and generation started, then xAI failed. "
                             "That is a fault while producing the reply, not with the key or the "
@@ -287,7 +317,37 @@ async def handle_live(ws: WebSocket, session_id: str, voice: str | None = None) 
             # reply, and logs that it was needed.
             import asyncio as _asyncio
 
-            state = {"response_active": False, "nudge": None}
+            state = {"response_active": False, "nudge": None, "profile": 0, "degraded": False}
+
+            async def degrade(reason: str) -> bool:
+                """Step down a rung and retry the turn. Returns False at the bottom.
+
+                A bare "internal error" from the model while generating says nothing
+                about which part of a 32KB session it could not carry. Rather than
+                report that and stop, try the same conversation with less loaded into
+                it - a smaller tool set, a shorter memory snapshot - and say what was
+                given up. A voice that answers with ten tools beats one that explains
+                why it cannot answer with thirty-eight.
+                """
+                nxt = state["profile"] + 1
+                if nxt >= len(VOICE_PROFILES):
+                    return False
+                state["profile"] = nxt
+                state["degraded"] = True
+                name = VOICE_PROFILES[nxt]
+                log.warning("generation failed (%s) - retrying the session on the '%s' profile", reason, name)
+                await upstream.send(json.dumps(session_config(session_id, voice, profile=name)))
+                await ws.send_json({
+                    "type": "status",
+                    "event": f"degraded to {name}",
+                    "text": (
+                        f"xAI could not generate a reply with the full session, so voice dropped to "
+                        f"the '{name}' profile. Fewer tools, shorter memory - she should answer now."
+                    ),
+                })
+                state["response_active"] = False
+                await upstream.send(json.dumps({"type": "response.create"}))
+                return True
 
             async def nudge_after_commit() -> None:
                 try:
@@ -382,6 +442,11 @@ async def handle_live(ws: WebSocket, session_id: str, voice: str | None = None) 
                     elif etype == "error":
                         detail = event.get("error") or event
                         log.error("xai realtime error: %s", detail)
+                        code = (detail or {}).get("code") if isinstance(detail, dict) else None
+                        kind = (detail or {}).get("type") if isinstance(detail, dict) else None
+                        transient = code == "internal_error" or kind == "server_error"
+                        if transient and await degrade(str(code or kind)):
+                            continue
                         await ws.send_json({"type": "error", "message": detail})
                     elif etype in ("session.updated", "session.created", "conversation.created"):
                         log.info("xai realtime %s", etype)

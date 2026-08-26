@@ -375,16 +375,18 @@ def voice_log() -> dict:
 
 
 @app.get("/api/voice/selftest")
-async def voice_selftest() -> dict:
+async def voice_selftest(profile: str = "full") -> dict:
     """Ask xAI directly whether it accepts our live-voice session.
 
     Open beside the health checks on purpose: this is what you reach for when voice is
     the thing that is broken, and the whole point is that it works without the HUD.
     It makes one outbound socket to xAI and reads config; it changes nothing.
     """
-    from .voice_live import selftest
+    from .voice_live import VOICE_PROFILES, selftest
 
-    return await selftest()
+    if profile not in VOICE_PROFILES:
+        return {"ok": False, "error": f"unknown profile {profile!r}", "profiles": list(VOICE_PROFILES)}
+    return await selftest(profile=profile)
 
 
 @app.get("/api/tools/audit")

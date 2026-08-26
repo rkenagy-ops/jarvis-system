@@ -205,3 +205,62 @@ def test_a_broken_log_record_cannot_take_down_the_socket():
 
     record = logging.LogRecord("jarvis.voice", logging.INFO, __file__, 1, "%s", (Exploding(),), None)
     voice_live.RING.emit(record)  # must not raise
+
+
+# --- climbing down when generation fails --------------------------------------
+
+
+def test_each_profile_is_smaller_than_the_last():
+    import json
+
+    from app import voice_live
+
+    sizes = [len(json.dumps(voice_live.session_config("p", profile=p))) for p in voice_live.VOICE_PROFILES]
+    assert sizes == sorted(sizes, reverse=True), f"the ladder must descend: {sizes}"
+    assert sizes[-1] < sizes[0] / 4, "the bottom rung has to be genuinely small to be worth trying"
+
+
+def test_every_profile_is_still_a_usable_session():
+    """A rung that is not a working assistant is not worth climbing down to."""
+    from app import voice_live
+
+    for prof in voice_live.VOICE_PROFILES:
+        sess = voice_live.session_config("p", profile=prof)["session"]
+        assert sess["instructions"].strip(), f"{prof} has no instructions"
+        assert sess["voice"], f"{prof} lost the voice"
+        assert sess["turn_detection"]["create_response"] is True, f"{prof} would never answer"
+        names = {t.get("name") or t.get("type") for t in sess["tools"]}
+        assert "web_search" in names, f"{prof} cannot reach the live world at all"
+
+
+def test_the_lean_profile_keeps_the_tools_worth_speaking_with():
+    from app import voice_live
+
+    names = {t.get("name") for t in voice_live.session_config("p", profile="lean")["session"]["tools"]}
+    for keep in ("now", "calc", "market", "memory_search"):
+        assert keep in names, f"lean voice should still have {keep}"
+
+
+def test_lean_never_offers_a_tool_that_does_not_exist():
+    from app import tools as tools_mod
+    from app import voice_live
+
+    declared = {t["name"] for t in tools_mod.FUNCTION_TOOLS}
+    assert voice_live.LEAN_TOOLS <= declared, voice_live.LEAN_TOOLS - declared
+
+
+def test_degradation_only_ever_steps_down():
+    """Stepping back up would loop forever against a persistent failure."""
+    assert 'nxt = state["profile"] + 1' in SRC
+    assert 'if nxt >= len(VOICE_PROFILES):' in SRC
+    assert "return False" in SRC
+
+
+def test_only_a_server_side_failure_triggers_degradation():
+    """Shedding tools because of our own bad argument would hide the real bug."""
+    assert 'code == "internal_error" or kind == "server_error"' in SRC
+
+
+def test_the_user_is_told_what_was_given_up():
+    assert "degraded to" in SRC
+    assert "Fewer tools, shorter memory" in SRC
