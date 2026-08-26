@@ -80,8 +80,18 @@ def _closest_route(path: str) -> str | None:
         for r in app.routes
         if getattr(r, "path", "").startswith("/api/") and "{" not in getattr(r, "path", "")
     }
-    match = difflib.get_close_matches(path, candidates, n=1, cutoff=0.8)
+    match = difflib.get_close_matches(_canonical(path), candidates, n=1, cutoff=0.8)
     return match[0] if match else None
+
+
+def _canonical(path: str) -> str:
+    """Trailing slashes are a typing habit, not a different endpoint.
+
+    FastAPI would redirect /api/voice/log/ to /api/voice/log, but the guard runs before
+    routing ever happens - so the slash version was rejected as an unknown path and the
+    401 told the user to go and pull. Strip it before deciding anything.
+    """
+    return path[:-1] if len(path) > 1 and path.endswith("/") else path
 
 
 def _route_exists(path: str) -> bool:
@@ -96,12 +106,13 @@ def _route_exists(path: str) -> bool:
     Matched against the compiled route regexes so parameterised routes
     (/api/thing/{id}) count as existing.
     """
+    path = _canonical(path)
     for route in app.routes:
         rx = getattr(route, "path_regex", None)
         if rx is not None:
             if rx.fullmatch(path):
                 return True
-        elif getattr(route, "path", None) == path:
+        elif _canonical(getattr(route, "path", "")) == path:
             return True
     return False
 
@@ -118,7 +129,7 @@ async def fortress(request: Request, call_next):
         if not guard.is_loopback_ip(client):
             return JSONResponse({"error": "bootstrap only from this machine"}, status_code=403)
         return await call_next(request)
-    if path in _OPEN_PATHS:
+    if _canonical(path) in _OPEN_PATHS:
         return await call_next(request)
     if path.startswith("/api/"):
         given = request.headers.get("x-jarvis-token") or request.query_params.get("token")

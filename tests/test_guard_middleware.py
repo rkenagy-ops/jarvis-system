@@ -132,3 +132,23 @@ def test_a_genuinely_unknown_path_still_blames_staleness():
     """The near-miss check must not swallow the case it was built around."""
     body = client.get("/api/nothing-remotely-like-a-route-here").json()
     assert "git pull and restart" in body["hint"]
+
+
+def test_a_trailing_slash_is_the_same_endpoint():
+    """FastAPI would redirect it, but the guard runs before routing - so the slash
+    version was refused as unknown and the 401 sent the user off to git pull."""
+    for path in ("/api/voice/log/", "/api/health/full/", "/diag/"):
+        assert client.get(path).status_code == 200, f"{path} should behave like {path[:-1]}"
+
+
+def test_a_trailing_slash_on_a_guarded_route_is_still_guarded():
+    """Normalising the slash must not become a way around the token."""
+    resp = client.get("/api/markets/")
+    assert resp.status_code == 401
+    assert resp.json()["hint"] is None, "it exists on this build; do not blame staleness"
+
+
+def test_the_root_path_survives_normalisation():
+    """"/" is one character of trailing slash and must not be stripped to nothing."""
+    assert main_mod._canonical("/") == "/"
+    assert client.get("/").status_code == 200
