@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import logging
+import time
+from collections import deque
 from typing import Any
 
 from fastapi import WebSocket, WebSocketDisconnect
@@ -13,6 +15,49 @@ from .brain import _parse_args, _run_tool
 # Voice failures used to reach only the browser console. The server log is what
 # gets pasted when something is wrong, and it said nothing about voice at all.
 log = logging.getLogger("jarvis.voice")
+
+
+class _Ring(logging.Handler):
+    """Keep the last N voice log lines in memory so a URL can show them.
+
+    The server console is where these lines land, and a live console window mid-stream
+    is a miserable thing to scroll and copy out of - which is exactly what you are
+    asked to do at the worst moment. Holding them here costs nothing and turns the
+    diagnosis into opening a page.
+    """
+
+    def __init__(self, limit: int = 300) -> None:
+        super().__init__()
+        self.lines: deque[str] = deque(maxlen=limit)
+
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            stamp = time.strftime("%H:%M:%S", time.localtime(record.created))
+            self.lines.append(f"{stamp} {record.levelname} {record.getMessage()}")
+        except Exception:
+            pass  # a logging handler that raises would take the socket down with it
+
+
+RING = _Ring()
+log.addHandler(RING)
+log.setLevel(logging.INFO)
+
+
+def recent_log() -> dict[str, Any]:
+    """What xAI has actually sent on this run, in order, newest last."""
+    lines = list(RING.lines)
+    return {
+        "lines": lines,
+        "count": len(lines),
+        "note": (
+            "Empty means live voice has not been started since the server booted - "
+            "press the live button and say one sentence, then reload this."
+            if not lines
+            else "Look for 'response.created'. If it never appears, xAI is not generating "
+            "a response for your turn. If 'binary audio frames' appears, the audio is "
+            "arriving in that encoding."
+        ),
+    }
 
 
 def _websockets():

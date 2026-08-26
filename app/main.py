@@ -59,6 +59,7 @@ _OPEN_PATHS = {
     "/api/health",
     "/api/health/full",
     "/api/voice/selftest",
+    "/api/voice/log",
     "/api/guard/bootstrap",
     "/diag",
 }
@@ -346,6 +347,19 @@ def diagnostics_page() -> Response:
         (config.WEB_DIR / "diag.html").read_text(encoding="utf-8"),
         media_type="text/html",
     )
+
+
+@app.get("/api/voice/log")
+def voice_log() -> dict:
+    """The live-voice event log from this run, without fighting the console window.
+
+    Open beside the other voice checks: copying a live, mid-stream console window is
+    the last thing anyone should be asked to do while trying to work out why voice is
+    silent.
+    """
+    from .voice_live import recent_log
+
+    return recent_log()
 
 
 @app.get("/api/voice/selftest")

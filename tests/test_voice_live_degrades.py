@@ -164,3 +164,44 @@ def test_the_client_consumes_binary_frames():
 def test_both_audio_paths_share_one_scheduler():
     """Two schedulers would mean two clocks, which is the bug we just fixed."""
     assert JS.count("state.playTime += audio.duration") == 1
+
+
+def test_the_voice_log_is_readable_from_a_url():
+    """Copying a live console window mid-stream is the last thing to ask of anyone
+    trying to work out why voice is silent."""
+    from app import main as main_mod
+    from fastapi.testclient import TestClient
+
+    assert "/api/voice/log" in main_mod._OPEN_PATHS
+    client = TestClient(main_mod.app, base_url="http://127.0.0.1")
+    body = client.get("/api/voice/log").json()
+    assert "lines" in body and isinstance(body["lines"], list)
+    assert body["note"], "an empty log must explain that it is empty, not just look broken"
+
+
+def test_the_ring_actually_captures_what_is_logged():
+    from app import voice_live
+
+    voice_live.log.info("xai realtime event: response.created")
+    assert any("response.created" in line for line in voice_live.RING.lines)
+
+
+def test_the_ring_is_bounded():
+    """An unbounded buffer on a long-running server is a slow leak."""
+    from app import voice_live
+
+    assert voice_live.RING.lines.maxlen and voice_live.RING.lines.maxlen <= 1000
+
+
+def test_a_broken_log_record_cannot_take_down_the_socket():
+    """Scoped to our handler. Other handlers on the chain are not ours to promise for."""
+    import logging
+
+    from app import voice_live
+
+    class Exploding:
+        def __str__(self):
+            raise RuntimeError("nope")
+
+    record = logging.LogRecord("jarvis.voice", logging.INFO, __file__, 1, "%s", (Exploding(),), None)
+    voice_live.RING.emit(record)  # must not raise
