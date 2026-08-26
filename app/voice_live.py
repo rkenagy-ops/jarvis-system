@@ -117,7 +117,7 @@ def session_config(session_id: str, voice: str | None = None) -> dict[str, Any]:
     }
 
 
-async def selftest(timeout: float = 12.0) -> dict[str, Any]:
+async def selftest(timeout: float = 20.0, probe_response: bool = True) -> dict[str, Any]:
     """Open the real realtime socket, send our real session config, report the answer.
 
     health.voice() checks prerequisites — a key, a URL, the package. It cannot tell you
@@ -155,25 +155,59 @@ async def selftest(timeout: float = 12.0) -> dict[str, Any]:
                 etype = event.get("type") or ""
                 seen.append(etype)
                 if etype == "session.updated":
+                    if not probe_response:
+                        return {
+                            "ok": True,
+                            "stage": "session",
+                            "events": seen,
+                            "tools_offered": len(cfg["session"]["tools"]),
+                            "voice": cfg["session"]["voice"],
+                            "note": "xAI accepted the session config.",
+                        }
+                    # Accepting the session proves nothing about generating a reply, and
+                    # that is where it was actually failing: session.updated, then
+                    # response.created, then an internal_error every single turn. Ask for
+                    # a real response so this reports the failure that matters.
+                    await upstream.send(json.dumps({
+                        "type": "conversation.item.create",
+                        "item": {
+                            "type": "message",
+                            "role": "user",
+                            "content": [{"type": "input_text", "text": "Say the single word: ready."}],
+                        },
+                    }))
+                    await upstream.send(json.dumps({"type": "response.create"}))
+                    continue
+                if etype in ("response.done", "response.completed"):
                     return {
                         "ok": True,
-                        "stage": "session",
+                        "stage": "response",
                         "events": seen,
                         "tools_offered": len(cfg["session"]["tools"]),
                         "voice": cfg["session"]["voice"],
-                        "note": "xAI accepted the session. If voice is still silent the problem is in the browser: microphone permission, or the tab is muted.",
+                        "note": "xAI generated a complete response. Voice works end to end on the server; anything still silent is in the browser - microphone permission, or a muted tab.",
                     }
                 if etype == "error":
+                    detail = event.get("error") or event
+                    generating = "response.created" in seen
                     return {
                         "ok": False,
-                        "stage": "session",
+                        "stage": "response" if generating else "session",
                         "events": seen,
-                        "error": event.get("error") or event,
-                        "note": "The socket opened but xAI rejected our session config, so no response is ever generated. That is why she transcribes you and never answers.",
+                        "error": detail,
+                        "tools_offered": len(cfg["session"]["tools"]),
+                        "note": (
+                            "The session was accepted and generation started, then xAI failed. "
+                            "That is a fault while producing the reply, not with the key or the "
+                            "socket - which is why she transcribes you and never answers."
+                            if generating
+                            else "The socket opened but xAI rejected our session config, so no "
+                            "response is ever generated."
+                        ),
                     }
     except Exception as exc:
         return {"ok": False, "stage": "connect", "events": seen, "error": f"{type(exc).__name__}: {str(exc)[:300]}"}
-    return {"ok": False, "stage": "session", "events": seen, "error": f"No session.updated within {timeout}s."}
+    return {"ok": False, "stage": "timeout", "events": seen, "error": f"Nothing conclusive within {timeout}s."}
 
 
 async def handle_live(ws: WebSocket, session_id: str, voice: str | None = None) -> None:

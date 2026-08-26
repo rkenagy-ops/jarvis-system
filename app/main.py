@@ -60,6 +60,7 @@ _OPEN_PATHS = {
     "/api/health/full",
     "/api/voice/selftest",
     "/api/voice/log",
+    "/api/tools/audit",
     "/api/guard/bootstrap",
     "/diag",
 }
@@ -384,6 +385,33 @@ async def voice_selftest() -> dict:
     from .voice_live import selftest
 
     return await selftest()
+
+
+@app.get("/api/tools/audit")
+def tools_audit() -> dict:
+    """Is the tool payload we hand the model actually well formed?
+
+    Two tools were declared under the name "oss" with mutually exclusive action enums.
+    A duplicate name passes session validation and then breaks generation, and it had
+    already happened once before in this file with "universe". Worth a check that runs.
+    """
+    from collections import Counter
+
+    from . import tools as tools_mod
+
+    names = [t.get("name") for t in tools_mod.FUNCTION_TOOLS]
+    dupes = {n: c for n, c in Counter(names).items() if c > 1}
+    return {
+        "ok": not dupes,
+        "count": len(names),
+        "duplicates": dupes or None,
+        "payload_bytes": len(tools_mod.dumps(tools_mod.FUNCTION_TOOLS)),
+        "note": (
+            "Two entries sharing a name give the model conflicting schemas for one function."
+            if dupes
+            else "No duplicate function names."
+        ),
+    }
 
 
 @app.get("/api/status")

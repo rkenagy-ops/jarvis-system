@@ -421,18 +421,40 @@ FUNCTION_TOOLS = [
     ),
     _fn(
         "oss",
-        "Pull open-source from GitHub: search, readme, ingest, starter_pack, brain_pack (RAG/memory/LLM repos), awesome, public_apis, huggingface, youtube.",
+        (
+            "Open source, curated and raw. Raw access to ANY public GitHub repo: fetch, tree, "
+            "read, grep, vendor, ingest, search - no allowlist, real source rather than just the "
+            "README. Curated packs on top: readme, starter_pack, brain_pack, awesome, public_apis, "
+            "huggingface, youtube, self_upgrade. install runs pip on a fetched repo and takes a "
+            "confirm_token."
+        ),
         {
             "action": {
                 "type": "string",
-                "enum": ["search", "readme", "ingest", "starter_pack", "brain_pack", "jarvis_pack", "desk_pack", "social_pack", "stack_pack", "capability_pack", "growth_pack", "self_upgrade", "awesome", "public_apis", "huggingface", "youtube"],
+                "enum": [
+                    # raw, unrestricted - app/oss.py
+                    "status", "search", "fetch", "tree", "read", "grep", "vendor", "ingest", "install",
+                    # curated packs - app/github_oss.py
+                    "readme", "starter_pack", "brain_pack", "jarvis_pack", "desk_pack", "social_pack",
+                    "stack_pack", "capability_pack", "growth_pack", "funnel_pack", "instagram_pack",
+                    "self_upgrade", "awesome", "public_apis", "huggingface", "youtube",
+                ],
             },
-            "query": {"type": "string"},
-            "repo": {"type": "string", "description": "owner/repo"},
+            "repo": {"type": "string", "description": "owner/name of any public repo."},
+            "query": {"type": "string", "description": "search terms for action=search."},
+            "pattern": {"type": "string", "description": "regex for action=grep."},
+            "path": {"type": "string", "description": "file path inside the repo for action=read."},
+            "subdir": {"type": "string"},
+            "glob": {"type": "string"},
+            "ref": {"type": "string", "description": "branch/tag/sha. Defaults to the default branch."},
+            "package": {"type": "string", "description": "pip package name for action=install."},
+            "force": {"type": "boolean", "description": "re-download even if already fetched."},
             "name": {"type": "string", "description": "awesome list key: public-apis|selfhosted|python|awesome"},
             "url": {"type": "string"},
-            "limit": {"type": "integer"},
             "kind": {"type": "string"},
+            "limit": {"type": "integer"},
+            "max_files": {"type": "integer"},
+            "confirm_token": {"type": "string"},
         },
         ["action"],
     ),
@@ -477,33 +499,6 @@ FUNCTION_TOOLS = [
                 "description": "Minutes to wait after the post publishes before the follow-up comment.",
             },
             "job_id": {"type": "string", "description": "Publer job id returned by schedule/publish."},
-        },
-        ["action"],
-    ),
-    _fn(
-        "oss",
-        (
-            "Unrestricted open-source access: fetch, read, grep, vendor or ingest ANY public "
-            "GitHub repo - no allowlist, no curated pack, real source rather than just the README. "
-            "install runs pip on a fetched repo and takes a confirm_token."
-        ),
-        {
-            "action": {
-                "type": "string",
-                "enum": ["status", "search", "fetch", "tree", "read", "grep", "vendor", "ingest", "install"],
-            },
-            "repo": {"type": "string", "description": "owner/name of any public repo."},
-            "query": {"type": "string", "description": "search terms for action=search."},
-            "pattern": {"type": "string", "description": "regex for action=grep."},
-            "path": {"type": "string", "description": "file path inside the repo for action=read."},
-            "subdir": {"type": "string"},
-            "glob": {"type": "string"},
-            "ref": {"type": "string", "description": "branch/tag/sha. Defaults to the default branch."},
-            "package": {"type": "string", "description": "pip package name for action=install."},
-            "force": {"type": "boolean", "description": "re-download even if already fetched."},
-            "limit": {"type": "integer"},
-            "max_files": {"type": "integer"},
-            "confirm_token": {"type": "string"},
         },
         ["action"],
     ),
@@ -597,6 +592,14 @@ def fetch_url(url: str) -> dict:
     return {"url": str(resp.url), "status": resp.status_code, "text": text[:12000]}
 
 
+# Actions that belong to the curated pack module. Everything else is raw access.
+_OSS_CURATED = frozenset({
+    "readme", "starter_pack", "brain_pack", "jarvis_pack", "desk_pack", "social_pack",
+    "stack_pack", "capability_pack", "growth_pack", "funnel_pack", "instagram_pack",
+    "self_upgrade", "awesome", "public_apis", "huggingface", "youtube",
+})
+
+
 def execute(name: str, arguments: dict[str, Any], *, session_id: str, agent_id: str) -> Any:
     if name == "memory_search":
         return memory.search(arguments.get("query") or "", limit=int(arguments.get("limit") or 10))
@@ -658,7 +661,19 @@ def execute(name: str, arguments: dict[str, Any], *, session_id: str, agent_id: 
     if name == "catalog":
         return catalog.call(arguments.get("source") or "", arguments.get("query") or "")
     if name == "oss":
-        return github_oss.dispatch(arguments.get("action") or "search", **{k: v for k, v in arguments.items() if k != "action"})
+        # There were two "oss" tools declared under one name with mutually exclusive
+        # action enums, and this branch always won - so every raw action (fetch, tree,
+        # read, grep, vendor, install) was handed to the curated module, which has never
+        # known what to do with them. The unrestricted tool was unreachable dead code.
+        # One name, one schema, one routing table. Raw wins the overlapping actions
+        # (search, ingest) because it is strictly the more capable of the two.
+        action = arguments.get("action") or "status"
+        rest = {k: v for k, v in arguments.items() if k != "action"}
+        if action in _OSS_CURATED:
+            return github_oss.dispatch(action, **rest)
+        from . import oss as oss_mod
+
+        return oss_mod.dispatch(action, **rest)
     if name == "desktop":
         from . import desktop as desktop_mod
 
@@ -714,13 +729,6 @@ def execute(name: str, arguments: dict[str, Any], *, session_id: str, agent_id: 
 
         return setups_mod.dispatch(
             arguments.get("action") or "scan",
-            **{k: v for k, v in arguments.items() if k != "action"},
-        )
-    if name == "oss":
-        from . import oss as oss_mod
-
-        return oss_mod.dispatch(
-            arguments.get("action") or "status",
             **{k: v for k, v in arguments.items() if k != "action"},
         )
     if name == "engage":
