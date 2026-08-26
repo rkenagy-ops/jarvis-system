@@ -109,3 +109,58 @@ def test_the_session_still_carries_the_tools():
     assert "web_search" in names
     assert len(names) > 10, "the function tools must ride along with the voice session"
     assert "spawn_agents" not in names, "voice must not spawn a swarm mid-sentence"
+
+
+# --- the silent-turn failure --------------------------------------------------
+
+SRC = (ROOT / "app" / "voice_live.py").read_text(encoding="utf-8")
+JS = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
+
+
+def test_a_committed_turn_that_draws_no_response_gets_nudged():
+    """The exact symptom: the socket is up, the turn commits, the transcript of what
+    you said comes back, and no response is ever generated. Nothing in the protocol
+    reports that, so ask for the response outright rather than hang."""
+    assert "async def nudge_after_commit" in SRC
+    assert "def arm_nudge" in SRC
+    assert '"type": "response.create"' in SRC
+
+
+def test_the_nudge_is_armed_from_every_end_of_turn_signal():
+    for signal in (
+        "conversation.item.input_audio_transcription.completed",
+        "input_audio_buffer.committed",
+        "input_audio_buffer.speech_stopped",
+    ):
+        assert signal in SRC, f"{signal} should arm the nudge"
+
+
+def test_a_real_response_cancels_the_nudge():
+    """Nudging over a response already in flight would talk over her."""
+    assert 'if etype == "response.created"' in SRC
+    assert 'state["nudge"].cancel()' in SRC
+
+
+def test_upstream_event_types_are_logged_once_each():
+    """The server log is the only record of what xAI actually sends. It said nothing."""
+    assert "seen_types" in SRC
+    assert 'log.info("xai realtime event: %s", etype)' in SRC
+
+
+def test_voice_tools_go_through_the_shared_wrapper():
+    assert "_run_tool(name, args" in SRC
+    assert "tools.execute(" not in SRC, "voice must use the same guarded tool path as chat"
+
+
+def test_the_client_consumes_binary_frames():
+    """The server forwards them with send_bytes. Nothing received them, so if xAI
+    delivers audio as binary rather than base64 deltas, that was every word she spoke."""
+    assert "await ws.send_bytes(raw)" in SRC, "the server still forwards binary"
+    assert "function playPcmBuffer" in JS
+    assert 'ws.binaryType = "arraybuffer"' in JS
+    assert "playPcmBuffer(m.data)" in JS, "binary frames must reach the player"
+
+
+def test_both_audio_paths_share_one_scheduler():
+    """Two schedulers would mean two clocks, which is the bug we just fixed."""
+    assert JS.count("state.playTime += audio.duration") == 1

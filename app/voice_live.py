@@ -8,7 +8,7 @@ from fastapi import WebSocket, WebSocketDisconnect
 
 from . import config, memory, tools
 from .agents import conductor_system
-from .brain import _parse_args
+from .brain import _parse_args, _run_tool
 
 # Voice failures used to reach only the browser console. The server log is what
 # gets pasted when something is wrong, and it said nothing about voice at all.
@@ -199,14 +199,60 @@ async def handle_live(ws: WebSocket, session_id: str, voice: str | None = None) 
                 except WebSocketDisconnect:
                     return
 
+            # The nudge below exists because of the exact symptom this file kept
+            # producing: the socket is up, the turn commits, the transcript of what you
+            # said comes back — and no response is ever generated. Auto-response after a
+            # committed turn is requested in the session config, but if it does not
+            # happen there is nothing in the protocol that tells you so. Asking for the
+            # response outright after a short grace period turns a silent hang into a
+            # reply, and logs that it was needed.
+            import asyncio as _asyncio
+
+            state = {"response_active": False, "nudge": None}
+
+            async def nudge_after_commit() -> None:
+                try:
+                    await _asyncio.sleep(2.0)
+                except _asyncio.CancelledError:
+                    return
+                if state["response_active"]:
+                    return
+                log.warning(
+                    "no response 2s after the turn committed - asking for one explicitly. "
+                    "create_response in turn_detection is not being honoured."
+                )
+                await upstream.send(json.dumps({"type": "response.create"}))
+
+            def arm_nudge() -> None:
+                if state["nudge"] and not state["nudge"].done():
+                    state["nudge"].cancel()
+                state["nudge"] = _asyncio.create_task(nudge_after_commit())
+
             async def pump_down() -> None:
                 audio_kind = None
+                seen_types: set[str] = set()
                 async for raw in upstream:
                     if isinstance(raw, bytes):
+                        # xAI may deliver audio as binary rather than base64 deltas. The
+                        # server forwarded these and the HUD had no consumer for them, so
+                        # they were parsed as JSON, threw, and were dropped. Relayed with
+                        # a marker so the client knows to play them as PCM16.
+                        if "binary-audio" not in seen_types:
+                            seen_types.add("binary-audio")
+                            log.info("xai realtime is sending binary audio frames (%d bytes)", len(raw))
                         await ws.send_bytes(raw)
                         continue
                     event = json.loads(raw)
-                    etype = event.get("type")
+                    etype = event.get("type") or ""
+                    if etype not in seen_types:
+                        seen_types.add(etype)
+                        log.info("xai realtime event: %s", etype)
+                    if etype == "response.created":
+                        state["response_active"] = True
+                        if state["nudge"] and not state["nudge"].done():
+                            state["nudge"].cancel()
+                    elif etype in ("response.done", "response.completed", "response.cancelled"):
+                        state["response_active"] = False
                     if etype in ("response.output_audio.delta", "response.audio.delta"):
                         if audio_kind and audio_kind != etype:
                             continue
@@ -232,16 +278,16 @@ async def handle_live(ws: WebSocket, session_id: str, voice: str | None = None) 
                         if text:
                             memory.add_message(session_id, "user", text)
                         await ws.send_json({"type": "user", "text": text})
+                        arm_nudge()
+                    elif etype in ("input_audio_buffer.committed", "input_audio_buffer.speech_stopped"):
+                        arm_nudge()
                     elif etype == "response.function_call_arguments.done":
                         name = event.get("name")
                         call_id = event.get("call_id")
                         args = _parse_args(event.get("arguments"))
                         pending[call_id] = {"name": name, "args": args}
                         await ws.send_json({"type": "tool_call", "name": name, "arguments": args})
-                        try:
-                            result = tools.execute(name, args, session_id=session_id, agent_id="jarvis")
-                        except Exception as exc:
-                            result = {"error": str(exc)}
+                        result = _run_tool(name, args, session_id=session_id, agent_id="jarvis")
                         await ws.send_json({"type": "tool_result", "name": name, "result": result})
                         await upstream.send(json.dumps({
                             "type": "conversation.item.create",
@@ -252,6 +298,7 @@ async def handle_live(ws: WebSocket, session_id: str, voice: str | None = None) 
                             },
                         }))
                         # Wait is handled client-side; request continuation.
+                        state["response_active"] = False
                         await upstream.send(json.dumps({"type": "response.create"}))
                     elif etype == "error":
                         detail = event.get("error") or event

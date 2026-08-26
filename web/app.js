@@ -670,15 +670,24 @@ function audioClock() {
 }
 
 function playPcm16(b64) {
-  const ctx = state.audioCtx || new AudioContext({ sampleRate: 24000 });
-  state.audioCtx = ctx;
-  if (ctx.state === "suspended") ctx.resume();
-  audioClock();
   const raw = atob(b64);
   const buf = new ArrayBuffer(raw.length);
   const view = new Uint8Array(buf);
   for (let i = 0; i < raw.length; i++) view[i] = raw.charCodeAt(i);
-  const pcm = new Int16Array(buf);
+  playPcmBuffer(buf);
+}
+
+// One scheduler, whether the audio arrived as a base64 delta or a raw binary frame.
+function playPcmBuffer(buf) {
+  if (buf instanceof Blob) { buf.arrayBuffer().then(playPcmBuffer); return; }
+  if (!buf || !buf.byteLength) return;
+  const ctx = state.audioCtx || new AudioContext({ sampleRate: 24000 });
+  state.audioCtx = ctx;
+  if (ctx.state === "suspended") ctx.resume();
+  audioClock();
+  // Int16Array needs an even byte length and an aligned offset.
+  const pcm = new Int16Array(buf, 0, Math.floor(buf.byteLength / 2));
+  if (!pcm.length) return;
   const audio = ctx.createBuffer(1, pcm.length, 24000);
   const ch = audio.getChannelData(0);
   for (let i = 0; i < pcm.length; i++) ch[i] = pcm[i] / 32768;
@@ -755,10 +764,15 @@ async function toggleLive() {
     };
     state.processor = proc;
   };
+  ws.binaryType = "arraybuffer";
   ws.onmessage = (m) => {
-    // The server relays upstream binary frames as-is, and a Blob is not JSON.
-    // Parsing it unconditionally threw and silently dropped the message.
-    if (typeof m.data !== "string") return;
+    // The server forwards upstream binary frames as-is, and nothing here consumed
+    // them: JSON.parse threw on the Blob and the message vanished. If xAI delivers
+    // audio as binary rather than base64 deltas, that was every word she ever spoke.
+    if (typeof m.data !== "string") {
+      playPcmBuffer(m.data);
+      return;
+    }
     let ev;
     try { ev = JSON.parse(m.data); } catch { return; }
     if (ev.type === "audio" && ev.data) playPcm16(ev.data);
