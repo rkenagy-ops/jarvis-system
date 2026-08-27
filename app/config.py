@@ -89,6 +89,10 @@ IBKR_HOST = "127.0.0.1"
 IBKR_PORT = int(_clean(os.getenv("IBKR_PORT")) or "7496")
 IBKR_CLIENT_ID = int(_clean(os.getenv("IBKR_CLIENT_ID")) or "117")
 IBKR_LIVE = (_clean(os.getenv("IBKR_LIVE")) or "false").lower() == "true"
+# Risk governor. These LOWER the hard ceilings in app/risk.py; they can never raise
+# them. A limit a config file can widen is a suggestion, not a limit.
+MAX_DAILY_LOSS = float(_clean(os.getenv("MAX_DAILY_LOSS")) or "25000")
+MAX_TRADE_NOTIONAL = float(_clean(os.getenv("MAX_TRADE_NOTIONAL")) or "25000")
 MARKETBEAST_ROOT = _clean(os.getenv("MARKETBEAST_ROOT")) or str(ROOT / "vendor" / "marketbeast" / "hypertrader")
 PUBLER_API_KEY = _clean(os.getenv("PUBLER_API_KEY"))
 PUBLER_WORKSPACE_ID = _clean(os.getenv("PUBLER_WORKSPACE_ID"))
@@ -128,7 +132,7 @@ def reload_env() -> None:
     global JARVIS_TOKEN, JARVIS_ALLOW_LAN, JARVIS_PUBLIC_HOST, OFFLINE, HOST, PORT
     global OLLAMA_HOST, OLLAMA_MODEL, OLLAMA_EMBED_MODEL, ALPACA_KEY_ID, ALPACA_SECRET_KEY, ALPACA_LIVE
     global MS_CLIENT_ID, MS_TENANT, MS_REFRESH_TOKEN
-    global IBKR_PORT, IBKR_CLIENT_ID, IBKR_LIVE, MARKETBEAST_ROOT
+    global IBKR_PORT, IBKR_CLIENT_ID, IBKR_LIVE, MARKETBEAST_ROOT, MAX_DAILY_LOSS, MAX_TRADE_NOTIONAL
     global PUBLER_API_KEY, PUBLER_WORKSPACE_ID, KLAVIYO_API_KEY, MANYCHAT_API_TOKEN, CLICKFUNNELS_API_KEY, CLICKFUNNELS_API_BASE
     global THREADS_ACCESS_TOKEN, THREADS_USER_ID, LINKEDIN_ACCESS_TOKEN, LINKEDIN_AUTHOR_URN
     global IG_ACCESS_TOKEN, IG_USER_ID, FB_PAGE_TOKEN, FB_PAGE_ID
@@ -169,6 +173,8 @@ def reload_env() -> None:
     IBKR_PORT = int(_clean(os.getenv("IBKR_PORT")) or "7496")
     IBKR_CLIENT_ID = int(_clean(os.getenv("IBKR_CLIENT_ID")) or "117")
     IBKR_LIVE = (_clean(os.getenv("IBKR_LIVE")) or "false").lower() == "true"
+    MAX_DAILY_LOSS = float(_clean(os.getenv("MAX_DAILY_LOSS")) or "25000")
+    MAX_TRADE_NOTIONAL = float(_clean(os.getenv("MAX_TRADE_NOTIONAL")) or "25000")
     MARKETBEAST_ROOT = _clean(os.getenv("MARKETBEAST_ROOT")) or str(ROOT / "vendor" / "marketbeast" / "hypertrader")
     PUBLER_API_KEY = _clean(os.getenv("PUBLER_API_KEY"))
     PUBLER_WORKSPACE_ID = _clean(os.getenv("PUBLER_WORKSPACE_ID"))
@@ -236,6 +242,8 @@ def status() -> dict:
         "x_oauth": bool(X_API_KEY and X_API_SECRET and X_ACCESS_TOKEN and X_ACCESS_SECRET),
         "microsoft_configured": bool(MS_CLIENT_ID and MS_REFRESH_TOKEN),
         "ibkr_live": IBKR_LIVE,
+        "max_daily_loss": MAX_DAILY_LOSS,
+        "max_trade_notional": MAX_TRADE_NOTIONAL,
         "ibkr_port": IBKR_PORT,
         "marketbeast_root": bool(MARKETBEAST_ROOT),
         "publer": bool(PUBLER_API_KEY and PUBLER_WORKSPACE_ID),

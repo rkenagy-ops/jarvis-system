@@ -400,6 +400,52 @@ FUNCTION_TOOLS = [
         ["action"],
     ),
     _fn(
+        "risk",
+        (
+            "The governor on live trading. action=state shows today's loss against the daily limit, "
+            "remaining budget, trade count and whether trading is halted. action=halt stops all new "
+            "orders immediately (closing positions is never blocked). action=resume clears a halt - "
+            "a deliberate decision, never automatic. Every live order passes through this before the "
+            "confirm token or any standing grant is even considered."
+        ),
+        {
+            "action": {"type": "string", "enum": ["state", "check", "halt", "resume", "record", "budget", "pnl"]},
+            "reason": {"type": "string"},
+            "notional": {"type": "number"},
+            "pnl": {"type": "number"},
+            "symbol": {"type": "string"},
+        },
+        ["action"],
+    ),
+    _fn(
+        "options",
+        (
+            "Options selection on the things that decide the outcome: bid/ask cost, volatility regime, "
+            "delta band, days to expiry, liquidity, breakeven distance and daily theta burn. "
+            "action=iv says whether premium is cheap or dear for this name by its own history. "
+            "action=rank scores a broker chain and ranks what survives the filters. action=size turns a "
+            "risk budget into a contract count. action=book nets the greeks across open positions. "
+            "Rejecting every contract is a valid answer - some days the right number of trades is zero."
+        ),
+        {
+            "action": {"type": "string", "enum": ["rank", "iv", "score", "size", "book"]},
+            "symbol": {"type": "string"},
+            "bias": {"type": "string", "description": "bullish or bearish; picks the side, not the standard."},
+            "chain": {"type": "array", "items": {"type": "object"}, "description": "broker chain rows for action=rank."},
+            "spot": {"type": "number"},
+            "strike": {"type": "number"},
+            "expiry": {"type": "string"},
+            "right": {"type": "string"},
+            "bid": {"type": "number"},
+            "ask": {"type": "number"},
+            "iv": {"type": "number"},
+            "risk_budget": {"type": "number"},
+            "cost_per_contract": {"type": "number"},
+            "stop_pct": {"type": "number"},
+        },
+        ["action"],
+    ),
+    _fn(
         "backtest",
         (
             "Does a setup actually have a record? Replays the SAME detector setups action=scan "
@@ -570,6 +616,11 @@ def tools_for(agent_id: str, *, allow_spawn: bool = False) -> list[dict]:
         if name == "setups" and agent_id not in _MARKET_AGENTS:
             continue
         if name == "backtest" and agent_id not in _MARKET_AGENTS:
+            continue
+        if name == "options" and agent_id not in _MARKET_AGENTS:
+            continue
+        # risk is the control surface for live trading, not a market tool.
+        if name == "risk" and agent_id not in {"jarvis", "trader"}:
             continue
         if name == "greeks" and agent_id not in _MARKET_AGENTS:
             continue
@@ -742,6 +793,20 @@ def execute(name: str, arguments: dict[str, Any], *, session_id: str, agent_id: 
 
         return greeks_mod.dispatch(
             arguments.get("action") or "analyze",
+            **{k: v for k, v in arguments.items() if k != "action"},
+        )
+    if name == "risk":
+        from . import risk as risk_mod
+
+        return risk_mod.dispatch(
+            arguments.get("action") or "state",
+            **{k: v for k, v in arguments.items() if k != "action"},
+        )
+    if name == "options":
+        from . import options as options_mod
+
+        return options_mod.dispatch(
+            arguments.get("action") or "rank",
             **{k: v for k, v in arguments.items() if k != "action"},
         )
     if name == "backtest":

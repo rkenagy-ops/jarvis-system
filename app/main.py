@@ -393,6 +393,35 @@ async def voice_selftest(profile: str = "full") -> dict:
     return await selftest(profile=profile)
 
 
+@app.get("/api/risk")
+def api_risk() -> dict:
+    """Where today stands against the daily loss limit, and whether trading is halted."""
+    from . import risk as risk_mod
+
+    return risk_mod.state()
+
+
+@app.post("/api/risk/halt")
+def api_risk_halt(reason: str = "manual kill switch") -> dict:
+    """Stop all new orders now. Closing positions is never blocked.
+
+    A POST with no token requirement beyond the fortress guard, deliberately: the kill
+    switch has to be reachable in a hurry, and every second spent finding a credential
+    is a second the position is still open.
+    """
+    from . import risk as risk_mod
+
+    return risk_mod.halt(reason)
+
+
+@app.post("/api/risk/resume")
+def api_risk_resume(reason: str = "") -> dict:
+    """Clear a halt. A human decision, never automatic."""
+    from . import risk as risk_mod
+
+    return risk_mod.resume(reason)
+
+
 @app.get("/api/backtest")
 def api_backtest(symbol: str, setup: str = "", action: str = "sweep", range: str = "5y") -> dict:
     """Historical record for a setup, or every setup on a symbol ranked by expectancy."""

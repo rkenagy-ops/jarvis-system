@@ -411,8 +411,65 @@ def option_quotes(specs: list[dict]) -> dict[str, dict]:
         return {}
 
 
+# Order kinds that reduce exposure. The governor never blocks these - a halt must not
+# be able to trap a position.
+RISK_EXEMPT = frozenset({"ibkr_close", "ibkr_cancel"})
+
+
+def _estimate_notional(kind: str, payload: dict) -> float:
+    """Roughly what this order puts at stake, for the risk gate.
+
+    Deliberately errs high. An option contract is 100 shares, and where no price is
+    known we fall back to the strike, because a gate that under-estimates exposure is
+    worse than one that occasionally refuses a legitimate order.
+    """
+    qty = abs(float(payload.get("qty") or 0))
+    if kind == "ibkr_option":
+        px = payload.get("limit") or payload.get("strike") or 0
+        return qty * abs(float(px or 0)) * 100
+    px = payload.get("limit") or payload.get("entry") or payload.get("price") or 0
+    return qty * abs(float(px or 0))
+
+
+def _risk_gate(kind: str, payload: dict) -> dict | None:
+    """The governor, ahead of every other check. No bypass, by design.
+
+    This sits before the confirm-token and trust-grant logic on purpose: a standing
+    grant authorises a KIND of order, it does not authorise exceeding the day's loss
+    limit. Confirmed=True does not skip it either - an explicit human confirm is
+    consent to a trade, not consent to trade past the limit that was set precisely so
+    a bad day has a floor.
+    """
+    if kind in RISK_EXEMPT:
+        # Closing and cancelling REDUCE exposure. Gating them would mean a halt traps
+        # you in a losing position at precisely the moment you most need out, which
+        # would turn the safety rail into the hazard.
+        return None
+    if not gateway_is_live():
+        return None  # paper: the governor is about real money
+    try:
+        from . import risk
+    except Exception:
+        return None  # never let an import problem here block the desk entirely
+    verdict = risk.check(_estimate_notional(kind, payload), kind=kind)
+    if verdict.get("allowed"):
+        return None
+    return {
+        "error": "Blocked by the risk governor. No order sent.",
+        "reason": verdict.get("reason"),
+        "halted": verdict.get("halted", False),
+        "risk": verdict.get("state"),
+        "fix": verdict.get("fix"),
+    }
+
+
 def _need_confirm(kind: str, payload: dict, *, confirmed: bool, confirm_token: str | None) -> dict | None:
     from . import memory
+
+    # Ahead of everything, including confirmed=True and standing grants.
+    blocked = _risk_gate(kind, payload)
+    if blocked:
+        return blocked
 
     if not gateway_is_live() or confirmed:
         return None
