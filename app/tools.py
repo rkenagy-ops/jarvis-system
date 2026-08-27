@@ -418,6 +418,31 @@ FUNCTION_TOOLS = [
         ["action"],
     ),
     _fn(
+        "scout",
+        (
+            "The best option trade available right now, decided by what the stock has ACTUALLY "
+            "done. Scores every expiry from 7 to 60 DTE on one axis that needs no opinion: the "
+            "move the contract requires, against how often this name has made a move that size "
+            "over that exact horizon, measured on its own history. Reports that beside the "
+            "Black-Scholes number and flags where they disagree - a lognormal denies the fat "
+            "tails real stocks have. action=base_rate answers 'how often does X move Y% in Z days' "
+            "on its own. Direction comes from the trend, not a standing preference."
+        ),
+        {
+            "action": {"type": "string", "enum": ["hunt", "base_rate", "evaluate"]},
+            "symbol": {"type": "string"},
+            "bias": {"type": "string", "description": "auto (from trend), bullish, or bearish."},
+            "min_dte": {"type": "integer"},
+            "max_dte": {"type": "integer"},
+            "move_pct": {"type": "number", "description": "for action=base_rate."},
+            "horizon": {"type": "integer", "description": "trading days, for action=base_rate."},
+            "direction": {"type": "string", "enum": ["up", "down"]},
+            "range": {"type": "string", "description": "history window, default 3y."},
+            "chain": {"type": "array", "items": {"type": "object"}, "description": "real broker chain; without it prices are theoretical."},
+        },
+        ["action"],
+    ),
+    _fn(
         "probability",
         (
             "The odds, told apart properly. delta (N(d1)) is NOT the chance of finishing in the "
@@ -647,6 +672,8 @@ def tools_for(agent_id: str, *, allow_spawn: bool = False) -> list[dict]:
             continue
         if name == "probability" and agent_id not in _MARKET_AGENTS:
             continue
+        if name == "scout" and agent_id not in _MARKET_AGENTS:
+            continue
         # risk is the control surface for live trading, not a market tool.
         if name == "risk" and agent_id not in {"jarvis", "trader"}:
             continue
@@ -828,6 +855,13 @@ def execute(name: str, arguments: dict[str, Any], *, session_id: str, agent_id: 
 
         return risk_mod.dispatch(
             arguments.get("action") or "state",
+            **{k: v for k, v in arguments.items() if k != "action"},
+        )
+    if name == "scout":
+        from . import scout as scout_mod
+
+        return scout_mod.dispatch(
+            arguments.get("action") or "hunt",
             **{k: v for k, v in arguments.items() if k != "action"},
         )
     if name == "probability":

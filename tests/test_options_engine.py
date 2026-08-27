@@ -50,10 +50,25 @@ def test_a_deep_itm_contract_is_rejected_as_expensive_stock():
     assert any("close to stock" in b for b in out["blockers"])
 
 
-def test_an_expiring_contract_is_rejected():
+def test_a_contract_expiring_inside_a_week_is_rejected():
+    """7 DTE is a legitimate trade and is now inside the window; 4 is not. Below a week
+    the contract turns on a single session rather than on the thesis."""
     out = options.score_contract(**_at(4, bid=1.10, ask=1.15))
     assert out["ok"] is False
-    assert any("theta dominates" in b for b in out["blockers"])
+    assert any("coin flip" in b for b in out["blockers"])
+
+
+def test_seven_dte_is_inside_the_window_now():
+    """The data decides which expiry is best, not a preference baked into the filter."""
+    out = options.score_contract(**_at(8, bid=1.60, ask=1.66))
+    assert out["ok"] is True, out.get("blockers")
+    assert "Short-dated" in out["horizon"]
+
+
+def test_every_expiry_reports_what_kind_of_trade_it_is():
+    for days, word in ((10, "Short-dated"), (25, "Front month"), (50, "Longer-dated")):
+        out = options.score_contract(**_at(days, bid=2.0, ask=2.06))
+        assert word in out["horizon"], f"{days}d described as {out['horizon']!r}"
 
 
 def test_an_illiquid_contract_is_rejected():

@@ -32,10 +32,13 @@ MAX_SPREAD_PCT = 12.0
 MIN_OPEN_INTEREST = 250
 MIN_VOLUME = 25
 
-# Weeklies decay fastest and give a thesis no time to work; LEAPs tie up capital and
-# barely move on the move you predicted. This window is where directional trades live.
-MIN_DTE = 21
-MAX_DTE = 75
+# The tradeable window. 7 DTE is not a worse trade than 45 DTE, it is a different one -
+# it costs less, decays faster, and needs the move sooner. Which is better depends on
+# what the underlying actually does over each horizon, and that is measurable rather
+# than a matter of taste. So DTE is a scored dimension here, not a gate: the window
+# only excludes what is genuinely unworkable at either end.
+MIN_DTE = 7
+MAX_DTE = 60
 
 # Delta band for a directional long. Below this you are buying lottery tickets that
 # expire worthless most of the time; above it you are paying for stock you could buy.
@@ -222,9 +225,21 @@ def score_contract(
     if volume is not None and volume < MIN_VOLUME:
         blockers.append(f"Only {volume} traded today; this contract barely changes hands.")
     if dte < MIN_DTE:
-        blockers.append(f"{dte} days to expiry - theta dominates and the thesis has no time to work.")
+        blockers.append(
+            f"{dte} days to expiry - inside a week the contract is closer to a coin flip on a "
+            "single session than a position."
+        )
     if dte > MAX_DTE:
         blockers.append(f"{dte} days out - capital is tied up and the contract moves little on your move.")
+
+    # Not a blocker: a note on what this expiry IS, so the tradeoff is visible rather
+    # than decided for you.
+    if dte <= 14:
+        horizon = "Short-dated: cheap, fast-decaying, needs the move this week."
+    elif dte <= 30:
+        horizon = "Front month: the usual balance of cost against time."
+    else:
+        horizon = "Longer-dated: costlier, decays slowly, survives being early."
     if delta is not None and not (TARGET_DELTA[0] <= abs(delta) <= TARGET_DELTA[1]):
         if abs(delta) < TARGET_DELTA[0]:
             blockers.append(f"Delta {round(delta, 2)} - this is a lottery ticket, it usually expires worthless.")
@@ -258,6 +273,7 @@ def score_contract(
         "delta_shares": round((delta or 0) * 100, 1),
         "open_interest": open_interest,
         "volume": volume,
+        "horizon": horizon,
         "blockers": blockers or None,
         "verdict": (
             "Tradeable." if not blockers

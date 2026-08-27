@@ -393,6 +393,14 @@ async def voice_selftest(profile: str = "full") -> dict:
     return await selftest(profile=profile)
 
 
+@app.get("/api/scout")
+def api_scout(symbol: str, bias: str = "auto", min_dte: int = 7, max_dte: int = 60) -> dict:
+    """Best option trade on a symbol across the 7-60 DTE window, ranked on base rates."""
+    from . import scout as scout_mod
+
+    return scout_mod.hunt(symbol, bias=bias, min_dte=min_dte, max_dte=max_dte)
+
+
 @app.get("/api/risk")
 def api_risk() -> dict:
     """Where today stands against the daily loss limit, and whether trading is halted."""
