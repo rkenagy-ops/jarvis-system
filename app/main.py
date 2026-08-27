@@ -393,6 +393,15 @@ async def voice_selftest(profile: str = "full") -> dict:
     return await selftest(profile=profile)
 
 
+@app.get("/api/catalysts")
+def api_catalysts(limit: int = 30, symbols: str = "") -> dict:
+    """Tradeable catalysts on the world wires right now, with their expected horizons."""
+    from . import catalyst as catalyst_mod
+
+    syms = [s.strip().upper() for s in symbols.split(",") if s.strip()] or None
+    return catalyst_mod.scan(limit=limit, symbols=syms)
+
+
 @app.get("/api/scout")
 def api_scout(symbol: str, bias: str = "auto", min_dte: int = 7, max_dte: int = 60) -> dict:
     """Best option trade on a symbol across the 7-60 DTE window, ranked on base rates."""

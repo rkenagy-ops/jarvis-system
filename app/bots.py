@@ -52,6 +52,15 @@ SPECS: list[tuple[str, str, int]] = [
         "stops being reported as an open gap.",
         21600,
     ),
+    (
+        "bot-24-catalyst",
+        "Sweep the world wires for tradeable catalysts - earnings, guidance, approvals, "
+        "conflict, supply shocks - classify each by how soon the move should happen and how "
+        "long it lasts, and emit market.signal so the desk reacts instead of waiting for its "
+        "next tick. Every 10 minutes, because a catalyst that reaches you an hour late is "
+        "already in the price.",
+        600,
+    ),
 ]
 
 

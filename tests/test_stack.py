@@ -236,11 +236,27 @@ def test_publer_schedule_needs_confirm(monkeypatch):
 
 
 def test_bot_roster():
-    assert len(bots.SPECS) == 23
+    """Properties, not a count.
+
+    This asserted len == 23 and had to be edited every time a bot was added, which makes
+    it a chore rather than a check. What actually matters is that the roster is unique,
+    numbered without gaps, and that every entry can actually run.
+    """
+    from app import autonomy
+
     names = [s[0] for s in bots.SPECS]
+    assert len(set(names)) == len(names), "duplicate bot names"
     assert names[0].startswith("bot-01")
-    assert names[-1].startswith("bot-23")
-    assert len(set(names)) == 23
+
+    numbers = sorted(int(n.split("-")[1]) for n in names)
+    assert numbers == list(range(1, len(names) + 1)), f"gaps in the numbering: {numbers}"
+
+    for name in names:
+        assert name in autonomy.JOB_HANDLERS, f"{name} is on the roster with no handler"
+
+    for spec in bots.SPECS:
+        assert spec[1].strip(), f"{spec[0]} has no description"
+        assert spec[2] > 0, f"{spec[0]} has a non-positive interval"
 
 
 def test_stack_tool_on_jarvis():

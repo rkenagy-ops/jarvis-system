@@ -11,15 +11,36 @@ from xml.etree import ElementTree as ET
 from . import config, markets
 from . import guard
 
+# A US/UK-only wire misses the half of the day that has already happened. Asian and
+# European sessions set the tone the US opens into, and a story that broke in Tokyo at
+# 02:00 New York time is not news by the time the bell rings - it is already in the
+# price. Breadth here is about being early rather than about being thorough.
 NEWS_FEEDS = {
-    "bbc": "https://feeds.bbci.co.uk/news/rss.xml",
+    # --- US markets
+    "yahoo_finance": "https://finance.yahoo.com/news/rssindex",
+    "cnbc": "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=100003114",
+    "cnbc_earnings": "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=15839135",
+    "marketwatch": "https://feeds.content.dowjones.io/public/rss/mw_topstories",
+    "seeking_alpha": "https://seekingalpha.com/market_currents.xml",
+    # --- global wires
+    "reuters_world": "https://www.reutersagency.com/feed/?best-topics=business-finance&post_type=best",
+    "aljazeera": "https://www.aljazeera.com/xml/rss/all.xml",
     "bbc_world": "https://feeds.bbci.co.uk/news/world/rss.xml",
     "bbc_business": "https://feeds.bbci.co.uk/news/business/rss.xml",
     "bbc_tech": "https://feeds.bbci.co.uk/news/technology/rss.xml",
-    "npr": "https://feeds.npr.org/1001/rss.xml",
-    "yahoo_finance": "https://finance.yahoo.com/news/rssindex",
-    "cnbc": "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=100003114",
     "guardian_biz": "https://www.theguardian.com/uk/business/rss",
+    "guardian_world": "https://www.theguardian.com/world/rss",
+    "npr": "https://feeds.npr.org/1001/rss.xml",
+    # --- Asia and Europe, which trade before New York opens
+    "nikkei_asia": "https://asia.nikkei.com/rss/feed/nar",
+    "scmp_business": "https://www.scmp.com/rss/92/feed",
+    "dw_business": "https://rss.dw.com/rdf/rss-en-bus",
+    "france24_biz": "https://www.france24.com/en/business/rss",
+    # --- sector wires that move single names
+    "fierce_pharma": "https://www.fiercepharma.com/rss/xml",
+    "oilprice": "https://oilprice.com/rss/main",
+    "defense_news": "https://www.defensenews.com/arc/outboundfeeds/rss/?outputType=xml",
+    "semiconductor": "https://www.semiconductor-digest.com/feed/",
     "coindesk": "https://www.coindesk.com/arc/outboundfeeds/rss/",
     "hn": "https://hnrss.org/frontpage",
 }

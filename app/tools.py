@@ -418,6 +418,28 @@ FUNCTION_TOOLS = [
         ["action"],
     ),
     _fn(
+        "catalyst",
+        (
+            "What the world wires are saying that could move a position, and how soon. "
+            "action=scan sweeps 23 global feeds and classifies each headline: earnings, guidance, "
+            "approvals, M&A, conflict, supply shocks - each with how many days until the move and "
+            "how long it persists. action=horizon turns a headline into a suggested expiry window. "
+            "action=reaction measures whether this name's shocks actually CONTINUE or gap and fade, "
+            "which is what decides if a short-dated option works. Anything scheduled carries an IV "
+            "crush warning: a known date means the premium is already bid up, and buying a naked "
+            "long through the print loses money even when the stock gaps your way."
+        ),
+        {
+            "action": {"type": "string", "enum": ["scan", "classify", "horizon", "reaction"]},
+            "headline": {"type": "string"},
+            "symbol": {"type": "string"},
+            "symbols": {"type": "string", "description": "comma-separated filter for scan."},
+            "limit": {"type": "integer"},
+            "range": {"type": "string"},
+        },
+        ["action"],
+    ),
+    _fn(
         "scout",
         (
             "The best option trade available right now, decided by what the stock has ACTUALLY "
@@ -674,6 +696,8 @@ def tools_for(agent_id: str, *, allow_spawn: bool = False) -> list[dict]:
             continue
         if name == "scout" and agent_id not in _MARKET_AGENTS:
             continue
+        if name == "catalyst" and agent_id not in _MARKET_AGENTS:
+            continue
         # risk is the control surface for live trading, not a market tool.
         if name == "risk" and agent_id not in {"jarvis", "trader"}:
             continue
@@ -855,6 +879,13 @@ def execute(name: str, arguments: dict[str, Any], *, session_id: str, agent_id: 
 
         return risk_mod.dispatch(
             arguments.get("action") or "state",
+            **{k: v for k, v in arguments.items() if k != "action"},
+        )
+    if name == "catalyst":
+        from . import catalyst as catalyst_mod
+
+        return catalyst_mod.dispatch(
+            arguments.get("action") or "scan",
             **{k: v for k, v in arguments.items() if k != "action"},
         )
     if name == "scout":

@@ -198,6 +198,63 @@ def _h_gaps() -> str:
     return f"{out.get('summary')} Goals moved: {', '.join(moved) if moved else 'none'}."
 
 
+def _h_catalyst() -> str:
+    """Sweep the wires, log what is tradeable, and wake the desk if anything is.
+
+    Emitting rather than just writing a note is the point: a catalyst is time-sensitive
+    by definition, and the whole reason to run this every ten minutes is that the desk
+    hears about it now rather than on its own next tick.
+    """
+    from . import catalyst, events, memory, obsidian
+
+    out = catalyst.scan(limit=25)
+    found = out.get("catalysts") or []
+    named = out.get("with_tickers") or []
+    if not found:
+        return "Wires scanned; nothing that reads as a tradeable catalyst."
+
+    lines = [f"---\ntype: catalysts\nlayer: super-7.3\n---\n", "# Catalysts on the wires\n"]
+    for c in found[:20]:
+        flag = " [IV CRUSH RISK]" if c.get("iv_crush_risk") else ""
+        tick = f" ({', '.join(c['tickers'])})" if c.get("tickers") else ""
+        lines.append(
+            f"- **{c['kind']}** {c['direction']} ~{c['horizon_days']}d{flag}{tick} - "
+            f"{c['headline']} _({c.get('source')})_"
+        )
+    try:
+        obsidian.write_note("Markets/catalysts.md", "\n".join(lines) + "\n")
+    except Exception:
+        pass
+
+    for c in named[:8]:
+        try:
+            memory.remember(
+                f"Catalyst: {c['kind']} {c['direction']} on {', '.join(c['tickers'])} "
+                f"(~{c['horizon_days']}d). {c['headline']}",
+                kind="signal", tags=["catalyst", "market"], importance=0.75, source_agent="scanner",
+            )
+        except Exception:
+            pass
+
+    if named:
+        try:
+            events.emit("market.signal", {
+                "source": "catalyst",
+                "count": len(named),
+                "tickers": sorted({t for c in named for t in c["tickers"]}),
+                "kinds": sorted({c["kind"] for c in named}),
+            }, coalesce=True)
+        except Exception:
+            pass
+
+    crush = sum(1 for c in found if c.get("iv_crush_risk"))
+    return (
+        f"{len(found)} catalyst(s) on the wires, {len(named)} tied to a ticker"
+        + (f", {crush} carrying IV crush risk" if crush else "")
+        + f". Sources: {out.get('sources')}."
+    )
+
+
 def _h_learn() -> str:
     from . import learning
 
@@ -240,6 +297,7 @@ JOB_HANDLERS: dict[str, Any] = {
     "bot-21-engage": _h_engage,
     "bot-22-learn": _h_learn,
     "bot-23-gaps": _h_gaps,
+    "bot-24-catalyst": _h_catalyst,
 }
 
 
