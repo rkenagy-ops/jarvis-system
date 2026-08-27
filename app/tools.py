@@ -400,6 +400,24 @@ FUNCTION_TOOLS = [
         ["action"],
     ),
     _fn(
+        "backtest",
+        (
+            "Does a setup actually have a record? Replays the SAME detector setups action=scan "
+            "uses over years of daily bars and reports trades, win rate, expectancy in R, profit "
+            "factor and worst drawdown. action=verify pairs today's live plan with its history, so "
+            "an ENTER arrives with evidence or with an explicit admission there is none. Call this "
+            "before sizing anything real."
+        ),
+        {
+            "action": {"type": "string", "enum": ["run", "sweep", "verify"]},
+            "symbol": {"type": "string"},
+            "setup": {"type": "string", "description": "catalog key; not needed for sweep."},
+            "range": {"type": "string", "description": "history window, default 5y."},
+            "risk": {"type": "number", "description": "dollar risk budget, for verify."},
+        },
+        ["action"],
+    ),
+    _fn(
         "setups",
         (
             "Named market setups: which are live on a symbol, what each one IS and how it fails, "
@@ -550,6 +568,8 @@ def tools_for(agent_id: str, *, allow_spawn: bool = False) -> list[dict]:
         if name == "market" and agent_id not in _MARKET_AGENTS:
             continue
         if name == "setups" and agent_id not in _MARKET_AGENTS:
+            continue
+        if name == "backtest" and agent_id not in _MARKET_AGENTS:
             continue
         if name == "greeks" and agent_id not in _MARKET_AGENTS:
             continue
@@ -722,6 +742,13 @@ def execute(name: str, arguments: dict[str, Any], *, session_id: str, agent_id: 
 
         return greeks_mod.dispatch(
             arguments.get("action") or "analyze",
+            **{k: v for k, v in arguments.items() if k != "action"},
+        )
+    if name == "backtest":
+        from . import backtest as backtest_mod
+
+        return backtest_mod.dispatch(
+            arguments.get("action") or "run",
             **{k: v for k, v in arguments.items() if k != "action"},
         )
     if name == "setups":

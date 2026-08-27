@@ -225,6 +225,46 @@ def watch_vault(event: str = "vault.changed") -> dict[str, Any]:
     return {"ok": True, **SOURCES["vault"]}
 
 
+# What reacts to what, out of the box.
+#
+# The event half of autonomy was fully built and then never switched on: watch_vault()
+# started a real watcher, emit() looked jobs up in SUBSCRIPTIONS, and nothing ever put
+# anything in SUBSCRIPTIONS. health reported "subscriptions: 0" the whole time. So every
+# vault edit fired an event into an empty registry, and learning only ever happened when
+# its six-hour timer came round - which is exactly the "learning is scheduled, not
+# constant" complaint.
+#
+# These are the defaults. A vault edit should reindex what changed and let learning see
+# it; a closed capability gap is worth re-checking the goal list over.
+DEFAULT_SUBSCRIPTIONS: dict[str, tuple[str, ...]] = {
+    "vault.changed": ("bot-19-rag", "bot-22-learn"),
+    "gaps.closed": ("bot-23-gaps",),
+    "market.signal": ("bot-03-desk",),
+}
+
+
+def wire_defaults() -> dict[str, Any]:
+    """Register the default subscriptions. Idempotent, so boot can just call it."""
+    wired: dict[str, list[str]] = {}
+    for event, jobs in DEFAULT_SUBSCRIPTIONS.items():
+        for job in jobs:
+            out = subscribe(event, job)
+            if out.get("ok"):
+                wired.setdefault(event, []).append(job)
+    total = sum(len(v) for v in SUBSCRIPTIONS.values())
+    return {
+        "ok": total > 0,
+        "wired": wired,
+        "subscriptions": total,
+        "note": (
+            "Events now reach jobs. Before this nothing was subscribed, so the watcher "
+            "fired into an empty registry and only the timers ever ran anything."
+            if total
+            else "Nothing subscribed - events will still go nowhere."
+        ),
+    }
+
+
 def stop_all() -> dict[str, Any]:
     _stop.set()
     stopped = 0

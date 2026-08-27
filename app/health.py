@@ -63,7 +63,15 @@ def brain() -> dict[str, Any]:
         ol["models"] = probe.get("models")
         ol["reason"] = probe.get("reason") or probe.get("error")
     if not ol.get("up"):
-        ol["fix"] = "Ollama is not answering. Start it, or install: winget install Ollama.Ollama"
+        # "Ollama is not answering" covered two different problems with one sentence.
+        # Nothing listening and someone else holding the port need opposite fixes.
+        diag = _try(lambda: importlib.import_module("app.ollama").diagnose(), {})
+        if isinstance(diag, dict) and diag.get("verdict"):
+            ol["diagnosis"] = diag.get("verdict")
+            ol["detail"] = diag.get("detail")
+            ol["fix"] = diag.get("fix") or "Ollama is not answering."
+        else:
+            ol["fix"] = "Ollama is not answering. Start it, or install: winget install Ollama.Ollama"
     elif not ol.get("models"):
         ol["fix"] = f"Ollama is up but no model is pulled. Run: ollama pull {getattr(config, 'OLLAMA_MODEL', 'llama3.2')}"
     out["ollama"] = ol

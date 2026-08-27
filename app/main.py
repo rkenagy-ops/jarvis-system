@@ -31,6 +31,10 @@ try:
     from . import events as _events
 
     _events.watch_vault()
+    # Subscribing is the half that was missing. The watcher has always run; without
+    # this it emitted into an empty registry, so nothing was ever event-driven and
+    # learning only happened when its timer came round.
+    _events.wire_defaults()
 except Exception:
     pass
 try:
@@ -387,6 +391,14 @@ async def voice_selftest(profile: str = "full") -> dict:
     if profile not in VOICE_PROFILES:
         return {"ok": False, "error": f"unknown profile {profile!r}", "profiles": list(VOICE_PROFILES)}
     return await selftest(profile=profile)
+
+
+@app.get("/api/backtest")
+def api_backtest(symbol: str, setup: str = "", action: str = "sweep", range: str = "5y") -> dict:
+    """Historical record for a setup, or every setup on a symbol ranked by expectancy."""
+    from . import backtest as backtest_mod
+
+    return backtest_mod.dispatch(action, symbol=symbol, setup=setup, range=range)
 
 
 @app.get("/api/tools/audit")

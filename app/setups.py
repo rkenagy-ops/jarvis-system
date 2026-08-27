@@ -146,13 +146,28 @@ def _avg_volume(bars: list[dict], period: int = 20) -> float | None:
 # --------------------------------------------------------------------------- detection
 
 
+# The minimum history any detection needs before its indicators mean anything.
+WARMUP_BARS = 60
+
+
 def _context(symbol: str, range_: str = "1y") -> dict[str, Any]:
     hist = markets.history(symbol, range_)
     if hist.get("error"):
         return hist
     bars = [b for b in hist.get("bars") or [] if b.get("close") is not None]
-    if len(bars) < 60:
-        return {"error": f"Only {len(bars)} usable bars for {symbol}; need 60+."}
+    return context_from_bars(bars, symbol)
+
+
+def context_from_bars(bars: list[dict], symbol: str) -> dict[str, Any]:
+    """Everything detection needs, computed from a list of bars and nothing else.
+
+    Split out of _context so the backtest can hand it bars[:i+1] and get the state of
+    the world as of bar i. Every helper here slices from the end of what it is given,
+    so truncating the list is all it takes to move back in time - and a detector that
+    cannot see past the end of its input cannot peek at the future by accident.
+    """
+    if len(bars) < WARMUP_BARS:
+        return {"error": f"Only {len(bars)} usable bars for {symbol}; need {WARMUP_BARS}+."}
     closes = [b["close"] for b in bars]
     stats = markets.indicators(closes)
     if stats.get("error"):
@@ -176,7 +191,16 @@ def scan(symbol: str, range_: str = "1y") -> dict[str, Any]:
     ctx = _context(symbol, range_)
     if not ctx.get("ok"):
         return ctx
+    return detect(ctx)
 
+
+def detect(ctx: dict[str, Any]) -> dict[str, Any]:
+    """The detection rules themselves, over a context and nothing else.
+
+    scan() runs this on the newest bar; the backtest runs the very same function on
+    every historical bar. That is deliberate: a backtest that reimplements the rules
+    is measuring a strategy nobody trades.
+    """
     bars, closes, stats = ctx["bars"], ctx["closes"], ctx["stats"]
     last = closes[-1]
     sma20, sma50 = ctx["sma20"], ctx["sma50"]
@@ -280,20 +304,19 @@ def scan(symbol: str, range_: str = "1y") -> dict[str, Any]:
 # --------------------------------------------------------------------------- planning
 
 
-def plan(symbol: str, setup: str, risk: float = 0.0, *, range_: str = "1y") -> dict[str, Any]:
-    """Turn a setup into entry / stop / target and a share count sized off your risk budget."""
-    key = (setup or "").strip().lower()
+def levels_for(ctx: dict[str, Any], key: str) -> dict[str, Any]:
+    """Entry, stop and target for one setup, from a context and nothing else.
+
+    Extracted from plan() for the same reason detect() was extracted from scan(): the
+    backtest has to size its historical trades with the identical rules the live plan
+    uses, or the hit rate it reports belongs to some other strategy.
+    """
     if key not in CATALOG:
         return {"error": f"Unknown setup {key!r}.", "known": sorted(CATALOG)}
-
-    ctx = _context(symbol, range_)
-    if not ctx.get("ok"):
-        return ctx
-
     bars, closes, stats = ctx["bars"], ctx["closes"], ctx["stats"]
     last = closes[-1]
     atr = ctx["atr"]
-    sma20, sma50 = ctx["sma20"], ctx["sma50"]
+    sma20 = ctx["sma20"]
     if not atr:
         return {"error": "Not enough data to compute ATR; cannot size a stop."}
 
@@ -331,6 +354,29 @@ def plan(symbol: str, setup: str, risk: float = 0.0, *, range_: str = "1y") -> d
             stop = round((low20 or last) - 0.5 * atr, 2)
             target = round(mid, 2)
 
+    if abs(entry - stop) <= 0:
+        return {"error": "Computed a zero-width stop; refusing to produce levels."}
+    return {"ok": True, "side": side, "entry": entry, "stop": stop, "target": target, "atr": atr}
+
+
+def plan(symbol: str, setup: str, risk: float = 0.0, *, range_: str = "1y") -> dict[str, Any]:
+    """Turn a setup into entry / stop / target and a share count sized off your risk budget."""
+    key = (setup or "").strip().lower()
+    if key not in CATALOG:
+        return {"error": f"Unknown setup {key!r}.", "known": sorted(CATALOG)}
+
+    ctx = _context(symbol, range_)
+    if not ctx.get("ok"):
+        return ctx
+    levels = levels_for(ctx, key)
+    if levels.get("error"):
+        return levels
+
+    closes, stats = ctx["closes"], ctx["stats"]
+    last = closes[-1]
+    atr = ctx["atr"]
+    sma50 = ctx["sma50"]
+    side, entry, stop, target = levels["side"], levels["entry"], levels["stop"], levels["target"]
     risk_per_share = abs(entry - stop)
     if risk_per_share <= 0:
         return {"error": "Computed a zero-width stop; refusing to produce a plan."}

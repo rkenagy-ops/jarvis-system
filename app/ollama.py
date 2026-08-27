@@ -20,6 +20,82 @@ def model() -> str:
     return config.OLLAMA_MODEL or "llama3.2"
 
 
+def diagnose() -> dict[str, Any]:
+    """Is Ollama not running, or is something else sitting on its port?
+
+    probe() collapses every failure into "down", and those two cases need opposite
+    fixes: one is "start Ollama", the other is "something already owns 11434 and
+    starting Ollama will not help until you find out what". Telling them apart takes a
+    raw socket and costs nothing.
+    """
+    import socket
+    from urllib.parse import urlparse
+
+    parsed = urlparse(base())
+    host = parsed.hostname or "127.0.0.1"
+    port = parsed.port or (443 if parsed.scheme == "https" else 11434)
+
+    try:
+        with socket.create_connection((host, port), timeout=2.0):
+            listening = True
+    except OSError as exc:
+        return {
+            "listening": False,
+            "host": host,
+            "port": port,
+            "verdict": "nothing_listening",
+            "detail": f"Nothing is accepting connections on {host}:{port} ({exc.__class__.__name__}).",
+            "fix": "Ollama is not running. Start it, or install: winget install Ollama.Ollama",
+        }
+
+    # Something is there. Is it Ollama?
+    try:
+        with httpx.Client(timeout=3.0) as client:
+            resp = client.get(base() + "/api/tags")
+        body = resp.text[:200]
+        if resp.status_code < 400 and "models" in body:
+            return {
+                "listening": listening,
+                "host": host,
+                "port": port,
+                "verdict": "ollama",
+                "detail": "Ollama is answering on its own port.",
+            }
+        return {
+            "listening": listening,
+            "host": host,
+            "port": port,
+            "verdict": "port_taken",
+            "status": resp.status_code,
+            "body": body,
+            "detail": (
+                f"Something is listening on {host}:{port} but it does not answer /api/tags "
+                f"like Ollama (HTTP {resp.status_code}). The port is taken by another service."
+            ),
+            "fix": (
+                f"Find the owner:  Get-NetTCPConnection -LocalPort {port} -State Listen | "
+                "Select-Object OwningProcess | ForEach-Object { Get-Process -Id $_.OwningProcess }  "
+                "Then stop it, or point OLLAMA_HOST at a free port in .env."
+            ),
+        }
+    except Exception as exc:
+        return {
+            "listening": listening,
+            "host": host,
+            "port": port,
+            "verdict": "port_taken",
+            "detail": (
+                f"Something holds {host}:{port} but does not speak HTTP the way Ollama does "
+                f"({type(exc).__name__}). The port is taken by another service."
+            ),
+            "fix": (
+                f"Find the owner:  Get-NetTCPConnection -LocalPort {port} -State Listen | "
+                "Select-Object OwningProcess | ForEach-Object { Get-Process -Id $_.OwningProcess }  "
+                "Then stop it, or point OLLAMA_HOST at a free port in .env."
+            ),
+        }
+
+
 def probe(*, force: bool = False) -> dict[str, Any]:
     now = time.time()
     if not force and _probe["ok"] is not None and now - float(_probe["checked"] or 0) < 30:
