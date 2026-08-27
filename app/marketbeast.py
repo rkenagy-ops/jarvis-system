@@ -135,7 +135,13 @@ def enrich(row: dict[str, Any], extra: dict | None = None) -> dict[str, Any]:
         "combined_score": row.get("combined_score"),
         "price": spot or None,
         "rsi": row.get("rsi"),
-        "breakeven": round(strike + debit, 2) if strike and debit else None,
+        # A put breaks even BELOW the strike. Adding the debit for both sides quietly
+        # reported every put's breakeven on the wrong side of the strike.
+        "breakeven": (
+            round(strike - debit, 2)
+            if strike and debit and str(row.get("option_type") or "CALL").upper().startswith("P")
+            else round(strike + debit, 2) if strike and debit else None
+        ),
         "max_loss": round(debit * 100, 2) if debit else None,
         "reason": extra.get("reason") or row.get("reason"),
         "quote_source": extra.get("source") or "yahoo",
@@ -168,7 +174,15 @@ def _sector_symbols(sc, universe: str) -> list[str] | None:
     return mapping.get(uni)
 
 
-def _analyze_one(scanner, symbol: str, dte: int) -> dict | None:
+def _analyze_one(scanner, symbol: str, dte: int, *, allow_puts: bool = True) -> dict | None:
+    """One symbol, one side, chosen by the scanner's own read of direction.
+
+    This used to drop every bearish symbol on the floor and only ever look at
+    preferred_calls - while the scanner underneath had been scoring both directions and
+    populating preferred_puts the whole time. Half the signal was computed and discarded
+    before anything downstream could see it. A bearish read now buys a put instead of
+    producing nothing.
+    """
     df = scanner.fetch_data(symbol)
     if df is None or len(df) < 20:
         return None
@@ -176,15 +190,24 @@ def _analyze_one(scanner, symbol: str, dte: int) -> dict | None:
         analysis = scanner.analyze(symbol, df)
     except Exception:
         return None
-    if analysis.get("direction") not in {"BULLISH", "NEUTRAL"}:
+
+    direction = (analysis.get("direction") or "").upper()
+    if direction == "BEARISH":
+        if not allow_puts:
+            return None
+        side, key = "PUT", "preferred_puts"
+    elif direction in {"BULLISH", "NEUTRAL"}:
+        side, key = "CALL", "preferred_calls"
+    else:
         return None
+
     opts = scanner.get_options_data(symbol, target_dte=dte)
-    if not opts or not opts.get("preferred_calls"):
+    if not opts or not opts.get(key):
         return None
-    best = opts["preferred_calls"][0]
+    best = opts[key][0]
     analysis.update(
         {
-            "option_type": "CALL",
+            "option_type": side,
             "strike": best.get("strike"),
             "option_price": best.get("price"),
             "bid": best.get("bid"),
@@ -205,11 +228,14 @@ def _analyze_one(scanner, symbol: str, dte: int) -> dict | None:
     return enrich(analysis, best)
 
 
-def _score_calls(scanner, symbols: list[str], *, dte: int, top: int) -> list[dict]:
+def _score_calls(scanner, symbols: list[str], *, dte: int, top: int, allow_puts: bool = True) -> list[dict]:
     picks: list[dict] = []
     workers = min(8, max(2, len(symbols)))
     with ThreadPoolExecutor(max_workers=workers) as pool:
-        futs = {pool.submit(_analyze_one, scanner, symbol, dte): symbol for symbol in symbols}
+        futs = {
+            pool.submit(_analyze_one, scanner, symbol, dte, allow_puts=allow_puts): symbol
+            for symbol in symbols
+        }
         for fut in as_completed(futs):
             try:
                 row = fut.result()
@@ -270,14 +296,15 @@ def _write_vault(picks: list[dict], universe: str) -> str | None:
     day = date.today().isoformat()
     lines = [
         f"---\ntype: options\ndate: {day}\nuniverse: {universe}\nlayer: super-5.6\n---\n",
-        f"# MarketBeast calls {day} ({universe})\n",
+        f"# MarketBeast picks {day} ({universe})\n",
         "Grade A/B = liquid enough to ticket. C/WATCH = look only.\n",
     ]
     for p in picks:
         flag = "BUYABLE" if p.get("buyable") else "WATCH"
         lines.append(
             f"- [{p.get('grade')}/{flag}] {p.get('symbol')} {p.get('expiration')} "
-            f"{p.get('strike')}C @ {p.get('option_price')} "
+            f"{p.get('strike')}{'P' if (p.get('option_type') or 'CALL').upper().startswith('P') else 'C'} "
+            f"@ {p.get('option_price')} "
             f"spread={p.get('spread')} Δ{p.get('delta')} "
             f"max_loss={p.get('max_loss')} be={p.get('breakeven')} via {p.get('quote_source')}"
         )
@@ -289,11 +316,18 @@ def _write_vault(picks: list[dict], universe: str) -> str | None:
         return None
 
 
-def best_calls(*, top: int = 8, universe: str = "liquid", dte: int = 7) -> dict[str, Any]:
+def best_calls(*, top: int = 8, universe: str = "liquid", dte: int = 7,
+               allow_puts: bool = True) -> dict[str, Any]:
+    """Best contracts across the universe, either side.
+
+    The name is historical - it returns puts too now, because the scanner was always
+    scoring both directions and the wrapper was discarding half of them. allow_puts=False
+    restores the old calls-only behaviour for a strictly long book.
+    """
     top = max(3, min(int(top or 8), 20))
     dte = max(2, min(int(dte or 7), 45))
     uni = (universe or "liquid").lower()
-    key = f"{uni}:{top}:{dte}:v56"
+    key = f"{uni}:{top}:{dte}:{allow_puts}:v70"
     now = time.time()
     if _cache["picks"] and _cache["key"] == key and now - float(_cache["at"] or 0) < 90:
         return {"ok": True, "cached": True, "universe": uni, "picks": _cache["picks"][:top], **ready()}
@@ -307,7 +341,7 @@ def best_calls(*, top: int = 8, universe: str = "liquid", dte: int = 7) -> dict[
             symbols = symbols[:220]
         elif uni in {"nasdaq", "sp500"}:
             symbols = symbols[:80]
-    picks = _score_calls(scanner, symbols, dte=dte, top=max(top, 10))
+    picks = _score_calls(scanner, symbols, dte=dte, top=max(top, 10), allow_puts=allow_puts)
     picks = _overlay_ibkr(picks)[:top]
     _cache.update(at=now, key=key, picks=picks)
     note = _write_vault(picks, uni)

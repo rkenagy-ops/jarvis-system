@@ -63,6 +63,47 @@ def spread_pct(bid: float | None, ask: float | None) -> float | None:
     return round(100 * (ask - bid) / mid, 2)
 
 
+def yang_zhang(bars: list[dict], window: int = 20) -> float | None:
+    """Volatility that uses the whole bar, not just the close.
+
+    Close-to-close throws away the open, high and low - which is to say it throws away
+    most of what the day did. On a name that gaps and then reverses it can report calm
+    while the range says otherwise, and every ITM probability we compute is only as good
+    as the volatility feeding it. Yang-Zhang combines overnight gap, open-to-close drift
+    and Rogers-Satchell intraday range, and is the standard estimator for exactly this.
+    """
+    rows = [b for b in bars[-(window + 1):]
+            if all(b.get(k) for k in ("open", "high", "low", "close"))]
+    if len(rows) < window + 1:
+        return None
+
+    overnight, openclose, rs = [], [], []
+    for i in range(1, len(rows)):
+        prev_c = rows[i - 1]["close"]
+        o, h, l, c = rows[i]["open"], rows[i]["high"], rows[i]["low"], rows[i]["close"]
+        if min(prev_c, o, h, l, c) <= 0:
+            continue
+        overnight.append(math.log(o / prev_c))
+        openclose.append(math.log(c / o))
+        rs.append(math.log(h / c) * math.log(h / o) + math.log(l / c) * math.log(l / o))
+
+    n = len(rs)
+    if n < 5:
+        return None
+
+    mu_o = sum(overnight) / n
+    mu_c = sum(openclose) / n
+    v_o = sum((x - mu_o) ** 2 for x in overnight) / (n - 1)
+    v_c = sum((x - mu_c) ** 2 for x in openclose) / (n - 1)
+    v_rs = sum(rs) / n
+
+    k = 0.34 / (1.34 + (n + 1) / (n - 1))
+    var = v_o + k * v_c + (1 - k) * v_rs
+    if var <= 0:
+        return None
+    return math.sqrt(var * 252)
+
+
 def iv_rank(symbol: str, *, range_: str = "1y") -> dict[str, Any]:
     """Is premium expensive or cheap for this name, by its own history?
 
@@ -75,17 +116,28 @@ def iv_rank(symbol: str, *, range_: str = "1y") -> dict[str, Any]:
     hist = markets.history(symbol, range_)
     if hist.get("error"):
         return hist
-    closes = [b["close"] for b in (hist.get("bars") or []) if b.get("close")]
+    bars = [b for b in (hist.get("bars") or []) if b.get("close")]
+    closes = [b["close"] for b in bars]
     if len(closes) < 60:
         return {"error": f"Only {len(closes)} bars for {symbol}; need 60+ for a volatility range."}
 
-    rets = [math.log(closes[i] / closes[i - 1]) for i in range(1, len(closes)) if closes[i - 1] > 0]
     window = 20
-    vols = [
-        statistics.pstdev(rets[i - window : i]) * math.sqrt(252)
-        for i in range(window, len(rets) + 1)
-        if len(rets[i - window : i]) == window
-    ]
+    have_ohlc = all(all(b.get(k) for k in ("open", "high", "low")) for b in bars[-window - 1:])
+    vols: list[float] = []
+    if have_ohlc:
+        for i in range(window + 1, len(bars) + 1):
+            v = yang_zhang(bars[:i], window)
+            if v:
+                vols.append(v)
+        estimator = "yang-zhang"
+    if not vols:
+        rets = [math.log(closes[i] / closes[i - 1]) for i in range(1, len(closes)) if closes[i - 1] > 0]
+        vols = [
+            statistics.pstdev(rets[i - window : i]) * math.sqrt(252)
+            for i in range(window, len(rets) + 1)
+            if len(rets[i - window : i]) == window
+        ]
+        estimator = "close-to-close (no intraday range available)"
     if len(vols) < 30:
         return {"error": "Not enough history to place volatility in a range."}
 
@@ -112,6 +164,7 @@ def iv_rank(symbol: str, *, range_: str = "1y") -> dict[str, Any]:
         "range": {"low": round(lo * 100, 1), "high": round(hi * 100, 1)},
         "regime": regime,
         "stance": stance,
+        "estimator": estimator,
         "caveat": (
             "Realized volatility over 20 sessions, used as a stand-in for implied. Real IV rank "
             "needs the option surface from the broker; this is directionally right and not exact."

@@ -418,6 +418,32 @@ FUNCTION_TOOLS = [
         ["action"],
     ),
     _fn(
+        "probability",
+        (
+            "The odds, told apart properly. delta (N(d1)) is NOT the chance of finishing in the "
+            "money - it is always higher. p_itm (N(d2)) is the chance past the STRIKE. p_profit is "
+            "the chance past BREAKEVEN, the only one about your money: a call finishing a cent ITM "
+            "is a total loss and counts as a win in the other two. action=touch gives the chance of "
+            "hitting a level before expiry, which is the number for stops. action=edge prices a "
+            "trade against a view YOU supply, and refuses to invent one - at the market's own vol "
+            "the expected value of any option is zero before costs."
+        ),
+        {
+            "action": {"type": "string", "enum": ["itm", "profit", "touch", "edge", "compare"]},
+            "spot": {"type": "number"},
+            "strike": {"type": "number"},
+            "dte": {"type": "number", "description": "days to expiry."},
+            "iv": {"type": "number", "description": "volatility as a decimal, 0.30 for 30%."},
+            "premium": {"type": "number"},
+            "right": {"type": "string", "enum": ["C", "P"]},
+            "expected_move_pct": {"type": "number", "description": "your view, for action=edge."},
+            "expected_vol": {"type": "number"},
+            "strikes": {"type": "array", "items": {"type": "number"}},
+            "premiums": {"type": "array", "items": {"type": "number"}},
+        },
+        ["action"],
+    ),
+    _fn(
         "options",
         (
             "Options selection on the things that decide the outcome: bid/ask cost, volatility regime, "
@@ -619,6 +645,8 @@ def tools_for(agent_id: str, *, allow_spawn: bool = False) -> list[dict]:
             continue
         if name == "options" and agent_id not in _MARKET_AGENTS:
             continue
+        if name == "probability" and agent_id not in _MARKET_AGENTS:
+            continue
         # risk is the control surface for live trading, not a market tool.
         if name == "risk" and agent_id not in {"jarvis", "trader"}:
             continue
@@ -800,6 +828,13 @@ def execute(name: str, arguments: dict[str, Any], *, session_id: str, agent_id: 
 
         return risk_mod.dispatch(
             arguments.get("action") or "state",
+            **{k: v for k, v in arguments.items() if k != "action"},
+        )
+    if name == "probability":
+        from . import probability as prob_mod
+
+        return prob_mod.dispatch(
+            arguments.get("action") or "profit",
             **{k: v for k, v in arguments.items() if k != "action"},
         )
     if name == "options":

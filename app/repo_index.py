@@ -32,6 +32,79 @@ HUBS: list[dict[str, str]] = [
 
 # repo -> what it actually buys Jarvis. priority 1 = pull first.
 INDEX: list[dict[str, Any]] = [
+    # --- options probability and volatility ------------------------------------
+    # Added for the "best ITM percentage" question. Our p_itm assumes prices are
+    # lognormal at a single volatility; the market plainly does not think so, which is
+    # what the volatility smile IS. These are the repos that do it properly.
+    {
+        "repo": "Open-Lemma/options-implied-probability",
+        "category": "options",
+        "priority": 1,
+        "why": (
+            "Derives the risk-neutral probability distribution of future price from the actual "
+            "option chain, rather than assuming lognormal at one vol. This is the honest upgrade "
+            "to app/probability.py: our N(d2) is the market's view only if the smile is flat, and "
+            "it never is. Use it to replace our ITM estimate with the market's own."
+        ),
+    },
+    {
+        "repo": "jasonstrimpel/volatility-trading",
+        "category": "options",
+        "priority": 1,
+        "why": (
+            "Euan Sinclair's volatility estimators - Yang-Zhang, Garman-Klass, Parkinson, "
+            "Rogers-Satchell. Close-to-close, which app/options.iv_rank uses, throws away the "
+            "intraday range and understates true volatility on gappy names. Every ITM number we "
+            "compute is only as good as the vol that feeds it."
+        ),
+    },
+    {
+        "repo": "rgaveiga/optionlab",
+        "category": "options",
+        "priority": 2,
+        "why": (
+            "Evaluates multi-leg option strategies with probability of profit and full payoff "
+            "curves. Our engine reasons about single legs; this is what spreads and verticals "
+            "need, and spreads are the right structure when premium is dear."
+        ),
+    },
+    {
+        "repo": "goldspanlabs/optopsy",
+        "category": "options",
+        "priority": 2,
+        "why": (
+            "Options-specific backtesting over historical chains. app/backtest.py replays stock "
+            "setups; this is the equivalent for option structures, where expiry and strike "
+            "selection are the strategy rather than details of it."
+        ),
+    },
+    {
+        "repo": "mcf-long-short/ibkr-options-volatility-trading",
+        "category": "options",
+        "priority": 3,
+        "why": "Straddles through the TWS API - a working reference for option order construction against IBKR.",
+    },
+    {
+        "repo": "Lumiwealth/lumibot",
+        "category": "trading",
+        "priority": 2,
+        "why": "Backtestable strategies across stocks and options with a real IBKR broker adapter, plus FRED macro data.",
+    },
+    {
+        "repo": "nautechsystems/nautilus_trader",
+        "category": "trading",
+        "priority": 3,
+        "why": (
+            "Production event-driven trading engine. Not something to adopt wholesale, but the "
+            "reference for how order state, fills and position tracking should be modelled."
+        ),
+    },
+    {
+        "repo": "je-suis-tm/quant-trading",
+        "category": "strategy",
+        "priority": 3,
+        "why": "Readable implementations of classic strategies including VIX calculation and option straddles - useful to backtest against ours rather than to import.",
+    },
     # --- brokerage / execution -------------------------------------------------
     {
         "repo": "ib-api-reloaded/ib_async",

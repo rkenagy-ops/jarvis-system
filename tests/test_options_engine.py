@@ -158,3 +158,38 @@ def test_rejecting_everything_is_a_valid_answer():
 def test_dispatch_surface():
     assert "error" in options.dispatch("nonsense")
     assert "error" in options.dispatch("iv")  # no symbol
+
+
+# --- volatility estimation ----------------------------------------------------
+
+
+def test_yang_zhang_sees_range_that_close_to_close_misses():
+    """A name that gaps and reverses looks calm on closes alone. Every ITM probability
+    we compute is only as good as the volatility feeding it."""
+    import math
+    import statistics
+
+    px, bars = 100.0, []
+    for i in range(60):
+        o = px * (1 + (0.02 if i % 2 else -0.02))
+        h, l = o * 1.03, o * 0.97
+        c = px  # every close identical: close-to-close sees zero volatility
+        bars.append({"open": o, "high": h, "low": l, "close": c})
+
+    yz = options.yang_zhang(bars, 20)
+    closes = [b["close"] for b in bars]
+    rets = [math.log(closes[i] / closes[i - 1]) for i in range(1, len(closes))]
+    cc = statistics.pstdev(rets[-20:]) * math.sqrt(252)
+
+    assert cc < 0.001, "the control: identical closes look like zero volatility"
+    assert yz > 0.2, "the range says otherwise, and that is the number that matters"
+
+
+def test_yang_zhang_needs_a_full_window():
+    assert options.yang_zhang([{"open": 1, "high": 1, "low": 1, "close": 1}] * 5, 20) is None
+
+
+def test_yang_zhang_survives_a_bad_bar():
+    bars = [{"open": 100, "high": 101, "low": 99, "close": 100} for _ in range(40)]
+    bars[10] = {"open": 0, "high": 0, "low": 0, "close": 0}
+    assert options.yang_zhang(bars, 20) is not None

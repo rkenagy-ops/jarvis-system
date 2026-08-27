@@ -221,7 +221,10 @@ def test_candidates_survive_search_failure(monkeypatch):
     monkeypatch.setattr(learning, "_ledger", lambda: [])
     monkeypatch.setattr(learning, "search_available", lambda: True)
     monkeypatch.setattr(learning.oss, "search", lambda q, limit=10: {"error": "rate limited"})
-    out = learning.candidates("trading", limit=5)
+    # The limit has to exceed what the index already holds for the topic, or the search
+    # is never attempted and there is no failure to survive. The index has grown since
+    # this was written, which is what made a limit of 5 stop reaching the search at all.
+    out = learning.candidates("trading", limit=50)
     assert out["ok"] is True
     assert out["candidates"], "index results must survive a search failure"
     assert out["search_error"] == "rate limited"

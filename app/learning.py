@@ -43,6 +43,7 @@ TOPICS: dict[str, str] = {
     "data": "dataframe analytics python stars:>2000",
     "automation": "workflow automation python stars:>1000",
     "options": "options pricing greeks implied volatility python stars:>200",
+    "strategy": "quantitative trading strategies python stars:>500",
     "risk": "portfolio risk metrics drawdown python stars:>500",
     "security": "secret scanning credential detection stars:>1000",
     "interface": "python native desktop gui framework stars:>1000",
