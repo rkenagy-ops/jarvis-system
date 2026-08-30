@@ -56,6 +56,10 @@ OFFLINE = (_clean(os.getenv("JARVIS_OFFLINE")) or "false").lower() == "true"
 OLLAMA_HOST = _clean(os.getenv("OLLAMA_HOST")) or "http://127.0.0.1:11434"
 OLLAMA_MODEL = _clean(os.getenv("OLLAMA_MODEL")) or "llama3.1:8b"
 OLLAMA_EMBED_MODEL = _clean(os.getenv("OLLAMA_EMBED_MODEL")) or "nomic-embed-text"
+# onerahmet/openai-whisper-asr-webservice, provisioned in docker-compose.yml, loopback
+# only. Used by app/local_voice.py as an offline fallback for POST /api/voice/stt when
+# xAI is unavailable (no key, OFFLINE=true, or the call itself fails).
+WHISPER_BASE_URL = _clean(os.getenv("WHISPER_BASE_URL")) or "http://localhost:9000"
 MS_CLIENT_ID = _clean(os.getenv("MS_CLIENT_ID"))
 MS_TENANT = _clean(os.getenv("MS_TENANT")) or "consumers"
 MS_REFRESH_TOKEN = _clean(os.getenv("MS_REFRESH_TOKEN"))
@@ -130,7 +134,7 @@ def reload_env() -> None:
     global WORDPRESS_URL, WORDPRESS_USER, WORDPRESS_APP_PASSWORD, X_BEARER_TOKEN, POSTIZ_URL
     global X_API_KEY, X_API_SECRET, X_ACCESS_TOKEN, X_ACCESS_SECRET
     global JARVIS_TOKEN, JARVIS_ALLOW_LAN, JARVIS_PUBLIC_HOST, OFFLINE, HOST, PORT
-    global OLLAMA_HOST, OLLAMA_MODEL, OLLAMA_EMBED_MODEL, ALPACA_KEY_ID, ALPACA_SECRET_KEY, ALPACA_LIVE
+    global OLLAMA_HOST, OLLAMA_MODEL, OLLAMA_EMBED_MODEL, WHISPER_BASE_URL, ALPACA_KEY_ID, ALPACA_SECRET_KEY, ALPACA_LIVE
     global MS_CLIENT_ID, MS_TENANT, MS_REFRESH_TOKEN
     global IBKR_PORT, IBKR_CLIENT_ID, IBKR_LIVE, MARKETBEAST_ROOT, MAX_DAILY_LOSS, MAX_TRADE_NOTIONAL
     global PUBLER_API_KEY, PUBLER_WORKSPACE_ID, KLAVIYO_API_KEY, MANYCHAT_API_TOKEN, CLICKFUNNELS_API_KEY, CLICKFUNNELS_API_BASE
@@ -164,6 +168,7 @@ def reload_env() -> None:
     OLLAMA_HOST = _clean(os.getenv("OLLAMA_HOST")) or "http://127.0.0.1:11434"
     OLLAMA_MODEL = _clean(os.getenv("OLLAMA_MODEL")) or "llama3.1:8b"
     OLLAMA_EMBED_MODEL = _clean(os.getenv("OLLAMA_EMBED_MODEL")) or "nomic-embed-text"
+    WHISPER_BASE_URL = _clean(os.getenv("WHISPER_BASE_URL")) or "http://localhost:9000"
     MS_CLIENT_ID = _clean(os.getenv("MS_CLIENT_ID"))
     MS_TENANT = _clean(os.getenv("MS_TENANT")) or "consumers"
     MS_REFRESH_TOKEN = _clean(os.getenv("MS_REFRESH_TOKEN"))
