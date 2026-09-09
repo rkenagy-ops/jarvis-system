@@ -35,7 +35,7 @@ body::before {
 }
 .app { position: relative; z-index: 1; }
 
-.app { display: grid; grid-template-rows: 56px 1fr 168px; height: 100%; }
+.app { display: grid; grid-template-rows: 56px 1fr 168px; grid-template-columns: minmax(0, 1fr); height: 100%; width: 100%; overflow: hidden; }
 
 .topbar {
   display: flex; align-items: center; justify-content: space-between;
@@ -83,7 +83,7 @@ body::before {
 
 .core {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
-  position: relative; min-height: 0;
+  position: relative; min-height: 0; min-width: 0; overflow: hidden; width: 100%;
 }
 .hud {
   position: relative; width: min(420px, 70vmin); height: min(420px, 70vmin);
