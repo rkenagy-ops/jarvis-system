@@ -107,6 +107,14 @@ def voice() -> dict[str, Any]:
     checks["voice_model"] = getattr(config, "VOICE_MODEL", None) or "grok-voice-think-fast-2.0"
     checks["voice"] = getattr(config, "VOICE", None)
     checks["offline"] = bool(config.OFFLINE)
+    # Informational only — deliberately does not affect "ok"/"blockers" below. This is
+    # the offline fallback for the single-turn POST /api/voice/stt endpoint (see
+    # app/local_voice.py), not for the live realtime socket this function is otherwise
+    # describing, so it would be misleading to let it clear a live-voice blocker.
+    checks["local_whisper_configured"] = bool(getattr(config, "WHISPER_BASE_URL", None))
+    checks["local_whisper_available"] = _try(
+        lambda: importlib.import_module("app.local_voice").available(), False
+    )
 
     blockers = []
     if not checks["websockets_installed"]:
@@ -134,7 +142,10 @@ def voice() -> dict[str, Any]:
         "endpoint": "/api/voice/live (websocket)",
         "note": (
             "Live voice is a websocket to xAI realtime. It needs the same XAI_API_KEY as chat, "
-            "so if chat is degraded voice is usually down for the same reason."
+            "so if chat is degraded voice is usually down for the same reason. Separately, "
+            "POST /api/voice/stt (one spoken turn, not the live socket) falls back to a local "
+            f"whisper container at {getattr(config, 'WHISPER_BASE_URL', '')} — "
+            + ("reachable right now." if checks["local_whisper_available"] else "not reachable right now (docker compose up whisper).")
         ),
     }
 

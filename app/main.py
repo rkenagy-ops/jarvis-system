@@ -625,9 +625,39 @@ def chat_stream(body: ChatIn) -> StreamingResponse:
 
 @app.post("/api/voice/stt")
 async def stt(file: UploadFile = File(...)) -> dict:
+    """Transcribe one spoken turn: xAI first, a local whisper container if it isn't reachable.
+
+    xai.transcribe() needs XAI_API_KEY and a live call to api.x.ai — the same
+    dependency chat has. When that path is unavailable (no key, JARVIS_OFFLINE=true, or
+    the call itself fails), fall back to the whisper container docker-compose.yml
+    already provisions (see app/local_voice.py) instead of returning nothing. This is
+    the REST single-turn endpoint, not the live realtime socket in app/voice_live.py —
+    that one is a different, bidirectional-streaming problem this does not solve.
+    """
     data = await file.read()
-    text = xai.transcribe(data, filename=file.filename or "audio.webm", mime=file.content_type or "audio/webm")
-    return {"text": text}
+    filename = file.filename or "audio.webm"
+    mime = file.content_type or "audio/webm"
+    xai_error = "xai unavailable (no key, or OFFLINE is true)"
+    if config.XAI_API_KEY and not config.OFFLINE:
+        try:
+            text = xai.transcribe(data, filename=filename, mime=mime)
+            return {"text": text, "source": "xai"}
+        except Exception as exc:
+            # Fall through to the local whisper container rather than failing outright.
+            xai_error = str(exc)[:200]
+
+    from . import local_voice
+
+    if not local_voice.available():
+        return {
+            "text": "",
+            "error": (
+                f"No STT path available. xAI: {xai_error}. Local whisper not reachable at "
+                f"{config.WHISPER_BASE_URL} — run: docker compose up whisper"
+            ),
+        }
+    text = local_voice.transcribe(data, filename=filename, mime=mime)
+    return {"text": text, "source": "local_whisper"}
 
 
 @app.post("/api/voice/tts")

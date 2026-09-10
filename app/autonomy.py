@@ -70,11 +70,22 @@ def _h_calendar() -> str:
 
 
 def _h_upgrade() -> str:
-    from . import growth
+    """Runs the learning cycle, not growth.cycle().
 
-    result = growth.cycle(6)
-    count = result.get("count") if "count" in result else len(result.get("ingested") or [])
-    return f"Self-upgrade: ingested {count} — {result.get('note')}"
+    growth.py (bot-07's old implementation) and learning.py (bot-22) were two separate
+    scheduled GitHub-hunt loops doing the same job on overlapping intervals (6h vs 12h).
+    learning.py is strictly better — ledger-tracked dedup, full source (not just READMEs),
+    RAG reindex — so both scheduled names now run it. The shared ledger in
+    learning.ingested makes a second trigger a cheap no-op, not repeated work.
+
+    growth.py itself is untouched: still importable, still covered by its own tests,
+    still reachable on demand via POST /api/growth and github_oss action=growth_pack /
+    self_upgrade. This only stops it from being the thing that runs unattended.
+    """
+    from . import learning
+
+    result = learning.cycle()
+    return result.get("summary") or "Learning cycle finished."
 
 
 def _h_backup() -> str:
@@ -375,10 +386,7 @@ def run_job(job: dict[str, Any]) -> str:
         memory.mark_job(job["id"], summary[:400])
         return summary
     if name in {"self-upgrade", "growth"} or "self-upgrade" in prompt or "growth pack" in prompt:
-        from . import growth
-
-        result = growth.cycle(6)
-        summary = f"Self-upgrade: ingested {result.get('count') if 'count' in result else len(result.get('ingested') or [])} — {result.get('note')}"
+        summary = _h_upgrade()
         memory.mark_job(job["id"], summary[:400])
         return summary
     if name in {"bot-09-news", "news-desk"} or "flag headlines" in prompt:
