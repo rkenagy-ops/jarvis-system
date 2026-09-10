@@ -161,7 +161,7 @@ async def selftest(timeout: float = 20.0, probe_response: bool = True, profile: 
     import asyncio
 
     loop = asyncio.get_running_loop()
-    url = f"{config.XAI_REALTIME}?model={config.VOICE_MODEL or 'grok-voice-think-fast-2.0'}"
+    url = f"{config.XAI_REALTIME}?model={config.VOICE_MODEL or 'grok-voice-latest'}"
     headers = {"Authorization": f"Bearer {config.XAI_API_KEY}"}
     seen: list[str] = []
     try:
@@ -236,7 +236,56 @@ async def selftest(timeout: float = 20.0, probe_response: bool = True, profile: 
                         ),
                     }
     except Exception as exc:
-        return {"ok": False, "stage": "connect", "events": seen, "error": f"{type(exc).__name__}: {str(exc)[:300]}"}
+        # Extract xAI's rejection reason from the HTTP response body, which websockets
+        # attaches to InvalidStatus exceptions as exc.response.body.
+        extra = ""
+        try:
+            resp = getattr(exc, "response", None)
+            if resp is not None:
+                body = getattr(resp, "body", b"") or b""
+                hdrs = dict(getattr(resp, "headers", {}) or {})
+                code = getattr(resp, "status_code", "?")
+                extra = (
+                    f" | xai_http_{code}"
+                    f"_body={body.decode('utf-8', errors='replace')[:400]!r}"
+                    f" | xai_headers={hdrs}"
+                )
+        except Exception:
+            pass
+        err_out: dict[str, Any] = {
+            "ok": False,
+            "stage": "connect",
+            "events": seen,
+            "error": f"{type(exc).__name__}: {str(exc)[:300]}{extra}",
+            "url_used": url,
+            "websockets_version": getattr(_websockets(), "__version__", "unknown"),
+        }
+        # If the primary model failed, try grok-voice-latest to narrow whether this is
+        # a model-specific rejection or a credential/network issue.
+        current_model = config.VOICE_MODEL or "grok-voice-latest"
+        if "400" in str(exc) and current_model != "grok-voice-latest":
+            fallback_url = f"{config.XAI_REALTIME}?model=grok-voice-latest"
+            try:
+                async with websockets.connect(
+                    fallback_url, additional_headers=headers, max_size=8_000_000
+                ) as test_ws:
+                    raw_msg = await asyncio.wait_for(test_ws.recv(), timeout=5.0)
+                    fb_evt = json.loads(raw_msg) if not isinstance(raw_msg, bytes) else {}
+                    err_out["fallback_grok_voice_latest"] = (
+                        "CONNECTED — set JARVIS_VOICE_MODEL=grok-voice-latest in .env to fix voice"
+                    )
+                    err_out["fallback_first_event"] = fb_evt.get("type")
+            except Exception as fb_exc:
+                fb_extra = ""
+                try:
+                    fb_resp = getattr(fb_exc, "response", None)
+                    if fb_resp is not None:
+                        fb_body = getattr(fb_resp, "body", b"") or b""
+                        fb_extra = f" body={fb_body.decode('utf-8', errors='replace')[:200]!r}"
+                except Exception:
+                    pass
+                err_out["fallback_grok_voice_latest"] = f"also failed: {fb_exc}{fb_extra}"
+        return err_out
     return {"ok": False, "stage": "timeout", "events": seen, "error": f"Nothing conclusive within {timeout}s."}
 
 
@@ -260,7 +309,7 @@ async def handle_live(ws: WebSocket, session_id: str, voice: str | None = None) 
         await ws.close()
         return
 
-    url = f"{config.XAI_REALTIME}?model={config.VOICE_MODEL or 'grok-voice-think-fast-2.0'}"
+    url = f"{config.XAI_REALTIME}?model={config.VOICE_MODEL or 'grok-voice-latest'}"
     headers = {"Authorization": f"Bearer {config.XAI_API_KEY}"}
     pending: dict[str, dict[str, Any]] = {}
 
@@ -464,9 +513,18 @@ async def handle_live(ws: WebSocket, session_id: str, voice: str | None = None) 
                 if exc and not isinstance(exc, (WebSocketDisconnect, websockets.ConnectionClosed)):
                     await ws.send_json({"type": "error", "message": str(exc)})
     except Exception as exc:
-        log.exception("live voice failed: %s", exc)
+        # Log the full HTTP response body when xAI rejects the handshake
+        body_hint = ""
         try:
-            await ws.send_json({"type": "error", "message": str(exc)})
+            resp = getattr(exc, "response", None)
+            if resp is not None:
+                body = getattr(resp, "body", b"") or b""
+                body_hint = f" | xai_body={body.decode('utf-8', errors='replace')[:300]!r}"
+        except Exception:
+            pass
+        log.exception("live voice failed: %s%s", exc, body_hint)
+        try:
+            await ws.send_json({"type": "error", "message": str(exc) + body_hint})
         except Exception:
             pass
     finally:
