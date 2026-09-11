@@ -324,177 +324,9 @@ def run_job(job: dict[str, Any]) -> str:
             summary = handler()
         except Exception as exc:
             summary = f"{name} failed: {type(exc).__name__}: {str(exc)[:200]}"
-        memory.mark_job(job["id"], summary[:400])
+        memory.mark_job(job["id"], summary[:1000])
         return summary
-    if name in {"morning-briefing", "briefing"} or "briefing" in prompt:
-        summary = briefing()
-        memory.mark_job(job["id"], summary[:400])
-        return summary
-    if name in {"poly-scan", "polymarket"} or "polymarket" in prompt:
-        from . import poly
-
-        result = poly.bounce()
-        n = len(result.get("ideas") or [])
-        summary = f"Polymarket {result.get('verdict')}: {n} books → {result.get('vault')}"
-        memory.mark_job(job["id"], summary[:400])
-        return summary
-    if name in {"desk-advise", "desk"} or "desk briefing" in prompt or "desk advise" in prompt:
-        from . import intel
-
-        result = intel.advise(top=6)
-        bias = (result.get("regime") or {}).get("bias")
-        n = len(result.get("ideas") or [])
-        summary = f"Desk {bias}: {n} ideas → {result.get('vault')}"
-        memory.mark_job(job["id"], summary[:400])
-        return summary
-    if name in {"marketbeast-scan", "options-scan"} or "marketbeast" in prompt or "best calls" in prompt:
-        from . import marketbeast
-
-        result = marketbeast.best_calls(top=8, universe="liquid")
-        n = len(result.get("picks") or [])
-        summary = f"MarketBeast liquid scan: {n} calls → {result.get('vault')}"
-        memory.mark_job(job["id"], summary[:400])
-        return summary
-    if name in {"calendar-sync", "outlook-sync"} or "sync calendar" in prompt or "outlook calendar" in prompt:
-        from . import msgraph
-
-        result = msgraph.sync_calendar()
-        summary = (
-            f"Calendar sync: {result.get('events', 0)} events, "
-            f"{result.get('reminders_added', 0)} reminders"
-            if result.get("ok")
-            else f"Calendar sync: {result.get('error')}"
-        )
-        memory.mark_job(job["id"], summary[:400])
-        return summary
-    if name in {"weekly-backup", "backup"} or "zip vault" in prompt:
-        from . import backup
-
-        result = backup.run()
-        summary = f"Backup {result.get('path')} ({result.get('files')} files)"
-        memory.mark_job(job["id"], summary[:400])
-        return summary
-    if name in {"self-upgrade", "growth"} or "self-upgrade" in prompt or "growth pack" in prompt:
-        from . import growth
-
-        result = growth.cycle(6)
-        summary = f"Self-upgrade: ingested {result.get('count') if 'count' in result else len(result.get('ingested') or [])} — {result.get('note')}"
-        memory.mark_job(job["id"], summary[:400])
-        return summary
-    if name in {"bot-09-news", "news-desk"} or "flag headlines" in prompt:
-        from . import intel
-
-        desk = intel.desk()
-        n = len(desk.get("linked") or [])
-        summary = f"News desk: {n} ticker-linked headlines"
-        memory.mark_job(job["id"], summary[:400])
-        return summary
-    if name in {"bot-10-social-draft", "social-draft"}:
-        from . import ops
-
-        item = ops.draft(
-            "Daily social",
-            "Hook.\n\nValue.\n\nCTA — reply confirm to publish.",
-            kind="post",
-            platforms=["x", "linkedin"],
-        )
-        summary = f"Social draft {item.get('id')} saved. Not published."
-        memory.mark_job(job["id"], summary[:400])
-        return summary
-    if name in {"bot-11-blog-draft", "blog-draft"}:
-        from . import ops
-
-        item = ops.draft(
-            "Draft blog",
-            "Outline only. Edit in vault/Blog then confirm to push WordPress.",
-            kind="blog",
-            platforms=["blog"],
-        )
-        summary = f"Blog draft {item.get('id')}"
-        memory.mark_job(job["id"], summary[:400])
-        return summary
-    if name in {"bot-12-publer"}:
-        from . import stack
-
-        st = stack.publer("me")
-        summary = "Publer ready" if st.get("ok") else f"Publer: {st.get('hint') or st.get('error') or 'keys missing'}"
-        memory.mark_job(job["id"], summary[:400])
-        return summary
-    if name in {"bot-13-klaviyo"}:
-        from . import stack
-
-        st = stack.klaviyo("lists")
-        summary = "Klaviyo lists ok" if st.get("ok") else f"Klaviyo: {st.get('hint') or st.get('error') or 'key missing'}"
-        memory.mark_job(job["id"], summary[:400])
-        return summary
-    if name in {"bot-14-manychat"}:
-        from . import stack
-
-        st = stack.manychat("info")
-        summary = "ManyChat page ok" if st.get("ok") else f"ManyChat: {st.get('hint') or st.get('error') or 'token missing'}"
-        memory.mark_job(job["id"], summary[:400])
-        return summary
-    if name in {"bot-15-clickfunnels"}:
-        from . import stack
-
-        st = stack.clickfunnels("status")
-        summary = "ClickFunnels ok" if st.get("ok") else f"ClickFunnels: {st.get('hint') or st.get('error') or 'key missing'}"
-        memory.mark_job(job["id"], summary[:400])
-        return summary
-    if name in {"bot-16-wordpress"}:
-        from . import ops as ops_mod
-
-        st = ops_mod.wordpress_probe()
-        summary = "WordPress REST ok" if st.get("ok") else f"WordPress: {st.get('reason') or st.get('hint') or 'blocked'}"
-        memory.mark_job(job["id"], summary[:400])
-        return summary
-    if name in {"bot-17-ibkr-watch"}:
-        from . import ibkr
-
-        p = ibkr.probe()
-        summary = (
-            f"IBKR {p.get('port_name')} live={p.get('gateway_live')} — {p.get('hint')}"
-        )
-        memory.mark_job(job["id"], summary[:400])
-        return summary[:400]
-    if name in {"bot-18-eval"}:
-        from . import eval as eval_mod
-
-        out = eval_mod.score("Scheduled briefing eval.")
-        summary = f"Eval score {out.get('score')}"
-        memory.mark_job(job["id"], summary[:400])
-        return summary
-    if name in {"bot-19-rag"}:
-        from . import rag
-
-        rag.reindex_vault()
-        summary = "Vault embeddings reindexed"
-        memory.mark_job(job["id"], summary[:400])
-        return summary
-    if name in {"bot-20-finish"}:
-        from . import finish
-
-        c = finish.checklist()
-        summary = f"Finish {c.get('done')}/{c.get('total')} next={c.get('next')}"
-        memory.mark_job(job["id"], summary[:400])
-        return summary
-    if name == "watchlist-scan" or prompt.strip().startswith("scan the watchlist"):
-        quotes = markets.watchlist()
-        movers = []
-        for q in quotes:
-            pct = q.get("change_pct")
-            if pct is None:
-                continue
-            if abs(pct) >= 1.5:
-                movers.append(f"{q['symbol']} {pct:+.2f}% @ {q.get('price')}")
-        summary = "Market pulse: " + (", ".join(movers) if movers else "no >1.5% movers on watchlist")
-        memory.remember(summary, kind="pulse", tags=["market", "autonomy"], importance=0.55, source_agent="trader")
-        try:
-            obsidian.daily(append=f"## Market pulse\n{summary}")
-        except Exception:
-            pass
-        memory.mark_job(job["id"], summary)
-        return summary
+    # Unknown job name — fall through to LLM dispatch.
     from . import xai
 
     if xai.probe().get("ok") and job.get("prompt"):
@@ -713,11 +545,13 @@ def beat() -> list[str]:
 
 
 def _loop() -> None:
+    import logging
+    _log = logging.getLogger(__name__)
     while not _stop.wait(20):
         try:
             beat()
-        except Exception:
-            continue
+        except Exception as exc:
+            _log.error("autonomy beat error: %s", exc, exc_info=True)
 
 
 def start() -> None:
