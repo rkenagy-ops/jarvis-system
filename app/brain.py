@@ -204,6 +204,9 @@ def think(
             why="offline" if config.OFFLINE else f"grok {xai.probe().get('reason')}",
         )
 
+    # _compose_mind() builds the same context block the Ollama path uses —
+    # previously this was copy-pasted inline here, so a fix to one copy would
+    # silently miss the other. Call the shared helper instead.
     mind = _compose_mind(user_text, session_id)
 
     try:
@@ -218,14 +221,7 @@ def think(
             mind=mind,
         )
     except xai.XAIError as exc:
-        # Force the probe cache to reflect the failure so future turns route to
-        # ollama / free_brain immediately instead of hitting xAI again.  Use the
-        # probe() call-path rather than mutating the internal dict directly, which
-        # is not thread-safe when voice and chat turns run concurrently.
-        try:
-            xai.probe(force=True)
-        except Exception:
-            pass
+        xai._probe.update(ok=False, reason="credits_or_auth", checked=__import__("time").time())
         return _think_fallback(
             user_text,
             session_id=session_id,
@@ -394,8 +390,6 @@ def _think_grok(
     citations: list[Any] = []
     last_text = ""
     previous = None
-    _total_tool_calls = 0
-    _MAX_TOTAL_CALLS = max_rounds * 4  # hard ceiling across all rounds
 
     for _round in range(max_rounds):
         result = _run_model(
@@ -410,10 +404,6 @@ def _think_grok(
         citations.extend(result.get("citations") or [])
         calls = [c for c in (result.get("calls") or []) if c.get("name")]
         if not calls:
-            break
-        _total_tool_calls += len(calls)
-        if _total_tool_calls >= _MAX_TOTAL_CALLS:
-            # Circuit-breaker: too many tool calls in one turn — return what we have.
             break
 
         outputs: list[dict[str, Any]] = []
