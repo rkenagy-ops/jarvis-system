@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
+import time
 from typing import Any
 from urllib.parse import urlparse
 
+_log = logging.getLogger(__name__)
 
 from . import catalog, github_client, github_oss, markets, memory, obsidian, opensource, ops, widgets, workspace
 from .agents import AGENTS
@@ -703,7 +706,7 @@ def tools_for(agent_id: str, *, allow_spawn: bool = False) -> list[dict]:
             continue
         if name == "greeks" and agent_id not in _MARKET_AGENTS:
             continue
-        # trust mints standing authorizations for live orders — control surface, not
+        # trust mints standing authorizations for live orders -- control surface, not
         # something every specialist should be able to reach.
         if name == "trust" and agent_id not in {"jarvis", "trader"}:
             continue
@@ -739,7 +742,8 @@ def fetch_url(url: str) -> dict:
     text = re.sub(r"(?is)<(script|style|noscript).*?>.*?</\1>", " ", text)
     text = re.sub(r"(?is)<[^>]+>", " ", text)
     text = re.sub(r"\s+", " ", text).strip()
-    return {"url": str(resp.url), "status": resp.status_code, "text": text[:12000]}
+    truncated = len(text) > 12000
+    return {"url": str(resp.url), "status": resp.status_code, "text": text[:12000], "truncated": truncated}
 
 
 # Actions that belong to the curated pack module. Everything else is raw access.
@@ -751,6 +755,18 @@ _OSS_CURATED = frozenset({
 
 
 def execute(name: str, arguments: dict[str, Any], *, session_id: str, agent_id: str) -> Any:
+    _t0 = time.monotonic()
+    try:
+        return _execute(name, arguments, session_id=session_id, agent_id=agent_id)
+    finally:
+        elapsed = time.monotonic() - _t0
+        if elapsed > 5:
+            _log.warning("slow tool %s (%.1fs) agent=%s session=%s", name, elapsed, agent_id, session_id)
+        else:
+            _log.debug("tool %s %.2fs agent=%s", name, elapsed, agent_id)
+
+
+def _execute(name: str, arguments: dict[str, Any], *, session_id: str, agent_id: str) -> Any:
     if name == "memory_search":
         return memory.search(arguments.get("query") or "", limit=int(arguments.get("limit") or 10))
     if name == "memory_remember":
@@ -954,4 +970,8 @@ def execute(name: str, arguments: dict[str, Any], *, session_id: str, agent_id: 
 
 
 def dumps(value: Any) -> str:
-    return json.dumps(value, default=str, ensure_ascii=False)[:24000]
+    s = json.dumps(value, default=str, ensure_ascii=False)
+    if len(s) <= 24000:
+        return s
+    # Hard cap: truncate and append a visible marker so the model knows output was cut.
+    return s[:23950] + "…[TRUNCATED]"

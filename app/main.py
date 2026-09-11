@@ -5,7 +5,7 @@ import time
 import uuid
 from pathlib import Path
 
-from fastapi import FastAPI, File, Form, Request, UploadFile, WebSocket
+from fastapi import BackgroundTasks, FastAPI, File, Form, Request, UploadFile, WebSocket
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -46,7 +46,7 @@ except Exception:
 try:
     # Reconcile the tracked capability goals against what is actually installed.
     # Nothing called this before, so a capability could ship and the goal stayed
-    # open forever — which is precisely what kept happening. Runs last, after the
+    # open forever -- which is precisely what kept happening. Runs last, after the
     # event sources are up, or the event-driven probe would read an empty registry.
     from . import gaps as _gaps
 
@@ -74,7 +74,7 @@ def _closest_route(path: str) -> str | None:
     """Did they just mistype it?
 
     "/api/voice/selftes" is not a route, so the guard correctly refused it and then
-    sent the user off to git pull — for a missing letter. A near-miss against the real
+    sent the user off to git pull -- for a missing letter. A near-miss against the real
     route table is a far more likely explanation than a stale process, and it is
     cheap to check.
     """
@@ -141,7 +141,7 @@ async def fortress(request: Request, call_next):
         if not guard.token_ok(given):
             # "jarvis locked" alone sent people hunting for a crash that was not
             # there. Say what is missing and how to get it. The token itself is
-            # never echoed — only the ways to obtain one.
+            # never echoed -- only the ways to obtain one.
             known = _route_exists(path)
             near = None if known else _closest_route(path)
             return JSONResponse(
@@ -154,7 +154,7 @@ async def fortress(request: Request, call_next):
                         "(it is not an open path either)."
                     ),
                     "how_to_unlock": [
-                        "Open the HUD at http://127.0.0.1:8787 — it carries the token for you.",
+                        "Open the HUD at http://127.0.0.1:8787 -- it carries the token for you.",
                         "Or append ?token=<JARVIS_TOKEN> to the URL.",
                         "Or send it as the x-jarvis-token header.",
                         "The token is JARVIS_TOKEN in .env, or GET /api/guard/bootstrap from this machine.",
@@ -165,7 +165,7 @@ async def fortress(request: Request, call_next):
                         if known
                         else f"Did you mean {near}? That route exists on this build."
                         if near
-                        else "If you expected this path to be open, the running process predates it — "
+                        else "If you expected this path to be open, the running process predates it -- "
                         "git pull and restart, since the old build is still serving."
                     ),
                 },
@@ -354,7 +354,7 @@ def diagnostics_page() -> Response:
     """The browser half of the diagnosis, which the server cannot see.
 
     /api/health/full and /api/voice/selftest both come back clean while the HUD still
-    says nothing — because the remaining failures live in the browser: a stale token in
+    says nothing -- because the remaining failures live in the browser: a stale token in
     localStorage, a suspended AudioContext, a refused microphone, a stream that closes
     without an event. This page runs the whole chain from inside the browser and prints
     a copyable result, instead of another round of guessing.
@@ -482,7 +482,7 @@ def status() -> dict:
     except Exception as exc:
         github = {
             "error": str(exc)[:240],
-            "hint": "Repo is already https://github.com/rkenagy-ops/jarvis-system — do not Import. Run gh auth login or paste a repo-scoped token in KEYS.",
+            "hint": "Repo is already https://github.com/rkenagy-ops/jarvis-system -- do not Import. Run gh auth login or paste a repo-scoped token in KEYS.",
             "repo": "rkenagy-ops/jarvis-system",
         }
     name, reason = _brain_name()
@@ -805,9 +805,30 @@ def autonomy_job(body: JobIn) -> dict:
     return memory.add_job(body.name, body.prompt, body.every_sec)
 
 
+@app.delete("/api/autonomy/job/{job_id}")
+def autonomy_job_delete(job_id: str) -> dict:
+    """Cancel a scheduled job by id."""
+    jobs = memory.list_jobs()
+    found = next((j for j in jobs if str(j.get("id")) == job_id), None)
+    if not found:
+        return JSONResponse({"error": "job not found", "id": job_id}, status_code=404)
+    # Mark with a terminal status so it is skipped on the next beat.
+    memory.mark_job(job_id, "cancelled")
+    return {"ok": True, "id": job_id, "status": "cancelled"}
+
+
 @app.post("/api/goals")
 def goals_add(body: GoalIn) -> dict:
     return memory.add_goal(body.title, body.detail, body.priority)
+
+
+@app.delete("/api/goals/{goal_id}")
+def goals_delete(goal_id: str) -> dict:
+    """Close a goal by id."""
+    ok = memory.update_goal(goal_id, "done")
+    if not ok:
+        return JSONResponse({"error": "goal not found", "id": goal_id}, status_code=404)
+    return {"ok": True, "id": goal_id, "status": "done"}
 
 
 @app.post("/api/briefing")
@@ -838,10 +859,12 @@ def api_daily_vault() -> dict:
 
 
 @app.post("/api/growth")
-def api_growth() -> dict:
+async def api_growth(background_tasks: BackgroundTasks) -> dict:
+    """Kick off self-upgrade in the background; returns immediately."""
     from . import growth
 
-    return growth.cycle(6)
+    background_tasks.add_task(growth.cycle, 6)
+    return {"ok": True, "status": "started"}
 
 
 @app.get("/api/finish")
@@ -907,8 +930,10 @@ def api_ms_send(body: MailIn) -> dict:
 
 
 @app.post("/api/rag/embed")
-def api_rag_embed() -> dict:
-    return rag.embed_vault()
+async def api_rag_embed(background_tasks: BackgroundTasks) -> dict:
+    """Kick off vault embedding in the background; returns immediately."""
+    background_tasks.add_task(rag.embed_vault)
+    return {"ok": True, "status": "started"}
 
 
 @app.get("/api/ollama")
@@ -1051,11 +1076,20 @@ def workspace_list(path: str = ".") -> dict:
     return workspace.list_files(path)
 
 
+_MAX_UPLOAD_BYTES = 100 * 1024 * 1024  # 100 MB hard cap
+
+
 @app.post("/api/workspace/upload")
 async def workspace_upload(file: UploadFile = File(...), dest: str = Form("inbox")) -> dict:
+    # Sanitize dest: strip leading slashes and any ".." traversal segments.
+    safe_parts = [p for p in Path(dest).parts if p not in ("", ".", "..") and not p.startswith("/")]
+    dest_safe = "/".join(safe_parts) if safe_parts else "inbox"
+
     name = Path(file.filename or "upload.bin").name
-    rel = f"{dest.rstrip('/')}/{name}"
+    rel = f"{dest_safe}/{name}"
     data = await file.read()
+    if len(data) > _MAX_UPLOAD_BYTES:
+        return JSONResponse({"error": f"File exceeds {_MAX_UPLOAD_BYTES // (1024*1024)} MB limit"}, status_code=413)
     path = workspace.resolve(rel)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(data)
