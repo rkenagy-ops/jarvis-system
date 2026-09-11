@@ -23,51 +23,56 @@ CRYPTO = {
 def _db() -> sqlite3.Connection:
     conn = sqlite3.connect(config.DB_PATH, check_same_thread=False, timeout=30)
     conn.row_factory = sqlite3.Row
+    # Use WAL mode: memory.py writes to the same file with WAL; mixing modes
+    # causes "database is locked" errors under concurrent reads/writes.
+    conn.execute("PRAGMA journal_mode=WAL")
     return conn
 
 
 def init() -> None:
     conn = _db()
-    conn.executescript(
-        """
-        CREATE TABLE IF NOT EXISTS paper_account (
-            id INTEGER PRIMARY KEY CHECK (id=1),
-            cash REAL NOT NULL,
-            updated_at REAL NOT NULL
-        );
-        CREATE TABLE IF NOT EXISTS paper_positions (
-            symbol TEXT PRIMARY KEY,
-            qty REAL NOT NULL,
-            avg_price REAL NOT NULL
-        );
-        CREATE TABLE IF NOT EXISTS paper_trades (
-            id TEXT PRIMARY KEY,
-            symbol TEXT NOT NULL,
-            side TEXT NOT NULL,
-            qty REAL NOT NULL,
-            price REAL NOT NULL,
-            mode TEXT NOT NULL,
-            created_at REAL NOT NULL
-        );
-        CREATE TABLE IF NOT EXISTS paper_options (
-            id TEXT PRIMARY KEY,
-            symbol TEXT NOT NULL,
-            expiry TEXT NOT NULL,
-            strike REAL NOT NULL,
-            right TEXT NOT NULL,
-            qty INTEGER NOT NULL,
-            debit REAL NOT NULL,
-            created_at REAL NOT NULL
-        );
-        """
-    )
-    if not conn.execute("SELECT 1 FROM paper_account WHERE id=1").fetchone():
-        conn.execute(
-            "INSERT INTO paper_account(id, cash, updated_at) VALUES(1,?,?)",
-            (config.PAPER_CASH, time.time()),
+    try:
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS paper_account (
+                id INTEGER PRIMARY KEY CHECK (id=1),
+                cash REAL NOT NULL,
+                updated_at REAL NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS paper_positions (
+                symbol TEXT PRIMARY KEY,
+                qty REAL NOT NULL,
+                avg_price REAL NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS paper_trades (
+                id TEXT PRIMARY KEY,
+                symbol TEXT NOT NULL,
+                side TEXT NOT NULL,
+                qty REAL NOT NULL,
+                price REAL NOT NULL,
+                mode TEXT NOT NULL,
+                created_at REAL NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS paper_options (
+                id TEXT PRIMARY KEY,
+                symbol TEXT NOT NULL,
+                expiry TEXT NOT NULL,
+                strike REAL NOT NULL,
+                right TEXT NOT NULL,
+                qty INTEGER NOT NULL,
+                debit REAL NOT NULL,
+                created_at REAL NOT NULL
+            );
+            """
         )
-    conn.commit()
-    conn.close()
+        if not conn.execute("SELECT 1 FROM paper_account WHERE id=1").fetchone():
+            conn.execute(
+                "INSERT INTO paper_account(id, cash, updated_at) VALUES(1,?,?)",
+                (config.PAPER_CASH, time.time()),
+            )
+        conn.commit()
+    finally:
+        conn.close()
 
 
 def _yahoo_chart(symbol: str, range_: str = "6mo", interval: str = "1d") -> dict:
@@ -478,6 +483,7 @@ def dispatch(action: str, **kwargs) -> Any:
     if action == "ticket":
         from . import ibkr
 
+        _confirmed = bool(kwargs.get("confirmed", False))
         if kwargs.get("expiry") and kwargs.get("strike"):
             return ibkr.place_option(
                 kwargs.get("symbol") or "",
@@ -487,6 +493,7 @@ def dispatch(action: str, **kwargs) -> Any:
                 int(kwargs.get("qty") or 1),
                 limit=kwargs.get("limit"),
                 confirm_token=kwargs.get("confirm_token"),
+                confirmed=_confirmed,
             )
         return ibkr.place_stock(
             kwargs.get("symbol") or "",
@@ -494,6 +501,7 @@ def dispatch(action: str, **kwargs) -> Any:
             float(kwargs.get("qty") or 0),
             limit=kwargs.get("limit"),
             confirm_token=kwargs.get("confirm_token"),
+            confirmed=_confirmed,
         )
     if action == "broker":
         from . import broker
