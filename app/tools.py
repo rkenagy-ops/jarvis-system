@@ -540,6 +540,20 @@ FUNCTION_TOOLS = [
         ["action"],
     ),
     _fn(
+        "premarket",
+        (
+            "Trading readiness, not a lever. Reads TWS connectivity, the risk "
+            "governor's halt/loss state, config sanity, a data-source spot check, "
+            "and carried-over orders/positions, and says plainly what would block an "
+            "order right now. Never clears a halt, raises a limit, or places "
+            "anything - a blocker's fix is always a human decision made through the "
+            "module that owns it (risk action=resume, starting TWS, fixing a config "
+            "value)."
+        ),
+        {"action": {"type": "string", "enum": ["check"]}},
+        ["action"],
+    ),
+    _fn(
         "forward_tracker",
         (
             "Live proof, not just historical proof. Logs every setup setups.scan() actually "
@@ -713,6 +727,8 @@ def tools_for(agent_id: str, *, allow_spawn: bool = False) -> list[dict]:
         if name == "setups" and agent_id not in _MARKET_AGENTS:
             continue
         if name == "forward_tracker" and agent_id not in _MARKET_AGENTS:
+            continue
+        if name == "premarket" and agent_id not in _MARKET_AGENTS:
             continue
         if name == "backtest" and agent_id not in _MARKET_AGENTS:
             continue
@@ -967,6 +983,13 @@ def _execute(name: str, arguments: dict[str, Any], *, session_id: str, agent_id:
 
         return forward_tracker_mod.dispatch(
             arguments.get("action") or "open",
+            **{k: v for k, v in arguments.items() if k != "action"},
+        )
+    if name == "premarket":
+        from . import premarket as premarket_mod
+
+        return premarket_mod.dispatch(
+            arguments.get("action") or "check",
             **{k: v for k, v in arguments.items() if k != "action"},
         )
     if name == "engage":
