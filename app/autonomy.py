@@ -53,6 +53,22 @@ def _h_options() -> str:
     return f"MarketBeast liquid scan: {len(result.get('picks') or [])} calls → {result.get('vault')}"
 
 
+def _h_forward_track() -> str:
+    """Pure observer: logs what setups.scan() finds and walks prior signals forward
+    with backtest's own engine. Never places an order, never touches IBKR, never
+    reads or changes a risk limit - it only watches and records.
+    """
+    from . import forward_tracker
+
+    logged = forward_tracker.log_new_signals()
+    walked = forward_tracker.update_open()
+    return (
+        f"Forward-track: logged {logged.get('logged', 0)} new signal(s) across "
+        f"{logged.get('scanned', 0)} symbols; walked forward and closed {walked.get('closed', 0)}, "
+        f"{walked.get('unfilled', 0)} never filled, {walked.get('still_open', 0)} still pending."
+    )
+
+
 def _h_poly() -> str:
     from . import poly
 
@@ -269,6 +285,7 @@ JOB_HANDLERS: dict[str, Any] = {
     "watchlist-scan": _h_watchlist,
     "desk-advise": _h_desk,
     "marketbeast-scan": _h_options,
+    "forward-track": _h_forward_track,
     "poly-scan": _h_poly,
     "calendar-sync": _h_calendar,
     "self-upgrade": _h_upgrade,
@@ -298,6 +315,7 @@ JOB_HANDLERS: dict[str, Any] = {
     "bot-22-learn": _h_learn,
     "bot-23-gaps": _h_gaps,
     "bot-24-catalyst": _h_catalyst,
+    "bot-25-forward-track": _h_forward_track,
 }
 
 
