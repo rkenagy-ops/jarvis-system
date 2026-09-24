@@ -183,6 +183,16 @@ def _h_premarket() -> str:
     return f"Premarket check: {len(out['blockers'])} blocker(s) - " + " | ".join(out["blockers"])
 
 
+def _h_pnl_dashboard() -> str:
+    """Records today's snapshot into the daily log. Reporting only - no target, no
+    cap on a good day, changes nothing about how or whether she trades.
+    """
+    from . import pnl_dashboard
+
+    out = pnl_dashboard.snapshot()
+    return f"P&L snapshot {out['day']}: realized {out['realized']:+.2f}, {out['trades']} trade(s) today."
+
+
 def _h_eval() -> str:
     from . import eval as eval_mod
 
@@ -327,6 +337,7 @@ JOB_HANDLERS: dict[str, Any] = {
     "bot-24-catalyst": _h_catalyst,
     "bot-25-forward-track": _h_forward_track,
     "bot-26-premarket": _h_premarket,
+    "bot-27-pnl-dashboard": _h_pnl_dashboard,
 }
 
 
