@@ -1,4 +1,28 @@
-"""Internal MarketBeast desk. v9 engine + Super Jarvis quality layer."""
+"""Internal MarketBeast desk. v9 engine + Super Jarvis quality layer.
+
+v10 correction: this module was choosing and grading contracts without calling this
+repo's own greeks.py or probability.py, and without cross-checking picks against
+catalyst.py's news feed. All three already existed and worked - they just weren't wired
+in here, which is exactly the gap greeks.py's own docstring calls out ("place_option()
+and marketbeast pick contracts and send orders without computing a single greek").
+Concretely, that meant:
+
+  - gamma, theta, vega were never computed or shown - only whatever raw "delta" the
+    vendored scanner happened to report.
+  - the probability shown was the vendored scanner's itm_prob (or delta used as a
+    stand-in), both of which probability.py's docstring shows overstate the real odds
+    of the trade paying off by roughly half again. p_profit (breakeven-adjusted) is the
+    number that is actually about the money.
+  - a pick could be graded A the day before an earnings print with the position held
+    straight through an IV crush, because nothing checked the news wire at all.
+
+This version computes real greeks and p_profit per contract (falling back to the
+vendored fields only when there isn't enough data to solve for IV), and cross-checks
+the final picks against catalyst.py so a scheduled event landing inside the contract's
+life gets flagged and downgraded rather than silently graded on greeks alone. Nothing
+about the IBKR live-quote overlay, order placement, or paper-trading path changed -
+this only touches how a contract is scored before it ever gets that far.
+"""
 
 from __future__ import annotations
 
@@ -9,7 +33,7 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
-from . import config, obsidian
+from . import config, greeks, obsidian, probability
 
 _cache: dict[str, Any] = {"at": 0.0, "key": "", "picks": []}
 VENDOR = Path(__file__).resolve().parents[1] / "vendor" / "marketbeast"
@@ -66,8 +90,56 @@ def _num(value: Any, default: float = 0.0) -> float:
         return default
 
 
+def _real_metrics(
+    *, spot: float, strike: float, dte: float, right: str, premium: float | None, iv_hint: float | None
+) -> dict[str, Any]:
+    """Full delta/gamma/theta/vega plus the breakeven-adjusted probability of profit,
+    computed from this repo's own greeks.py / probability.py rather than trusting
+    whatever the vendored scanner happened to populate.
+
+    Prefers a real IV when the chain provided one; otherwise solves for it from the
+    quoted premium (the same Newton-then-bisection routine greeks.implied_vol already
+    uses everywhere else in this codebase). Returns {} rather than raising if there
+    isn't enough data to solve either way - a contract with a missing IV and no premium
+    still gets picked, it just won't carry gamma/theta/vega for that one row.
+    """
+    if not (spot and strike and dte and dte > 0):
+        return {}
+    days = float(dte)
+    sigma = float(iv_hint) if iv_hint else None
+    out: dict[str, Any] = {}
+
+    g = None
+    if sigma and sigma > 0:
+        g = greeks.greeks(spot, strike, days / 365.0, sigma=sigma, right=right)
+    elif premium:
+        solved = greeks.implied_vol(float(premium), spot, strike, days / 365.0, right=right)
+        if solved.get("ok"):
+            sigma = solved["iv"]
+            g = greeks.greeks(spot, strike, days / 365.0, sigma=sigma, right=right)
+
+    if g and g.get("ok"):
+        out.update(
+            {"gamma": g["gamma"], "theta": g["theta"], "vega": g["vega"], "delta_bs": g["delta"], "iv_used": sigma}
+        )
+
+    if sigma and premium:
+        pp = probability.p_profit(spot, strike, days / 365.0, sigma, float(premium), right=right)
+        if pp.get("ok"):
+            out.update({"p_profit": pp["p_profit"], "p_itm": pp["p_itm"], "breakeven_pop": pp["breakeven"]})
+    elif sigma:
+        pi = probability.p_itm(spot, strike, days / 365.0, sigma, right=right)
+        if pi.get("ok"):
+            out["p_itm"] = pi["p_itm"]
+
+    return out
+
+
 def grade(pick: dict[str, Any]) -> str:
-    """A = liquid + sane delta. WATCH = junk or too wide."""
+    """A = liquid + sane delta + odds and decay that actually hold up. WATCH = junk,
+    too wide, bleeding too fast in theta, or a real probability of profit too low -
+    whichever of those this pick has data for.
+    """
     score = 0
     spread = pick.get("spread")
     if spread is not None:
@@ -91,6 +163,23 @@ def grade(pick: dict[str, Any]) -> str:
         score += 1
     if _num(pick.get("option_price")) < 0.15:
         score -= 2
+
+    # Theta: how much of the premium bleeds away per day regardless of direction.
+    theta, mid = pick.get("theta"), _num(pick.get("option_price"))
+    if theta is not None and mid:
+        if abs(_num(theta)) / mid > 0.05:
+            score -= 1
+
+    # p_profit is the breakeven-adjusted probability of profit - always <= delta and
+    # itm_prob, per probability.py. Grading on it directly (when it's available) closes
+    # the exact gap that module's docstring warns about.
+    p_profit = pick.get("p_profit")
+    if p_profit is not None:
+        if p_profit >= 0.45:
+            score += 1
+        elif p_profit < 0.25:
+            score -= 1
+
     if score >= 6:
         return "A"
     if score >= 4:
@@ -124,7 +213,17 @@ def enrich(row: dict[str, Any], extra: dict | None = None) -> dict[str, Any]:
         "ask": ask or None,
         "spread": round(spread, 4) if spread is not None else None,
         "delta": row.get("delta"),
+        "delta_bs": row.get("delta_bs"),
+        "gamma": row.get("gamma"),
+        "theta": row.get("theta"),
+        "vega": row.get("vega"),
         "itm_prob": row.get("itm_prob"),
+        # p_itm/p_profit come from probability.py when there was enough data to solve
+        # for IV; fall back to the vendored itm_prob so a row is never worse off than
+        # before this change, just less precise.
+        "p_itm": row.get("p_itm") if row.get("p_itm") is not None else row.get("itm_prob"),
+        "p_profit": row.get("p_profit"),
+        "iv_used": row.get("iv_used"),
         "expiration": row.get("expiration"),
         "dte": row.get("dte"),
         "iv": row.get("iv"),
@@ -295,6 +394,16 @@ def _analyze_one(scanner, symbol: str, dte: int, *, allow_puts: bool = True) -> 
             "reason": best.get("reason"),
         }
     )
+    analysis.update(
+        _real_metrics(
+            spot=_num(analysis.get("price")),
+            strike=_num(best.get("strike")),
+            dte=_num(opts.get("dte")),
+            right="P" if side == "PUT" else "C",
+            premium=best.get("price"),
+            iv_hint=best.get("iv") or opts.get("iv"),
+        )
+    )
     return enrich(analysis, best)
 
 
@@ -360,6 +469,56 @@ def _overlay_ibkr(picks: list[dict]) -> list[dict]:
     return picks
 
 
+def _attach_catalysts(picks: list[dict], dte: int) -> list[dict]:
+    """Cross today's picks against the news wire (catalyst.py) so a pick riding into a
+    scheduled-event IV crush gets flagged instead of silently graded A on greeks alone.
+
+    catalyst.py's own warning is the reason this exists: buying premium into a known
+    event and holding through it is one of the most reliable ways to be right about
+    direction and still lose money, because the IV that was bid up ahead of the event
+    deflates the moment it happens. If the wire shows a scheduled catalyst landing
+    inside this contract's DTE window, that's exactly the setup - so it gets downgraded
+    to WATCH rather than left looking like a clean A/B pick.
+
+    Fails safe: any error talking to the news feed (offline, feed down, parsing issue)
+    leaves picks untouched rather than blocking the scan.
+    """
+    if not picks:
+        return picks
+    try:
+        from . import catalyst
+
+        symbols = sorted({p.get("symbol") for p in picks if p.get("symbol")})
+        found = catalyst.scan(limit=80, symbols=symbols)
+        by_symbol: dict[str, dict] = {}
+        for item in found.get("with_tickers") or []:
+            for t in item.get("tickers") or []:
+                by_symbol.setdefault(t, item)
+    except Exception:
+        return picks
+
+    for p in picks:
+        hit = by_symbol.get(p.get("symbol"))
+        if not hit:
+            continue
+        p["catalyst"] = {
+            "headline": hit.get("headline"),
+            "kind": hit.get("kind"),
+            "direction": hit.get("direction"),
+            "scheduled": hit.get("scheduled"),
+            "horizon_days": hit.get("horizon_days"),
+        }
+        contract_dte = _num(p.get("dte"), float(dte))
+        horizon_days = hit.get("horizon_days")
+        if hit.get("scheduled") and horizon_days is not None and horizon_days <= contract_dte:
+            p["iv_crush_risk"] = True
+            p["grade"] = "WATCH"
+            p["buyable"] = False
+
+    picks.sort(key=lambda x: (x.get("buyable"), _num(x.get("combined_score"))), reverse=True)
+    return picks
+
+
 def _write_vault(picks: list[dict], universe: str) -> str | None:
     if not picks:
         return None
@@ -371,12 +530,14 @@ def _write_vault(picks: list[dict], universe: str) -> str | None:
     ]
     for p in picks:
         flag = "BUYABLE" if p.get("buyable") else "WATCH"
+        crush = f" ⚠ IV-crush risk: {p['catalyst']['headline']}" if p.get("iv_crush_risk") and p.get("catalyst") else ""
         lines.append(
             f"- [{p.get('grade')}/{flag}] {p.get('symbol')} {p.get('expiration')} "
             f"{p.get('strike')}{'P' if (p.get('option_type') or 'CALL').upper().startswith('P') else 'C'} "
             f"@ {p.get('option_price')} "
-            f"spread={p.get('spread')} Δ{p.get('delta')} "
-            f"max_loss={p.get('max_loss')} be={p.get('breakeven')} via {p.get('quote_source')}"
+            f"spread={p.get('spread')} Δ{p.get('delta')} Θ{p.get('theta')} Γ{p.get('gamma')} "
+            f"p_profit={p.get('p_profit')} "
+            f"max_loss={p.get('max_loss')} be={p.get('breakeven')} via {p.get('quote_source')}{crush}"
         )
     rel = f"Markets/{day}-calls.md"
     try:
@@ -397,7 +558,10 @@ def best_calls(*, top: int = 8, universe: str = "liquid", dte: int = 7,
     top = max(3, min(int(top or 8), 20))
     dte = max(2, min(int(dte or 7), 45))
     uni = (universe or "liquid").lower()
-    key = f"{uni}:{top}:{dte}:{allow_puts}:v70"
+    # v71: cache key bumped so picks cached under the old (pre-greeks/probability/
+    # catalyst) scoring are never served after this change - they're missing fields a
+    # client may now expect.
+    key = f"{uni}:{top}:{dte}:{allow_puts}:v71"
     now = time.time()
     if _cache["picks"] and _cache["key"] == key and now - float(_cache["at"] or 0) < 90:
         return {"ok": True, "cached": True, "universe": uni, "picks": _cache["picks"][:top], **ready()}
@@ -419,7 +583,8 @@ def best_calls(*, top: int = 8, universe: str = "liquid", dte: int = 7,
         if uni == "full":
             pass  # 273 vendored symbols, uncapped - see universe="market" for real scale
     picks = _score_calls(scanner, symbols, dte=dte, top=max(top, 10), allow_puts=allow_puts)
-    picks = _overlay_ibkr(picks)[:top]
+    picks = _overlay_ibkr(picks)
+    picks = _attach_catalysts(picks, dte)[:top]
     _cache.update(at=now, key=key, picks=picks)
     note = _write_vault(picks, uni)
     buyable = [p for p in picks if p.get("buyable")]
@@ -450,8 +615,23 @@ def deep(symbol: str, *, dte: int = 7) -> dict[str, Any]:
     analysis = scanner.analyze(symbol, df)
     opts = scanner.get_options_data(symbol, target_dte=dte) or {}
     raw = (opts.get("preferred_calls") or [])[:5]
-    calls = [enrich({**analysis, "option_type": "CALL", "expiration": opts.get("expiration"), "dte": opts.get("dte"), "option_price": c.get("price"), **c}, c) for c in raw]
+    calls = []
+    for c in raw:
+        row = {**analysis, "option_type": "CALL", "expiration": opts.get("expiration"), "dte": opts.get("dte"),
+               "option_price": c.get("price"), **c}
+        row.update(
+            _real_metrics(
+                spot=_num(analysis.get("price")),
+                strike=_num(c.get("strike")),
+                dte=_num(opts.get("dte")),
+                right="C",
+                premium=c.get("price"),
+                iv_hint=c.get("iv") or opts.get("iv"),
+            )
+        )
+        calls.append(enrich(row, c))
     calls = _overlay_ibkr(calls)
+    calls = _attach_catalysts(calls, dte)
     return {
         "ok": True,
         "symbol": symbol,
