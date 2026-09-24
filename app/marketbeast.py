@@ -158,7 +158,7 @@ def _liquid_symbols() -> list[str]:
         u = s.strip().upper()
         if u and u not in out and "-USD" not in u and not u.startswith("^"):
             out.append(u)
-    return out[:16]
+    return out
 
 
 def _sector_symbols(sc, universe: str) -> list[str] | None:
@@ -172,6 +172,76 @@ def _sector_symbols(sc, universe: str) -> list[str] | None:
         "full": getattr(sc, "FULL_MARKET", None),
     }
     return mapping.get(uni)
+
+
+def broad_screen(*, max_symbols: int | None = None, shortlist: int = 40,
+                  batch_size: int = 200, range_: str = "6mo") -> dict[str, Any]:
+    """Cheap first pass over the REAL full-market universe (thousands of tickers,
+    from universe.full() - not the vendored scanner's 273-symbol list), scored on
+    plain technical setups, to produce a shortlist worth the expensive per-symbol
+    options-chain analysis the vendored scanner does.
+
+    This is the actual answer to "scan thousands of stocks": nothing does a full
+    options-chain pull on thousands of names every cycle - that is what pushed the
+    universe cap to 220 in the first place. What scales is a batched, cached
+    technical screen that narrows thousands down to the handful actually worth the
+    slow path, the same way a real trading desk's scanner works.
+    """
+    from . import markets, setups
+
+    uni = universe_mod().full()
+    symbols = uni.get("symbols") or []
+    cap = max_symbols if max_symbols is not None else config.MARKETBEAST_MAX_UNIVERSE
+    if cap:
+        symbols = symbols[:cap]
+
+    scored: list[dict[str, Any]] = []
+    errors = 0
+    for i in range(0, len(symbols), max(1, batch_size)):
+        chunk = symbols[i : i + batch_size]
+        fetched = markets.history_batch(chunk, range_)
+        for sym, hist in fetched.items():
+            if hist.get("error"):
+                errors += 1
+                continue
+            bars = [b for b in (hist.get("bars") or []) if b.get("close") is not None]
+            ctx = setups.context_from_bars(bars, sym)
+            if not ctx.get("ok"):
+                continue
+            found = setups.detect(ctx).get("found") or []
+            if not found:
+                continue
+            # Rank by how many setups fired and how confident the strongest one is,
+            # not by anything options-related - that filter comes later, only for
+            # names that clear this bar.
+            weight = {"high": 3, "medium": 2, "low": 1}
+            score = sum(weight.get(f.get("confidence"), 1) for f in found)
+            scored.append({
+                "symbol": sym,
+                "score": score,
+                "setups": [f["setup"] for f in found],
+                "last": ctx["closes"][-1],
+                "rsi14": (ctx["stats"] or {}).get("rsi14"),
+                "trend": (ctx["stats"] or {}).get("trend"),
+            })
+
+    scored.sort(key=lambda r: r["score"], reverse=True)
+    return {
+        "ok": True,
+        "universe_source": uni.get("source"),
+        "universe_size": uni.get("count"),
+        "scanned": len(symbols),
+        "errors": errors,
+        "candidates": len(scored),
+        "shortlist": scored[:shortlist],
+    }
+
+
+def universe_mod():
+    """Indirection point so tests can monkeypatch the universe source cleanly."""
+    from . import universe
+
+    return universe
 
 
 def _analyze_one(scanner, symbol: str, dte: int, *, allow_puts: bool = True) -> dict | None:
@@ -333,14 +403,21 @@ def best_calls(*, top: int = 8, universe: str = "liquid", dte: int = 7,
         return {"ok": True, "cached": True, "universe": uni, "picks": _cache["picks"][:top], **ready()}
     sc = _load_scanner()
     scanner = sc.StockScanner()
+    screen = None
     if uni == "liquid":
         symbols = _liquid_symbols()
+    elif uni in {"market", "thousands", "everything"}:
+        # The real full-market universe (thousands of tickers via universe.py), cheaply
+        # screened first (broad_screen) so only names that already show a live setup
+        # go through the expensive per-symbol options-chain analysis below. Scanning
+        # thousands of names through the options path directly is not a cap that can
+        # just be raised - see broad_screen's docstring.
+        screen = broad_screen(range_="6mo")
+        symbols = [c["symbol"] for c in screen.get("shortlist") or []] or _liquid_symbols()
     else:
         symbols = list(_sector_symbols(sc, uni) or _liquid_symbols())
         if uni == "full":
-            symbols = symbols[:220]
-        elif uni in {"nasdaq", "sp500"}:
-            symbols = symbols[:80]
+            pass  # 273 vendored symbols, uncapped - see universe="market" for real scale
     picks = _score_calls(scanner, symbols, dte=dte, top=max(top, 10), allow_puts=allow_puts)
     picks = _overlay_ibkr(picks)[:top]
     _cache.update(at=now, key=key, picks=picks)
@@ -351,6 +428,8 @@ def best_calls(*, top: int = 8, universe: str = "liquid", dte: int = 7,
         "cached": False,
         "universe": uni,
         "scanned": len(symbols),
+        "broad_screen": {"universe_size": screen.get("universe_size"), "source": screen.get("universe_source"),
+                          "screened": screen.get("scanned"), "candidates": screen.get("candidates")} if screen else None,
         "buyable": len(buyable),
         "vault": note,
         "disclaimer": "Signals only. Grade A/B can paper-ticket. Live IBKR still needs TWS + confirm.",
