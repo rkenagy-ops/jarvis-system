@@ -69,6 +69,13 @@ SPECS: list[tuple[str, str, int]] = [
         "IBKR. Pure observation, so live win rate can be checked against the historical backtest.",
         3600,
     ),
+    (
+        "bot-26-premarket",
+        "Trading-readiness report: TWS connectivity, risk governor halt/loss state, config sanity, a data-source "
+        "spot check, carried-over orders and positions. Never clears a halt, raises a limit, or places an order - "
+        "surfaces blockers for a human to resolve. Runs every 30 minutes, same cadence as the IBKR watch bot.",
+        1800,
+    ),
 ]
 
 
