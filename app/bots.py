@@ -76,6 +76,13 @@ SPECS: list[tuple[str, str, int]] = [
         "surfaces blockers for a human to resolve. Runs every 30 minutes, same cadence as the IBKR watch bot.",
         1800,
     ),
+    (
+        "bot-27-pnl-dashboard",
+        "Records today's realized/unrealized P&L and trade count into an append-only daily log, so there is a "
+        "trailing record beyond just today. Reporting only - no daily target, nothing caps a good day, changes "
+        "nothing about how or whether she trades. Runs every 30 minutes.",
+        1800,
+    ),
 ]
 
 
