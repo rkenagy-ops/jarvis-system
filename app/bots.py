@@ -61,6 +61,14 @@ SPECS: list[tuple[str, str, int]] = [
         "already in the price.",
         600,
     ),
+    (
+        "bot-25-forward-track",
+        "Log any setup setups.scan() newly finds on the watchlist with its live entry/stop/target, "
+        "then walk every previously-logged open signal forward against real new bars using the same "
+        "fill/exit engine backtest.py uses. Places no orders, changes no risk limit, does not touch "
+        "IBKR. Pure observation, so live win rate can be checked against the historical backtest.",
+        3600,
+    ),
 ]
 
 
