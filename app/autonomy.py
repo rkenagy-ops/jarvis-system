@@ -173,6 +173,16 @@ def _h_ibkr_watch() -> str:
     return f"IBKR {p.get('port_name')} live={p.get('gateway_live')} — {p.get('hint')}"
 
 
+def _h_premarket() -> str:
+    """Reads status only - never clears a halt, raises a limit, or places anything."""
+    from . import premarket
+
+    out = premarket.readiness()
+    if out["ready"]:
+        return "Premarket check: ready, no blockers found."
+    return f"Premarket check: {len(out['blockers'])} blocker(s) - " + " | ".join(out["blockers"])
+
+
 def _h_eval() -> str:
     from . import eval as eval_mod
 
@@ -316,6 +326,7 @@ JOB_HANDLERS: dict[str, Any] = {
     "bot-23-gaps": _h_gaps,
     "bot-24-catalyst": _h_catalyst,
     "bot-25-forward-track": _h_forward_track,
+    "bot-26-premarket": _h_premarket,
 }
 
 
