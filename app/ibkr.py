@@ -1015,6 +1015,61 @@ def stock_quotes(symbols: list[str]) -> dict[str, dict]:
         return {}
 
 
+# markets.py range tokens -> IBKR's own duration vocabulary for reqHistoricalData.
+_DURATION_MAP = {
+    "1mo": "1 M", "3mo": "3 M", "6mo": "6 M", "1y": "1 Y",
+    "2y": "2 Y", "3y": "3 Y", "5y": "5 Y", "10y": "10 Y", "max": "10 Y",
+}
+
+
+def history_bars(symbol: str, range_: str = "6mo") -> dict[str, Any]:
+    """Daily bars straight from the TWS chart feed - the same data the platform's
+    own charts are drawn from, not a third-party unauthenticated endpoint.
+
+    Read-only: reqHistoricalData never touches an order or a position. Returns
+    {"error": ...} rather than raising when TWS isn't reachable, so callers (see
+    markets.history()) can fall through to another source without a try/except.
+    """
+    symbol = (symbol or "").strip().upper()
+    if not symbol or busy() or not port_open(port()):
+        return {"error": "IBKR TWS not reachable"}
+    if symbol.startswith("^") or "-USD" in symbol:
+        return {"error": "index/crypto symbols aren't plain IBKR stock contracts"}
+    duration = _DURATION_MAP.get((range_ or "6mo").lower(), "1 Y")
+
+    def read(ib) -> dict[str, Any]:
+        (Stock,) = _ib_names("Stock")
+        qualified = ib.qualifyContracts(Stock(symbol, "SMART", "USD"))
+        if not qualified:
+            return {"error": f"IBKR could not qualify {symbol}"}
+        bars = ib.reqHistoricalData(
+            qualified[0], endDateTime="", durationStr=duration,
+            barSizeSetting="1 day", whatToShow="TRADES", useRTH=True, formatDate=1,
+        )
+        rows = []
+        for b in bars or []:
+            date_s = str(b.date)[:10]
+            try:
+                import datetime as _dt
+
+                t = int(_dt.datetime.combine(_dt.date.fromisoformat(date_s), _dt.time(), tzinfo=_dt.timezone.utc).timestamp())
+            except ValueError:
+                t = None
+            rows.append({
+                "t": t, "date": date_s, "open": float(b.open), "high": float(b.high),
+                "low": float(b.low), "close": float(b.close),
+                "volume": int(b.volume) if b.volume == b.volume else None,
+            })
+        if not rows:
+            return {"error": f"IBKR returned no bars for {symbol}"}
+        return {"symbol": symbol, "bars": rows[-400:], "count": len(rows), "source": "ibkr"}
+
+    try:
+        return _call(read, timeout=15.0, block=False) or {"error": "IBKR TWS busy"}
+    except Exception as exc:
+        return {"error": f"{type(exc).__name__}: {exc}"}
+
+
 def dispatch(action: str = "account", **kwargs: Any) -> dict[str, Any]:
     act = (action or "account").lower()
     if act in {"probe", "status"}:
@@ -1026,6 +1081,8 @@ def dispatch(action: str = "account", **kwargs: Any) -> dict[str, Any]:
         if isinstance(symbols, str):
             symbols = [s.strip() for s in symbols.split(",") if s.strip()]
         return {"ok": True, "quotes": stock_quotes(list(symbols))}
+    if act in {"history", "chart", "bars"}:
+        return history_bars(kwargs.get("symbol") or "", kwargs.get("range") or "6mo")
     if act in {"account", "summary"}:
         return account()
     if act in {"orders", "open_orders", "working"}:
