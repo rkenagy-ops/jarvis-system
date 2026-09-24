@@ -1,6 +1,13 @@
 """'She could use the charts from the live TWS feed' - reqHistoricalData against the
 same session the platform's own charts are drawn from, not a third-party endpoint.
 Read-only: never touches an order or a position.
+
+Deliberately kept OUT of markets.history()'s default path: every IBKR call shares
+one single-threaded job queue with order placement and cancels, and IBKR paces
+historical-data requests - routing the pervasive, continuously-called history()
+through it risked queuing chart fetches ahead of a live order during real trading.
+ibkr.history_bars() is available on request (market action=ibkr mode=history), not
+automatic.
 """
 
 from pathlib import Path
@@ -84,64 +91,23 @@ def test_history_bars_reports_no_data_as_an_error(monkeypatch):
     assert "error" in out
 
 
-# --- markets.history() tries IBKR first, falls through cleanly -----------------
-
-
-def test_markets_history_prefers_ibkr_when_reachable(monkeypatch):
+def test_markets_history_never_touches_ibkr(monkeypatch):
+    """Deliberate: history() is called continuously by scans, backtests, and
+    forward-tracking. Every IBKR call - a chart pull included - shares one
+    single-threaded job queue with order placement and cancels. Routing this
+    pervasive function through IBKR risks queuing chart fetches ahead of a live
+    order, and IBKR's own historical-data pacing limits could degrade the
+    connection for trading too. ibkr.history_bars() stays available on purpose,
+    just never as this function's silent default.
+    """
     from app import ibkr as ibkr_mod
 
-    monkeypatch.setattr(ibkr_mod, "busy", lambda: False)
-    monkeypatch.setattr(ibkr_mod, "port_open", lambda p: True)
-    monkeypatch.setattr(ibkr_mod, "history_bars", lambda symbol, range_: {
-        "symbol": symbol, "bars": [{"date": "2024-01-02", "close": 55.0}], "count": 1, "source": "ibkr",
-    })
-
-    out = markets.history("AAPL", "1y")
-    assert out["source"] == "ibkr"
-    assert out["bars"][0]["close"] == 55.0
-
-
-def test_markets_history_falls_through_to_yahoo_when_ibkr_has_nothing(monkeypatch):
-    from app import ibkr as ibkr_mod
-
-    monkeypatch.setattr(ibkr_mod, "busy", lambda: False)
-    monkeypatch.setattr(ibkr_mod, "port_open", lambda p: True)
-    monkeypatch.setattr(ibkr_mod, "history_bars", lambda symbol, range_: {"error": "no data"})
-    monkeypatch.setattr(markets, "_yahoo_history", lambda symbol, range_: {
-        "symbol": symbol, "bars": [{"date": "2024-01-02", "close": 42.0}], "count": 1, "source": "yahoo",
-    })
-
-    out = markets.history("AAPL", "1y")
-    assert out["source"] == "yahoo"
-
-
-def test_markets_history_skips_ibkr_entirely_when_tws_is_closed(monkeypatch):
-    from app import ibkr as ibkr_mod
-
-    monkeypatch.setattr(ibkr_mod, "port_open", lambda p: False)
     called = {"ibkr": False}
     monkeypatch.setattr(ibkr_mod, "history_bars", lambda symbol, range_: called.update(ibkr=True) or {})
     monkeypatch.setattr(markets, "_yahoo_history", lambda symbol, range_: {
         "symbol": symbol, "bars": [{"date": "2024-01-02", "close": 1.0}], "count": 1, "source": "yahoo",
     })
 
-    markets.history("AAPL", "1y")
-    assert called["ibkr"] is False, "no TWS running means don't even try the IBKR path"
-
-
-def test_markets_history_an_ibkr_exception_never_breaks_the_fallback(monkeypatch):
-    from app import ibkr as ibkr_mod
-
-    monkeypatch.setattr(ibkr_mod, "busy", lambda: False)
-    monkeypatch.setattr(ibkr_mod, "port_open", lambda p: True)
-
-    def boom(symbol, range_):
-        raise RuntimeError("TWS died mid-request")
-
-    monkeypatch.setattr(ibkr_mod, "history_bars", boom)
-    monkeypatch.setattr(markets, "_yahoo_history", lambda symbol, range_: {
-        "symbol": symbol, "bars": [{"date": "2024-01-02", "close": 1.0}], "count": 1, "source": "yahoo",
-    })
-
     out = markets.history("AAPL", "1y")
+    assert called["ibkr"] is False
     assert out["source"] == "yahoo"

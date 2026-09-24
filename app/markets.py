@@ -251,6 +251,15 @@ def history(symbol: str, range_: str = "6mo") -> dict[str, Any]:
     """Daily bars for one symbol. Yahoo first; Stooq if Yahoo errors, rate-limits,
     or 403s (its unauthenticated chart endpoint does all three from time to time).
     Never raises - a total failure comes back as {"error": ...} same as before.
+
+    Deliberately does NOT try IBKR here. ibkr.history_bars() exists and is real, but
+    every IBKR call - a chart pull, an order, a cancel - funnels through the same
+    single-threaded TWS job queue. Routing this pervasive, continuously-called
+    function through it would mean a background scan's chart fetches could queue up
+    ahead of a live order or cancel, and IBKR's own historical-data pacing limits
+    could degrade the connection for trading too. Use ibkr.history_bars() directly
+    (or market action=ibkr mode=history) when TWS's own chart data is wanted on
+    purpose - never as this function's silent default.
     """
     symbol = symbol.strip().upper()
     try:
