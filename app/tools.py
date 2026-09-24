@@ -540,6 +540,24 @@ FUNCTION_TOOLS = [
         ["action"],
     ),
     _fn(
+        "pnl_dashboard",
+        (
+            "Daily P&L, visible - not a target. No goal percentage, no progress "
+            "bar, and nothing here caps a good day. action=dashboard gives today's "
+            "live number, the trailing daily record (green/red/flat days, an "
+            "equity curve), and which setups are actually contributing "
+            "(forward_tracker expectancy). action=snapshot records today's numbers "
+            "as they stand; safe to call anytime, never duplicates today's row. "
+            "Reporting only - the risk governor is still the only thing that can "
+            "stop a trade, and it still only gates losses."
+        ),
+        {
+            "action": {"type": "string", "enum": ["dashboard", "snapshot", "history"]},
+            "days": {"type": "integer", "description": "lookback window for dashboard/history, default 30."},
+        },
+        ["action"],
+    ),
+    _fn(
         "premarket",
         (
             "Trading readiness, not a lever. Reads TWS connectivity, the risk "
@@ -729,6 +747,8 @@ def tools_for(agent_id: str, *, allow_spawn: bool = False) -> list[dict]:
         if name == "forward_tracker" and agent_id not in _MARKET_AGENTS:
             continue
         if name == "premarket" and agent_id not in _MARKET_AGENTS:
+            continue
+        if name == "pnl_dashboard" and agent_id not in _MARKET_AGENTS:
             continue
         if name == "backtest" and agent_id not in _MARKET_AGENTS:
             continue
@@ -990,6 +1010,13 @@ def _execute(name: str, arguments: dict[str, Any], *, session_id: str, agent_id:
 
         return premarket_mod.dispatch(
             arguments.get("action") or "check",
+            **{k: v for k, v in arguments.items() if k != "action"},
+        )
+    if name == "pnl_dashboard":
+        from . import pnl_dashboard as pnl_dashboard_mod
+
+        return pnl_dashboard_mod.dispatch(
+            arguments.get("action") or "dashboard",
             **{k: v for k, v in arguments.items() if k != "action"},
         )
     if name == "engage":
