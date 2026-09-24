@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import datetime as dt
+import json
 import math
 import sqlite3
 import time
@@ -11,6 +13,14 @@ import httpx
 from . import config, memory
 
 UA = {"User-Agent": "Mozilla/5.0 SuperJarvis/1.2", "Accept": "application/json"}
+# Stooq wants no UA quirks, just a browser-shaped one; it has no anti-bot gate.
+_STOOQ_UA = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+# Freshness window for the OHLCV cache: daily bars don't change intraday, so a
+# scan cycle that re-touches the same symbol within this window reads it from
+# SQLite instead of making another network call. This is what makes scanning a
+# universe in the thousands survivable rather than one HTTP round-trip per name
+# per cycle.
+OHLCV_CACHE_TTL = 6 * 3600
 CRYPTO = {
     "BTC": "bitcoin",
     "ETH": "ethereum",
@@ -26,6 +36,20 @@ def _db() -> sqlite3.Connection:
     # Use WAL mode: memory.py writes to the same file with WAL; mixing modes
     # causes "database is locked" errors under concurrent reads/writes.
     conn.execute("PRAGMA journal_mode=WAL")
+    # Guaranteed on every connection, not just after init() - the cache helpers
+    # get called from scan paths that may run before anyone calls markets.init().
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS ohlcv_cache (
+            symbol TEXT NOT NULL,
+            range_key TEXT NOT NULL,
+            fetched_at REAL NOT NULL,
+            source TEXT NOT NULL,
+            payload TEXT NOT NULL,
+            PRIMARY KEY (symbol, range_key)
+        )
+        """
+    )
     return conn
 
 
@@ -65,6 +89,7 @@ def init() -> None:
             );
             """
         )
+        # ohlcv_cache is created unconditionally in _db() itself (see there for why).
         if not conn.execute("SELECT 1 FROM paper_account WHERE id=1").fetchone():
             conn.execute(
                 "INSERT INTO paper_account(id, cash, updated_at) VALUES(1,?,?)",
@@ -81,6 +106,69 @@ def _yahoo_chart(symbol: str, range_: str = "6mo", interval: str = "1d") -> dict
         resp = client.get(url, params={"range": range_, "interval": interval})
         resp.raise_for_status()
         return resp.json()
+
+
+def _iso_date(ts: Any) -> str | None:
+    try:
+        return dt.datetime.fromtimestamp(int(ts), tz=dt.timezone.utc).date().isoformat()
+    except (TypeError, ValueError, OSError):
+        return None
+
+
+# Stooq's own range vocabulary doesn't matter here: it always returns everything
+# it has and we slice locally, same as Yahoo's response is sliced to rows[-400:].
+_STOOQ_SUFFIXES = (".US", ".UK", ".DE")
+
+
+def _stooq_symbol(symbol: str) -> str:
+    s = symbol.strip().upper()
+    if any(s.endswith(suf) for suf in _STOOQ_SUFFIXES):
+        return s.lower()
+    if "-USD" in s or s.startswith("^"):
+        return s  # crypto/index tickers aren't on Stooq's plain equity endpoint
+    return f"{s.lower()}.us"
+
+
+def _stooq_history(symbol: str) -> dict[str, Any]:
+    """Free, unauthenticated, no API key. Daily EOD only - not a Yahoo replacement,
+    a fallback for when Yahoo's endpoint 403s, rate-limits, or is simply down.
+    """
+    sym = _stooq_symbol(symbol)
+    url = "https://stooq.com/q/d/l/"
+    with httpx.Client(timeout=20.0, headers=_STOOQ_UA) as client:
+        resp = client.get(url, params={"s": sym, "i": "d"})
+        resp.raise_for_status()
+        text = resp.text
+    lines = [ln for ln in text.strip().splitlines() if ln.strip()]
+    if len(lines) < 2 or "Date" not in lines[0]:
+        # Stooq returns a short "no data" body (still HTTP 200) for unknown symbols.
+        return {"error": f"Stooq has no data for {symbol}"}
+    rows: list[dict[str, Any]] = []
+    for line in lines[1:]:
+        parts = line.split(",")
+        if len(parts) < 6:
+            continue
+        date_s, o, h, l, c, v = parts[:6]
+        try:
+            close = float(c)
+        except ValueError:
+            continue
+        # strftime("%s") is a non-portable platform extension (unreliable on
+        # Windows, which is where this actually runs) - build the timestamp from
+        # the date directly instead.
+        t = int(dt.datetime.combine(dt.date.fromisoformat(date_s), dt.time(), tzinfo=dt.timezone.utc).timestamp())
+        rows.append({
+            "t": t,
+            "date": date_s,
+            "open": float(o) if o else None,
+            "high": float(h) if h else None,
+            "low": float(l) if l else None,
+            "close": close,
+            "volume": int(float(v)) if v else None,
+        })
+    if not rows:
+        return {"error": f"Stooq returned no usable rows for {symbol}"}
+    return {"symbol": symbol.upper(), "bars": rows[-400:], "count": len(rows), "source": "stooq"}
 
 
 def quote(symbol: str) -> dict[str, Any]:
@@ -129,8 +217,7 @@ def quote(symbol: str) -> dict[str, Any]:
         return {"symbol": symbol, "error": str(exc)}
 
 
-def history(symbol: str, range_: str = "6mo") -> dict[str, Any]:
-    symbol = symbol.strip().upper()
+def _yahoo_history(symbol: str, range_: str) -> dict[str, Any]:
     data = _yahoo_chart(symbol, range_=range_, interval="1d")
     result = ((data.get("chart") or {}).get("result") or [None])[0]
     if not result:
@@ -145,6 +232,11 @@ def history(symbol: str, range_: str = "6mo") -> dict[str, Any]:
         rows.append(
             {
                 "t": t,
+                # setups.py/backtest.py/forward_tracker.py key every signal off this -
+                # it was missing entirely before, which meant every real (non-test)
+                # trade silently carried entry_date=exit_date=None and forward_tracker
+                # could never tell one real day's signal apart from another's.
+                "date": _iso_date(t),
                 "open": (q.get("open") or [None])[i] if i < len(q.get("open") or []) else None,
                 "high": (q.get("high") or [None])[i] if i < len(q.get("high") or []) else None,
                 "low": (q.get("low") or [None])[i] if i < len(q.get("low") or []) else None,
@@ -152,7 +244,152 @@ def history(symbol: str, range_: str = "6mo") -> dict[str, Any]:
                 "volume": (q.get("volume") or [None])[i] if i < len(q.get("volume") or []) else None,
             }
         )
-    return {"symbol": symbol, "bars": rows[-400:], "count": len(rows)}
+    return {"symbol": symbol, "bars": rows[-400:], "count": len(rows), "source": "yahoo"}
+
+
+def history(symbol: str, range_: str = "6mo") -> dict[str, Any]:
+    """Daily bars for one symbol. Yahoo first; Stooq if Yahoo errors, rate-limits,
+    or 403s (its unauthenticated chart endpoint does all three from time to time).
+    Never raises - a total failure comes back as {"error": ...} same as before.
+    """
+    symbol = symbol.strip().upper()
+    try:
+        out = _yahoo_history(symbol, range_)
+        if not out.get("error"):
+            return out
+        yahoo_err = out["error"]
+    except Exception as exc:
+        yahoo_err = f"{type(exc).__name__}: {exc}"
+    try:
+        out = _stooq_history(symbol)
+        if not out.get("error"):
+            return out
+        return {"error": f"{yahoo_err}; stooq: {out['error']}"}
+    except Exception as exc:
+        return {"error": f"{yahoo_err}; stooq: {type(exc).__name__}: {exc}"}
+
+
+def _cache_get(symbol: str, range_: str, *, max_age: float) -> dict[str, Any] | None:
+    conn = _db()
+    try:
+        row = conn.execute(
+            "SELECT fetched_at, payload FROM ohlcv_cache WHERE symbol=? AND range_key=?",
+            (symbol, range_),
+        ).fetchone()
+    finally:
+        conn.close()
+    if not row or (time.time() - row["fetched_at"]) > max_age:
+        return None
+    try:
+        return json.loads(row["payload"])
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return None
+
+
+def _cache_put(symbol: str, range_: str, payload: dict[str, Any]) -> None:
+    conn = _db()
+    try:
+        conn.execute(
+            "INSERT INTO ohlcv_cache (symbol, range_key, fetched_at, source, payload) VALUES (?,?,?,?,?) "
+            "ON CONFLICT(symbol, range_key) DO UPDATE SET fetched_at=excluded.fetched_at, "
+            "source=excluded.source, payload=excluded.payload",
+            (symbol, range_, time.time(), payload.get("source") or "unknown", json.dumps(payload)),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def history_cached(symbol: str, range_: str = "6mo", *, max_age: float = OHLCV_CACHE_TTL) -> dict[str, Any]:
+    """Same contract as history(), but a repeat call within max_age reads SQLite
+    instead of the network. Point a scanner that revisits the same symbol every
+    cycle at this, not history() directly - a bare 1-hour daily bar has no reason
+    to be refetched every 30 seconds.
+    """
+    symbol = symbol.strip().upper()
+    cached = _cache_get(symbol, range_, max_age=max_age)
+    if cached is not None:
+        return {**cached, "cached": True}
+    out = history(symbol, range_)
+    if not out.get("error"):
+        _cache_put(symbol, range_, out)
+    return out
+
+
+def history_batch(symbols: list[str], range_: str = "6mo", *, max_age: float = OHLCV_CACHE_TTL) -> dict[str, dict[str, Any]]:
+    """History for many symbols at once: cache hits first, then ONE batched yfinance
+    download for everything still missing, then per-symbol Yahoo/Stooq for whatever
+    that batch call didn't cover (delistings, renamed tickers, odd exchanges).
+
+    This is the difference between scanning hundreds of names and scanning
+    thousands: one yfinance.download() call for a few hundred tickers is a handful
+    of HTTP requests total, not one per symbol.
+    """
+    symbols = [s.strip().upper() for s in symbols if s.strip()]
+    out: dict[str, dict[str, Any]] = {}
+    missing: list[str] = []
+    for sym in symbols:
+        cached = _cache_get(sym, range_, max_age=max_age)
+        if cached is not None:
+            out[sym] = {**cached, "cached": True}
+        else:
+            missing.append(sym)
+    if not missing:
+        return out
+
+    try:
+        import yfinance as yf
+
+        data = yf.download(
+            tickers=missing, period=range_, interval="1d",
+            group_by="ticker", threads=True, progress=False, auto_adjust=False,
+        )
+    except Exception:
+        data = None
+
+    still_missing: list[str] = []
+    if data is not None and not data.empty:
+        multi = hasattr(data.columns, "levels")
+        for sym in missing:
+            try:
+                frame = data[sym] if multi else data
+                frame = frame.dropna(how="all")
+                if frame.empty:
+                    still_missing.append(sym)
+                    continue
+                rows = []
+                for idx, row in frame.iterrows():
+                    close = row.get("Close")
+                    if close is None or close != close:  # NaN
+                        continue
+                    date_s = idx.date().isoformat() if hasattr(idx, "date") else str(idx)[:10]
+                    t = int(dt.datetime.combine(dt.date.fromisoformat(date_s), dt.time(), tzinfo=dt.timezone.utc).timestamp())
+                    rows.append({
+                        "t": t,
+                        "date": date_s,
+                        "open": float(row.get("Open")) if row.get("Open") == row.get("Open") else None,
+                        "high": float(row.get("High")) if row.get("High") == row.get("High") else None,
+                        "low": float(row.get("Low")) if row.get("Low") == row.get("Low") else None,
+                        "close": float(close),
+                        "volume": int(row.get("Volume")) if row.get("Volume") == row.get("Volume") else None,
+                    })
+                if not rows:
+                    still_missing.append(sym)
+                    continue
+                payload = {"symbol": sym, "bars": rows[-400:], "count": len(rows), "source": "yfinance_batch"}
+                out[sym] = payload
+                _cache_put(sym, range_, payload)
+            except Exception:
+                still_missing.append(sym)
+    else:
+        still_missing = list(missing)
+
+    for sym in still_missing:
+        single = history(sym, range_)
+        if not single.get("error"):
+            _cache_put(sym, range_, single)
+        out[sym] = single
+    return out
 
 
 def _series(values: list[float], window: int) -> list[float | None]:
