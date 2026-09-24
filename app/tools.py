@@ -540,6 +540,27 @@ FUNCTION_TOOLS = [
         ["action"],
     ),
     _fn(
+        "forward_tracker",
+        (
+            "Live proof, not just historical proof. Logs every setup setups.scan() actually "
+            "finds, with the exact levels setups.levels_for() computed at the moment it fired, "
+            "then walks it forward with backtest's own fill/exit engine as new bars print. "
+            "action=scan logs anything new (defaults to the watchlist). action=update walks "
+            "every open signal forward. action=stats gives the live win rate/expectancy. "
+            "action=compare puts that next to the historical backtest for the same setup, so "
+            "you can see whether a setup is still working on data it has never seen, not just "
+            "whether it once worked. Places no orders, touches no risk limit, touches IBKR not "
+            "at all - purely an observer."
+        ),
+        {
+            "action": {"type": "string", "enum": ["scan", "update", "stats", "open", "compare"]},
+            "symbols": {"type": "string", "description": "comma-separated, for action=scan. Defaults to the watchlist."},
+            "setup": {"type": "string", "description": "catalog key, for action=stats/compare."},
+            "range": {"type": "string", "description": "history window. Default 1y for scan, 2y for update."},
+        },
+        ["action"],
+    ),
+    _fn(
         "setups",
         (
             "Named market setups: which are live on a symbol, what each one IS and how it fails, "
@@ -690,6 +711,8 @@ def tools_for(agent_id: str, *, allow_spawn: bool = False) -> list[dict]:
         if name == "market" and agent_id not in _MARKET_AGENTS:
             continue
         if name == "setups" and agent_id not in _MARKET_AGENTS:
+            continue
+        if name == "forward_tracker" and agent_id not in _MARKET_AGENTS:
             continue
         if name == "backtest" and agent_id not in _MARKET_AGENTS:
             continue
@@ -937,6 +960,13 @@ def _execute(name: str, arguments: dict[str, Any], *, session_id: str, agent_id:
 
         return setups_mod.dispatch(
             arguments.get("action") or "scan",
+            **{k: v for k, v in arguments.items() if k != "action"},
+        )
+    if name == "forward_tracker":
+        from . import forward_tracker as forward_tracker_mod
+
+        return forward_tracker_mod.dispatch(
+            arguments.get("action") or "open",
             **{k: v for k, v in arguments.items() if k != "action"},
         )
     if name == "engage":
