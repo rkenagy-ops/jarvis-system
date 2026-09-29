@@ -24,6 +24,7 @@ IBKR_LIVE, or any other trading/risk switch — those stay exactly as configured
 
 from __future__ import annotations
 
+import json
 import sqlite3
 import threading
 from contextlib import contextmanager
@@ -57,11 +58,29 @@ CREATE TABLE IF NOT EXISTS forward_signals (
 """
 
 
+# Columns added after the table first shipped. journal.py reads `context` to diagnose
+# why a signal lost, and marks `reviewed` so each closed trade is studied exactly once.
+_ADDED_COLUMNS = {
+    "context": "TEXT",
+    "source": "TEXT",
+    "reviewed": "INTEGER NOT NULL DEFAULT 0",
+    "lesson": "TEXT",
+}
+_migrated: set[str] = set()
+
+
 def _connect() -> sqlite3.Connection:
     conn = sqlite3.connect(config.DB_PATH, check_same_thread=False, timeout=30)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute(_SCHEMA)
+    if str(config.DB_PATH) not in _migrated:
+        have = {r["name"] for r in conn.execute("PRAGMA table_info(forward_signals)").fetchall()}
+        for name, decl in _ADDED_COLUMNS.items():
+            if name not in have:
+                conn.execute(f"ALTER TABLE forward_signals ADD COLUMN {name} {decl}")
+        conn.commit()
+        _migrated.add(str(config.DB_PATH))
     return conn
 
 
@@ -86,50 +105,31 @@ def _db() -> Iterable[sqlite3.Connection]:
 
 
 def log_new_signals(symbols: list[str] | None = None, *, range_: str = "1y") -> dict[str, Any]:
-    """Scan symbols with the SAME setups.scan() the live desk uses; log anything new.
+    """Run the SAME detector the live desk uses on each symbol; log anything new.
 
     Keyed on (symbol, setup, signal_date), so re-running this after the same day's bar
     has already been logged is a no-op — it can never double-count one day's fire.
+    One history fetch per symbol: this used to call setups.scan() (which fetched) and
+    then fetch the identical history again to compute levels.
     """
     syms = [s.strip().upper() for s in (symbols or config.WATCHLIST) if s.strip()]
     logged: list[dict[str, Any]] = []
     skipped: list[dict[str, Any]] = []
     errors: list[dict[str, Any]] = []
+    regime = market_regime()
     for symbol in syms:
         try:
-            found = setups.scan(symbol, range_)
+            hist = markets.history(symbol, range_)
         except Exception as exc:
             errors.append({"symbol": symbol, "error": f"{type(exc).__name__}: {exc}"})
             continue
-        if not found.get("ok") or not found.get("found"):
-            continue
-        hist = markets.history(symbol, range_)
         bars = [b for b in (hist.get("bars") or []) if b.get("close") is not None]
-        if not bars:
-            continue
         ctx = setups.context_from_bars(bars, symbol)
         if not ctx.get("ok"):
             continue
-        signal_date = bars[-1].get("date") or date.today().isoformat()
-        for item in found["found"]:
-            key = item["setup"]
-            levels = setups.levels_for(ctx, key)
-            if not levels.get("ok"):
-                continue
-            try:
-                with _db() as conn:
-                    conn.execute(
-                        "INSERT INTO forward_signals "
-                        "(symbol, setup, side, entry, stop, target, signal_date, logged_at, status) "
-                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'open')",
-                        (
-                            symbol, key, levels["side"], levels["entry"], levels["stop"], levels["target"],
-                            signal_date, datetime.now(timezone.utc).isoformat(),
-                        ),
-                    )
-                logged.append({"symbol": symbol, "setup": key, "signal_date": signal_date, **levels})
-            except sqlite3.IntegrityError:
-                skipped.append({"symbol": symbol, "setup": key, "reason": "already logged for this session"})
+        out = log_from_context(ctx, setups.detect(ctx).get("found") or [], regime=regime, source="watchlist")
+        logged.extend(out["logged"])
+        skipped.extend(out["skipped"])
     return {
         "ok": True,
         "scanned": len(syms),
@@ -138,6 +138,77 @@ def log_new_signals(symbols: list[str] | None = None, *, range_: str = "1y") -> 
         "errors": errors,
         "signals": logged,
     }
+
+
+def log_from_context(
+    ctx: dict[str, Any], found: list[dict[str, Any]], *, regime: dict[str, Any] | None = None, source: str = "",
+) -> dict[str, list[dict[str, Any]]]:
+    """Log already-detected setups for bars the caller already holds.
+
+    The universe hunter screens thousands of names off one batched download; this lets
+    it record what it found without a second fetch per symbol.
+    """
+    bars, symbol = ctx["bars"], ctx["symbol"]
+    signal_date = bars[-1].get("date") or date.today().isoformat()
+    logged: list[dict[str, Any]] = []
+    skipped: list[dict[str, Any]] = []
+    for item in found:
+        key = item["setup"]
+        levels = setups.levels_for(ctx, key)
+        if not levels.get("ok"):
+            continue
+        context = json.dumps(signal_context(ctx, item, levels, regime))
+        try:
+            with _db() as conn:
+                conn.execute(
+                    "INSERT INTO forward_signals "
+                    "(symbol, setup, side, entry, stop, target, signal_date, logged_at, status, context, source) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?)",
+                    (
+                        symbol, key, levels["side"], levels["entry"], levels["stop"], levels["target"],
+                        signal_date, datetime.now(timezone.utc).isoformat(), context, source,
+                    ),
+                )
+            logged.append({"symbol": symbol, "setup": key, "signal_date": signal_date, **levels})
+        except sqlite3.IntegrityError:
+            skipped.append({"symbol": symbol, "setup": key, "reason": "already logged for this session"})
+    return {"logged": logged, "skipped": skipped}
+
+
+def signal_context(
+    ctx: dict[str, Any], item: dict[str, Any], levels: dict[str, Any], regime: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """The conditions a signal fired under - what journal.py later reads to tell a
+    normal loss from a mistake (chasing, fighting the market, light volume, ...)."""
+    bars, last = ctx["bars"], ctx["closes"][-1]
+    atr, sma20, sma50 = ctx["atr"], ctx["sma20"], ctx["sma50"]
+    avg_vol, vol = ctx["avg_volume"], bars[-1].get("volume")
+    evidence = item.get("evidence") or {}
+    return {
+        "confidence": item.get("confidence"),
+        "rsi14": round(ctx["stats"].get("rsi14") or 0, 1),
+        "above_sma50": bool(sma50 and last > sma50),
+        "extension_atr": round((last - sma20) / atr, 2) if (atr and sma20) else None,
+        "rvol": round(vol / avg_vol, 2) if (avg_vol and vol) else None,
+        "stop_atr": round(abs(levels["entry"] - levels["stop"]) / atr, 2) if atr else None,
+        "r_multiple": round(abs(levels["target"] - levels["entry"]) / abs(levels["entry"] - levels["stop"]), 2),
+        "candles": evidence.get("candles") or [],
+        "candles_against": evidence.get("candles_against") or [],
+        "market_up": (regime or {}).get("up"),
+    }
+
+
+def market_regime(symbol: str = "SPY") -> dict[str, Any]:
+    """Is the broad market above its 50-day? Longs and shorts both care."""
+    try:
+        hist = markets.history_cached(symbol, "6mo", max_age=3600)
+    except Exception:
+        return {}
+    closes = [b["close"] for b in (hist.get("bars") or []) if b.get("close") is not None]
+    if len(closes) < 50:
+        return {}
+    sma50 = sum(closes[-50:]) / 50
+    return {"symbol": symbol, "up": closes[-1] > sma50, "close": closes[-1], "sma50": round(sma50, 2)}
 
 
 def update_open(*, range_: str = "2y") -> dict[str, Any]:
@@ -155,14 +226,17 @@ def update_open(*, range_: str = "2y") -> dict[str, Any]:
     still_open: list[dict[str, Any]] = []
     errors: list[dict[str, Any]] = []
 
+    fetched: dict[str, list[dict]] = {}
     for row in rows:
         symbol = row["symbol"]
-        try:
-            hist = markets.history(symbol, range_)
-        except Exception as exc:
-            errors.append({"symbol": symbol, "error": str(exc)})
-            continue
-        bars = [b for b in (hist.get("bars") or []) if b.get("close") is not None]
+        if symbol not in fetched:
+            try:
+                hist = markets.history(symbol, range_)
+            except Exception as exc:
+                errors.append({"symbol": symbol, "error": str(exc)})
+                continue
+            fetched[symbol] = [b for b in (hist.get("bars") or []) if b.get("close") is not None]
+        bars = fetched[symbol]
         try:
             start_i = next(i for i, b in enumerate(bars) if b.get("date") == row["signal_date"])
         except StopIteration:

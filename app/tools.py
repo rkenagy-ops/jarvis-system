@@ -593,6 +593,59 @@ FUNCTION_TOOLS = [
         ["action"],
     ),
     _fn(
+        "candles",
+        (
+            "Read the candles. action=read names the candlestick patterns on the last bars "
+            "(hammer, engulfing, morning/evening star, shooting star, three soldiers/crows, "
+            "marubozu, doji, inside bar, NR7) and grades each by WHERE it formed (support, "
+            "resistance, with or against the 50-day) and volume. action=radar says whether a "
+            "breakout UP or breakdown DOWN is happening or loading (squeeze, compression, "
+            "distance to the 20-day high/low in ATRs, relative volume) with trigger and stop "
+            "levels. action=teach explains any pattern and how it fails."
+        ),
+        {
+            "action": {"type": "string", "enum": ["read", "radar", "teach"]},
+            "symbol": {"type": "string"},
+            "pattern": {"type": "string", "description": "pattern key, for action=teach."},
+            "range": {"type": "string"},
+        },
+        ["action"],
+    ),
+    _fn(
+        "hunter",
+        (
+            "Aggressive universe hunt across every liquid US stock, longs AND shorts. Ranks "
+            "setups by expected payoff (confidence, reward-to-risk, relative volume, breakout "
+            "radar) times what the journal has learned from her own closed trades, and lists "
+            "coiled names loading at a 20-day extreme. action=hunt runs a pass (slow: thousands "
+            "of names), action=last returns the latest pass instantly. Finds and ranks only - "
+            "orders still go through the risk governor and confirm token."
+        ),
+        {
+            "action": {"type": "string", "enum": ["hunt", "last", "liquid", "session"]},
+            "top": {"type": "integer"},
+            "refresh": {"type": "boolean", "description": "rebuild the liquid universe first."},
+        },
+        ["action"],
+    ),
+    _fn(
+        "journal",
+        (
+            "Learn from mistakes. Post-mortems every closed signal: a clean loss is cost of "
+            "business; chasing an extended move, fighting the market, light-volume breakouts, "
+            "stops inside the noise and poor reward-to-risk are named as mistakes. action=insights "
+            "shows what is paying and bleeding by setup and condition plus the rules learned; "
+            "action=mistakes lists recent ones; action=weights shows the ranking multipliers the "
+            "hunter applies; action=daily runs the whole study session and writes the lessons."
+        ),
+        {
+            "action": {"type": "string", "enum": ["review", "insights", "weights", "daily", "mistakes"]},
+            "limit": {"type": "integer"},
+            "refresh": {"type": "boolean"},
+        },
+        ["action"],
+    ),
+    _fn(
         "setups",
         (
             "Named market setups: which are live on a symbol, what each one IS and how it fails, "
@@ -605,7 +658,10 @@ FUNCTION_TOOLS = [
             "symbol": {"type": "string"},
             "setup": {
                 "type": "string",
-                "enum": ["trend_pullback", "breakout_20d", "oversold_in_uptrend", "momentum_cross", "range_fade"],
+                "enum": [
+                    "trend_pullback", "breakout_20d", "oversold_in_uptrend", "momentum_cross", "range_fade",
+                    "breakdown_20d", "trend_rally_short", "squeeze_breakout",
+                ],
             },
             "risk": {"type": "number", "description": "Dollars you are willing to lose on this trade."},
             "range": {"type": "string", "description": "History window, default 1y."},
@@ -742,7 +798,7 @@ def tools_for(agent_id: str, *, allow_spawn: bool = False) -> list[dict]:
             continue
         if name == "market" and agent_id not in _MARKET_AGENTS:
             continue
-        if name == "setups" and agent_id not in _MARKET_AGENTS:
+        if name in {"setups", "candles", "hunter", "journal"} and agent_id not in _MARKET_AGENTS:
             continue
         if name == "forward_tracker" and agent_id not in _MARKET_AGENTS:
             continue
@@ -989,6 +1045,27 @@ def _execute(name: str, arguments: dict[str, Any], *, session_id: str, agent_id:
 
         return backtest_mod.dispatch(
             arguments.get("action") or "run",
+            **{k: v for k, v in arguments.items() if k != "action"},
+        )
+    if name == "candles":
+        from . import candles as candles_mod
+
+        return candles_mod.dispatch(
+            arguments.get("action") or "read",
+            **{k: v for k, v in arguments.items() if k != "action"},
+        )
+    if name == "hunter":
+        from . import hunter as hunter_mod
+
+        return hunter_mod.dispatch(
+            arguments.get("action") or "last",
+            **{k: v for k, v in arguments.items() if k != "action"},
+        )
+    if name == "journal":
+        from . import journal as journal_mod
+
+        return journal_mod.dispatch(
+            arguments.get("action") or "insights",
             **{k: v for k, v in arguments.items() if k != "action"},
         )
     if name == "setups":

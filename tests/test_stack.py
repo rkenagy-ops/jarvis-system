@@ -286,3 +286,14 @@ def test_engage_follows_stack_gating():
     for agent in ("jarvis", "social", "scribe", "analyst"):
         names = {t.get("name") or t.get("type") for t in tools.tools_for(agent, allow_spawn=False)}
         assert ("engage" in names) == ("stack" in names), f"engage/stack gating diverged for {agent}"
+
+
+def test_seed_moves_existing_bots_onto_the_current_cadence():
+    from app import memory
+
+    bots.seed()
+    job = next(j for j in memory.list_jobs() if j["name"] == "bot-09-news")
+    memory.set_job_interval(job["id"], 2400)
+    bots.seed()
+    job = next(j for j in memory.list_jobs() if j["name"] == "bot-09-news")
+    assert job["every_sec"] == dict((n, e) for n, _, e in bots.SPECS)["bot-09-news"]

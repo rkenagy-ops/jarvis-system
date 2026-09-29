@@ -114,7 +114,9 @@ def snapshot(*, force: bool = False) -> dict[str, Any]:
     if cached and not force and now - float(_cache.get("at") or 0) < TTL_SEC:
         return cached
     buckets: dict[str, list[dict]] = {name: [] for name in NEWS_FEEDS}
-    with ThreadPoolExecutor(max_workers=6) as pool:
+    # One worker per feed (plus quotes): with 6 workers and 22 feeds on a 12s timeout,
+    # a few slow wires stacked into ~45s of wall clock before the desk saw any headline.
+    with ThreadPoolExecutor(max_workers=len(NEWS_FEEDS) + 1) as pool:
         futs = {pool.submit(_pull_news, name, url): name for name, url in NEWS_FEEDS.items()}
         qfut = pool.submit(_quotes)
         for fut, name in futs.items():

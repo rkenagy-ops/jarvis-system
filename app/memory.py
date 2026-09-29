@@ -548,6 +548,12 @@ def mark_job(job_id: str, result: str) -> None:
         )
 
 
+def set_job_interval(job_id: str, every_sec: int) -> bool:
+    with _db() as conn:
+        cur = conn.execute("UPDATE jobs SET every_sec=? WHERE id=?", (int(every_sec), job_id))
+        return cur.rowcount > 0
+
+
 def set_job_enabled(job_id: str, enabled: bool) -> bool:
     with _db() as conn:
         cur = conn.execute("UPDATE jobs SET enabled=? WHERE id=?", (1 if enabled else 0, job_id))

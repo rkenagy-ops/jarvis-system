@@ -155,6 +155,67 @@ INDEX: list[dict[str, Any]] = [
         "priority": 3,
         "why": "250+ indicators, maintained fork of pandas-ta with TA-Lib as an accuracy oracle.",
     },
+    # --- reading charts and learning from outcomes ------------------------------
+    # Added with app/candles.py, app/journal.py and app/hunter.py. candles.py hand-rolls
+    # its pattern maths; these are the references to check it against and the systems
+    # worth reading for how a desk turns its own results into better decisions.
+    {
+        "repo": "TA-Lib/ta-lib-python",
+        "category": "candlesticks",
+        "priority": 1,
+        "why": (
+            "The reference implementation of 61 candlestick pattern recognisers (CDLHAMMER, "
+            "CDLENGULFING, CDLMORNINGSTAR...). The accuracy oracle for app/candles.py - where "
+            "our shape rules and TA-Lib disagree on the same bars, one of us is wrong."
+        ),
+    },
+    {
+        "repo": "TauricResearch/TradingAgents",
+        "category": "trading_agents",
+        "priority": 1,
+        "why": (
+            "Multi-agent LLM trading firm: fundamental, sentiment, news and technical analysts, "
+            "bull/bear researchers debating, a trader and a risk team. The blueprint for giving "
+            "TRADER a bull-vs-bear debate before ENTER instead of a single pass."
+        ),
+    },
+    {
+        "repo": "virattt/ai-hedge-fund",
+        "category": "trading_agents",
+        "priority": 1,
+        "why": (
+            "Investor-persona agents plus a risk manager and portfolio manager that size from "
+            "their combined signals. Read for how it merges disagreeing agents into one position."
+        ),
+    },
+    {
+        "repo": "microsoft/qlib",
+        "category": "ml_trading",
+        "priority": 1,
+        "why": (
+            "AI-oriented quant platform: alpha factor libraries, model zoo and a proper "
+            "train/validate/backtest loop. The grown-up version of what journal.weights does - "
+            "learning which signals pay from outcomes, with the leakage controls that requires."
+        ),
+    },
+    {
+        "repo": "stefan-jansen/machine-learning-for-trading",
+        "category": "ml_trading",
+        "priority": 2,
+        "why": "Book-length notebooks: feature engineering from OHLCV, walk-forward validation, and why most ML trading results are overfit.",
+    },
+    {
+        "repo": "AI4Finance-Foundation/FinRL",
+        "category": "ml_trading",
+        "priority": 3,
+        "why": "Reinforcement-learning trading agents. Research only - an RL agent that learns on its own P&L needs far more data than one account produces.",
+    },
+    {
+        "repo": "kernc/backtesting.py",
+        "category": "backtesting",
+        "priority": 2,
+        "why": "Small, readable event-driven backtester with parameter optimisation and heatmaps - a second opinion on backtest.py's fills.",
+    },
     # --- backtesting -----------------------------------------------------------
     {
         "repo": "polakowo/vectorbt",

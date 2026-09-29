@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from . import markets
+from . import candles, markets
 
 # --------------------------------------------------------------------------- teaching
 
@@ -87,7 +87,41 @@ CATALOG: dict[str, dict[str, str]] = {
         "target_rule": "The midpoint of the range.",
         "fails_when": "The range is about to resolve into a trend. This is the setup that hurts most when wrong — keep it small.",
     },
+    "breakdown_20d": {
+        "name": "20-day breakdown (short)",
+        "idea": "Price closes below its lowest level in 20 sessions, ideally on heavier volume. The mirror of the breakout.",
+        "why": "A new 20-day low means every buyer in that window is underwater - each bounce meets supply from people trying to get out.",
+        "trigger": "Daily close below the 20-day low; sell-stop under the breakdown bar.",
+        "invalidation": "A close back inside the range. A breakdown that reclaims is a bear trap - and those squeeze hard.",
+        "stop_rule": "Above the recent swing high, or 1.5x ATR above entry, whichever is further.",
+        "target_rule": "Height of the base projected down from the breakdown point.",
+        "fails_when": "The broad market is ripping higher, or short interest is already crowded - breakdowns into a squeeze reverse violently.",
+    },
+    "trend_rally_short": {
+        "name": "Downtrend rally short",
+        "idea": "An established downtrend bounces into its 20-day average and stalls. You sell the rally, not the hole.",
+        "why": "Downtrends move in steps too. Rallies into a falling average are where trapped longs sell, so the stop sits close.",
+        "trigger": "Price loses the prior day's low after tagging the 20-day average from below.",
+        "invalidation": "A close back above the 50-day average. The premise was 'trend down' - that ends it.",
+        "stop_rule": "Above the recent swing high, or 1.5x ATR above entry, whichever is tighter.",
+        "target_rule": "The prior swing low first.",
+        "fails_when": "The rally is actually a base turning up - volume expanding on the up days is the tell.",
+    },
+    "squeeze_breakout": {
+        "name": "Volatility squeeze breakout (either side)",
+        "idea": "Bollinger bandwidth coils to a ~6-month low, then price closes outside its 10-day range. Trade the direction it breaks.",
+        "why": "Volatility mean-reverts: long quiet stretches end in expansion. The squeeze says a move is coming; the break says which way.",
+        "trigger": "Close above the 10-day high (long) or below the 10-day low (short) within 5 bars of a squeeze.",
+        "invalidation": "Price back inside the 10-day range - the expansion was a fake.",
+        "stop_rule": "The other side of the 10-day range, or 1.5x ATR, whichever is tighter.",
+        "target_rule": "2R first; trail once the move extends - squeezes that work tend to run.",
+        "fails_when": "The break comes on light volume or right before earnings - the real expansion then happens as a gap against you.",
+    },
 }
+
+# Setups whose trade is a short. Everything else is a long, except range_fade and
+# squeeze_breakout, which take whichever side the chart hands them.
+SHORT_SETUPS = {"breakdown_20d", "trend_rally_short"}
 
 
 def teach(setup: str = "") -> dict[str, Any]:
@@ -110,7 +144,9 @@ def teach(setup: str = "") -> dict[str, Any]:
 def _atr(bars: list[dict], period: int = 14) -> float | None:
     """Average true range — the volatility unit stops are measured in."""
     trs = []
-    for i in range(1, len(bars)):
+    # Only the last `period` true ranges are averaged; walking the full history for
+    # them made the backtest quadratic in its bar count.
+    for i in range(max(1, len(bars) - period - 5), len(bars)):
         high, low = bars[i].get("high"), bars[i].get("low")
         prev_close = bars[i - 1].get("close")
         if high is None or low is None or prev_close is None:
@@ -279,7 +315,57 @@ def detect(ctx: dict[str, Any]) -> dict[str, Any]:
                 }
             )
 
+    # 20-day breakdown: the short-side mirror of the breakout.
+    if low20 and last <= low20:
+        heavy = bool(avg_vol and last_vol and last_vol > avg_vol * 1.2)
+        found.append(
+            {
+                "setup": "breakdown_20d",
+                "side": "sell",
+                "confidence": "high" if heavy else "low",
+                "evidence": {
+                    "low_20": round(low20, 2),
+                    "volume_vs_avg": round(last_vol / avg_vol, 2) if (avg_vol and last_vol) else None,
+                    "note": None if heavy else "Volume is not confirming - light-volume breakdowns get reclaimed.",
+                },
+            }
+        )
+
+    # Downtrend rally into a falling 20-day: sell the bounce.
+    if sma20 and sma50 and last < sma50 and sma20 < sma50 and rsi is not None and atr:
+        if abs(last - sma20) <= atr and 42 <= rsi <= 62:
+            found.append(
+                {
+                    "setup": "trend_rally_short",
+                    "side": "sell",
+                    "confidence": "high" if last < sma20 else "medium",
+                    "evidence": {
+                        "below_sma50": True,
+                        "distance_to_sma20_atr": round(abs(last - sma20) / atr, 2),
+                        "rsi14": round(rsi, 1),
+                    },
+                }
+            )
+
+    # Squeeze breakout, either direction.
+    squeeze = _squeeze_break(ctx)
+    if squeeze:
+        found.append(squeeze)
+
+    # Candles are the tiebreaker: a setup confirmed by a pattern pointing the same way,
+    # formed at the right location, gets promoted one confidence step.
+    reading = candles.read_bars(bars, lookback=2)
     for item in found:
+        side = item.get("side") or ("sell" if item["setup"] in SHORT_SETUPS else "buy")
+        item["side"] = side
+        want = "bull" if side == "buy" else "bear"
+        agree = [p for p in reading.get("patterns") or [] if p["bias"] == want and p["score"] >= 2]
+        against = [p for p in reading.get("patterns") or [] if p["bias"] not in {want, "neutral"} and p["score"] >= 2]
+        if agree:
+            item["confidence"] = _PROMOTE.get(item["confidence"], item["confidence"])
+            item.setdefault("evidence", {})["candles"] = [p["pattern"] for p in agree]
+        if against:
+            item.setdefault("evidence", {})["candles_against"] = [p["pattern"] for p in against]
         item["name"] = CATALOG[item["setup"]]["name"]
         item["invalidation"] = CATALOG[item["setup"]]["invalidation"]
 
@@ -297,7 +383,38 @@ def detect(ctx: dict[str, Any]) -> dict[str, Any]:
         },
         "found": found,
         "count": len(found),
+        "candles": reading.get("patterns") or [],
         "next": "setups action=plan symbol=... setup=... risk=<dollars> for sized levels.",
+    }
+
+
+_PROMOTE = {"low": "medium", "medium": "high"}
+
+
+def _squeeze_break(ctx: dict[str, Any]) -> dict[str, Any] | None:
+    bars, closes = ctx["bars"], ctx["closes"]
+    if len(bars) < 30:
+        return None
+    pct = candles.squeeze_percentile(closes[:-1])
+    if pct is None or pct > 20:
+        return None
+    prior = bars[-11:-1]
+    hi10 = max(b.get("high") or b["close"] for b in prior)
+    lo10 = min(b.get("low") or b["close"] for b in prior)
+    last = closes[-1]
+    if last <= hi10 and last >= lo10:
+        return None
+    avg_vol, last_vol = ctx["avg_volume"], bars[-1].get("volume")
+    heavy = bool(avg_vol and last_vol and last_vol > avg_vol * 1.5)
+    return {
+        "setup": "squeeze_breakout",
+        "side": "buy" if last > hi10 else "sell",
+        "confidence": "high" if heavy else "medium",
+        "evidence": {
+            "squeeze_percentile": pct,
+            "range_10d": [round(lo10, 2), round(hi10, 2)],
+            "volume_vs_avg": round(last_vol / avg_vol, 2) if (avg_vol and last_vol) else None,
+        },
     }
 
 
@@ -342,6 +459,33 @@ def levels_for(ctx: dict[str, Any], key: str) -> dict[str, Any]:
         entry = round(last, 2)
         stop = round(swing_low, 2)
         target = round(swing_high, 2)
+    elif key == "breakdown_20d":
+        side = "sell"
+        entry = round(min(last, low20 or last), 2)
+        stop = round(max(_swing_high(bars, 10) or entry + 1.5 * atr, entry + 1.5 * atr), 2)
+        base_height = (high20 - low20) if (high20 and low20) else 2 * atr
+        target = round(max(entry - base_height, entry * 0.5), 2)
+    elif key == "trend_rally_short":
+        side = "sell"
+        entry = round(bars[-1].get("low") or last, 2)
+        stop = round(min(_swing_high(bars, 10) or entry + 1.5 * atr, entry + 1.5 * atr), 2)
+        target = round(_swing_low(bars, 20) or entry - 2 * atr, 2)
+        if target >= entry:
+            target = round(entry - 2 * atr, 2)
+    elif key == "squeeze_breakout":
+        prior = bars[-11:-1]
+        hi10 = max(b.get("high") or b["close"] for b in prior)
+        lo10 = min(b.get("low") or b["close"] for b in prior)
+        side = "sell" if last < lo10 else "buy"
+        entry = round(last, 2)
+        if side == "buy":
+            stop = max(lo10, entry - 1.5 * atr)
+            stop = round(stop if stop < entry else entry - 1.5 * atr, 2)
+            target = round(entry + 2 * (entry - stop), 2)
+        else:
+            stop = min(hi10, entry + 1.5 * atr)
+            stop = round(stop if stop > entry else entry + 1.5 * atr, 2)
+            target = round(entry - 2 * (stop - entry), 2)
     else:  # range_fade
         at_top = high20 and last >= high20 * 0.99
         side = "sell" if at_top else "buy"
@@ -391,8 +535,12 @@ def plan(symbol: str, setup: str, risk: float = 0.0, *, range_: str = "1y") -> d
     warnings = []
     if r_multiple < 1.5:
         warnings.append(f"Reward-to-risk is only {r_multiple}R. Most setups need 2R+ to be worth the slot.")
-    if side == "buy" and sma50 and last < sma50:
+    if side == "buy" and sma50 and last < sma50 and key != "squeeze_breakout":
         warnings.append("Price is below the 50-day — the trend filter this setup relies on is not there.")
+    if side == "sell" and sma50 and last > sma50 and key in SHORT_SETUPS:
+        warnings.append("Price is above the 50-day — shorting into an uptrend is fighting the tape.")
+    if side == "sell":
+        warnings.append("Short trade: needs shares available to borrow, or use puts for defined risk.")
     if shares == 0:
         warnings.append(f"Risk budget of {risk} is smaller than one share's risk ({risk_per_share:.2f}).")
 

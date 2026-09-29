@@ -12,6 +12,7 @@ from typing import Any
 from . import config, obsidian
 
 _cache: dict[str, Any] = {"at": 0.0, "key": "", "picks": []}
+_rotation: dict[str, int] = {"offset": 0}
 VENDOR = Path(__file__).resolve().parents[1] / "vendor" / "marketbeast"
 
 
@@ -192,8 +193,13 @@ def broad_screen(*, max_symbols: int | None = None, shortlist: int = 40,
     uni = universe_mod().full()
     symbols = uni.get("symbols") or []
     cap = max_symbols if max_symbols is not None else config.MARKETBEAST_MAX_UNIVERSE
-    if cap:
-        symbols = symbols[:cap]
+    if cap and len(symbols) > cap:
+        # The directory is alphabetical. Slicing [:cap] meant every pass screened the
+        # same A-to-roughly-F names and NVDA, TSLA or XOM were never looked at. Rotate a
+        # window through the whole list instead so each pass covers the next stretch.
+        start = _rotation["offset"] % len(symbols)
+        symbols = (symbols[start:] + symbols[:start])[:cap]
+        _rotation["offset"] = start + cap
 
     scored: list[dict[str, Any]] = []
     errors = 0
@@ -325,12 +331,14 @@ def _overlay_ibkr(picks: list[dict]) -> list[dict]:
 
         if ibkr.busy() or not ibkr.port_open(ibkr.port()):
             return picks
+        # Picks carry puts as well as calls now. Quoting every one as a call priced puts
+        # off the wrong contract and then reported a call's breakeven for them.
         specs = [
             {
                 "symbol": p.get("symbol"),
                 "expiry": p.get("expiration"),
                 "strike": p.get("strike"),
-                "right": "C",
+                "right": _right(p),
             }
             for p in picks[:6]
         ]
@@ -339,7 +347,7 @@ def _overlay_ibkr(picks: list[dict]) -> list[dict]:
         return picks
     for p in picks:
         expiry = str(p.get("expiration") or "").replace("-", "")
-        key = f"{p.get('symbol')}-{expiry}-{_num(p.get('strike')):g}C"
+        key = f"{p.get('symbol')}-{expiry}-{_num(p.get('strike')):g}{_right(p)}"
         q = quotes.get(key)
         if not q:
             continue
@@ -352,12 +360,17 @@ def _overlay_ibkr(picks: list[dict]) -> list[dict]:
             p["spread"] = round((_num(p["ask"]) - _num(p["bid"])) / ask, 4) if ask else p.get("spread")
         p["max_loss"] = round(_num(p.get("option_price")) * 100, 2)
         if p.get("strike") and p.get("option_price"):
-            p["breakeven"] = round(_num(p["strike"]) + _num(p["option_price"]), 2)
+            sign = -1 if _right(p) == "P" else 1
+            p["breakeven"] = round(_num(p["strike"]) + sign * _num(p["option_price"]), 2)
         p["quote_source"] = "ibkr"
         p["grade"] = grade(p)
         p["buyable"] = p["grade"] in {"A", "B"}
     picks.sort(key=lambda x: (x.get("buyable"), _num(x.get("combined_score"))), reverse=True)
     return picks
+
+
+def _right(pick: dict[str, Any]) -> str:
+    return "P" if str(pick.get("option_type") or "CALL").upper().startswith("P") else "C"
 
 
 def _write_vault(picks: list[dict], universe: str) -> str | None:

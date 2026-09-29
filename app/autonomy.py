@@ -1,12 +1,23 @@
 from __future__ import annotations
 
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 from . import config, markets, memory, obsidian, widgets
 
 _stop = threading.Event()
 _thread: threading.Thread | None = None
+
+# Due jobs run on a small pool instead of inline in the beat. Inline, one slow job - a
+# learning cycle cloning repos, a full-market screen - held the whole scheduler: the
+# 10-minute catalyst sweep and the news pull sat waiting behind it, which is exactly
+# the lag a desk cannot afford. _running keeps a job from being started twice while a
+# previous run of it is still going (it is not marked until it finishes).
+_JOB_WORKERS = 4
+_pool: ThreadPoolExecutor | None = None
+_running: set[str] = set()
+_running_lock = threading.Lock()
 
 
 # --------------------------------------------------------------------------- job handlers
@@ -291,6 +302,35 @@ def _h_catalyst() -> str:
     )
 
 
+def _h_hunter() -> str:
+    from . import hunter
+
+    out = hunter.hunt()
+    longs = ", ".join(f"{r['symbol']}({r['setup']})" for r in out["longs"][:5]) or "none"
+    shorts = ", ".join(f"{r['symbol']}({r['setup']})" for r in out["shorts"][:5]) or "none"
+    summary = (
+        f"Hunt [{out['session']}] {out['universe']['liquid']} liquid names, {out['signals']} signals. "
+        f"Longs: {longs}. Shorts: {shorts}. Loading: {len(out['loading'])}. "
+        f"Logged {out['logged_to_tracker']} to tracker in {out['elapsed_sec']}s."
+    )
+    memory.remember(summary, kind="signal", tags=["hunter", "market"], importance=0.7, source_agent="scanner")
+    return summary
+
+
+def _h_journal() -> str:
+    """Only studies once the day's bars are settled; intraday runs just review."""
+    from . import hunter, journal
+
+    if hunter.session() == "regular":
+        out = journal.review()
+        return f"Journal (intraday): reviewed {out['reviewed']} closed signal(s) {out['verdicts']}."
+    out = journal.daily()
+    return (
+        f"Journal: reviewed {out['reviewed']} {out['verdicts']}. "
+        f"Rules: {len(out['rules'])}, edges: {len(out['edges'])}. Lessons -> {out['vault']}"
+    )
+
+
 def _h_learn() -> str:
     from . import learning
 
@@ -338,6 +378,8 @@ JOB_HANDLERS: dict[str, Any] = {
     "bot-25-forward-track": _h_forward_track,
     "bot-26-premarket": _h_premarket,
     "bot-27-pnl-dashboard": _h_pnl_dashboard,
+    "bot-28-hunter": _h_hunter,
+    "bot-29-journal": _h_journal,
 }
 
 
@@ -536,6 +578,7 @@ def ensure_defaults() -> list[dict]:
         job = memory.add_job(name, prompt, every)
         memory.mark_job(job["id"], "seeded — waiting first interval")
         seeded.append(job)
+    bots.seed()  # keeps already-seeded bots on the cadence SPECS currently asks for
     return seeded
 
 
@@ -576,12 +619,37 @@ def beat() -> list[str]:
     except Exception as exc:
         results.append(f"publish-error {exc}")
     for job in memory.due_jobs():
-        try:
-            results.append(run_job(job))
-        except Exception as exc:
-            memory.mark_job(job["id"], f"error: {exc}")
-            results.append(str(exc))
+        with _running_lock:
+            if job["id"] in _running:
+                continue
+            _running.add(job["id"])
+        _job_pool().submit(_run_tracked, job)
+        results.append(f"started {job.get('name')}")
     return results
+
+
+def _job_pool() -> ThreadPoolExecutor:
+    global _pool
+    if _pool is None:
+        _pool = ThreadPoolExecutor(max_workers=_JOB_WORKERS, thread_name_prefix="jarvis-job")
+    return _pool
+
+
+def _run_tracked(job: dict[str, Any]) -> str:
+    try:
+        return run_job(job)
+    except Exception as exc:
+        memory.mark_job(job["id"], f"error: {exc}")
+        return str(exc)
+    finally:
+        with _running_lock:
+            _running.discard(job["id"])
+
+
+def running() -> list[str]:
+    """Job ids currently executing on the pool."""
+    with _running_lock:
+        return sorted(_running)
 
 
 def _loop() -> None:

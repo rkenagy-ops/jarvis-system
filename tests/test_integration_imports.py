@@ -64,5 +64,8 @@ def test_setups_catalog_matches_planner():
     """Every catalogued setup must be plannable, and vice versa."""
     from app import setups
 
-    planned = {"trend_pullback", "breakout_20d", "oversold_in_uptrend", "momentum_cross", "range_fade"}
+    planned = {
+        "trend_pullback", "breakout_20d", "oversold_in_uptrend", "momentum_cross", "range_fade",
+        "breakdown_20d", "trend_rally_short", "squeeze_breakout",
+    }
     assert set(setups.CATALOG) == planned

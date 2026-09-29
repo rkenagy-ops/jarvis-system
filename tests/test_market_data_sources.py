@@ -193,3 +193,26 @@ def test_history_batch_falls_back_to_single_fetch_when_yfinance_has_nothing(monk
 
     out = markets.history_batch(["ZBATCH2"], "1y")
     assert out["ZBATCH2"]["bars"][0]["close"] == 42.0
+
+
+def test_history_batch_caps_and_parallelises_the_per_symbol_fallback(monkeypatch):
+    """A batch miss for hundreds of names used to walk them one by one through Yahoo
+    then Stooq timeouts. The fallback is now bounded, and past the cap names come back
+    as errors instead of stalling the scan."""
+    import sys
+    import types
+
+    fake_yf = types.SimpleNamespace(download=lambda **k: None)
+    monkeypatch.setitem(sys.modules, "yfinance", fake_yf)
+    monkeypatch.setattr(markets, "FALLBACK_MAX", 3)
+    tried = []
+    monkeypatch.setattr(markets, "history", lambda s, r: tried.append(s) or {"symbol": s, "bars": [{"date": "2024-01-02", "close": 1.0}], "source": "yahoo"})
+
+    names = [f"ZCAP{i}" for i in range(5)]
+    out = markets.history_batch(names, "3mo")
+    assert sorted(tried) == names[:3]
+    assert all(not out[s].get("error") for s in names[:3])
+    assert all(out[s].get("error") for s in names[3:])
+    # the successes were written back in one go and now come from the cache
+    again = markets.history_batch(names[:3], "3mo")
+    assert all(again[s].get("cached") for s in names[:3])

@@ -53,6 +53,7 @@ def test_broad_screen_ranks_by_setup_confidence_and_respects_max_symbols(monkeyp
 
     monkeypatch.setattr(mb, "universe_mod", lambda: _FakeUniverse(["AAA", "BBB", "CCC"]))
     monkeypatch.setattr(config, "MARKETBEAST_MAX_UNIVERSE", 2)  # only AAA, BBB considered
+    monkeypatch.setitem(mb._rotation, "offset", 0)
 
     def fake_batch(symbols, range_, **kwargs):
         return {
@@ -113,3 +114,37 @@ def test_best_calls_market_universe_uses_the_broad_screen_shortlist(monkeypatch)
     assert out["ok"] is True
     assert called_with["symbols"] == ["HOT1", "HOT2"]
     assert out["broad_screen"]["candidates"] == 2
+
+
+def test_capped_broad_screen_rotates_through_the_whole_alphabetical_universe(monkeypatch):
+    """Slicing the sorted directory at the cap meant late-alphabet names were never
+    screened. Consecutive capped passes must walk forward through the list."""
+    monkeypatch.setattr(mb, "universe_mod", lambda: _FakeUniverse(["AAA", "BBB", "CCC", "DDD", "EEE"]))
+    monkeypatch.setattr(config, "MARKETBEAST_MAX_UNIVERSE", 2)
+    monkeypatch.setitem(mb._rotation, "offset", 0)
+    seen = []
+    monkeypatch.setattr(markets, "history_batch", lambda symbols, range_, **k: seen.append(list(symbols)) or {})
+
+    for _ in range(3):
+        mb.broad_screen()
+    assert seen == [["AAA", "BBB"], ["CCC", "DDD"], ["EEE", "AAA"]]
+
+
+def test_ibkr_overlay_quotes_puts_as_puts(monkeypatch):
+    from app import ibkr
+
+    seen = {}
+    monkeypatch.setattr(ibkr, "busy", lambda: False)
+    monkeypatch.setattr(ibkr, "port_open", lambda p: True)
+    monkeypatch.setattr(ibkr, "port", lambda: 7497)
+
+    def quotes(specs):
+        seen["rights"] = [s["right"] for s in specs]
+        return {"XYZ-20260116-100P": {"bid": 2.0, "ask": 2.2, "mid": 2.1}}
+
+    monkeypatch.setattr(ibkr, "option_quotes", quotes)
+    picks = [{"symbol": "XYZ", "expiration": "2026-01-16", "strike": 100, "option_type": "PUT", "option_price": 3.0}]
+    out = mb._overlay_ibkr(picks)
+    assert seen["rights"] == ["P"]
+    assert out[0]["quote_source"] == "ibkr"
+    assert out[0]["breakeven"] == 97.9  # a put breaks even below the strike

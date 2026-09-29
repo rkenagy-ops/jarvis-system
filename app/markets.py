@@ -325,6 +325,62 @@ def history_cached(symbol: str, range_: str = "6mo", *, max_age: float = OHLCV_C
     return out
 
 
+def _cache_get_many(symbols: list[str], range_: str, *, max_age: float) -> dict[str, dict[str, Any]]:
+    """Fresh cache rows for many symbols over ONE connection.
+
+    Calling _cache_get per symbol opened, configured and closed a SQLite connection for
+    every ticker - several thousand of them per full-market pass - before a single byte
+    of market data moved. That alone was seconds of pure overhead per scan.
+    """
+    if not symbols:
+        return {}
+    out: dict[str, dict[str, Any]] = {}
+    cutoff = time.time() - max_age
+    conn = _db()
+    try:
+        for i in range(0, len(symbols), 500):  # stay under SQLite's bound-parameter limit
+            chunk = symbols[i : i + 500]
+            marks = ",".join("?" * len(chunk))
+            rows = conn.execute(
+                f"SELECT symbol, fetched_at, payload FROM ohlcv_cache WHERE range_key=? AND symbol IN ({marks})",
+                (range_, *chunk),
+            ).fetchall()
+            for row in rows:
+                if row["fetched_at"] < cutoff:
+                    continue
+                try:
+                    out[row["symbol"]] = json.loads(row["payload"])
+                except (TypeError, ValueError):
+                    continue
+    finally:
+        conn.close()
+    return out
+
+
+def _cache_put_many(range_: str, payloads: dict[str, dict[str, Any]]) -> None:
+    if not payloads:
+        return
+    now = time.time()
+    conn = _db()
+    try:
+        conn.executemany(
+            "INSERT INTO ohlcv_cache (symbol, range_key, fetched_at, source, payload) VALUES (?,?,?,?,?) "
+            "ON CONFLICT(symbol, range_key) DO UPDATE SET fetched_at=excluded.fetched_at, "
+            "source=excluded.source, payload=excluded.payload",
+            [(sym, range_, now, p.get("source") or "unknown", json.dumps(p)) for sym, p in payloads.items()],
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+# Per-symbol fallback fetches for names the batch download missed. Done serially this
+# was the single worst stall in a full-market scan: a few hundred delisted or odd
+# tickers, each waiting out a Yahoo timeout and then a Stooq timeout, one after another.
+FALLBACK_WORKERS = 8
+FALLBACK_MAX = 150
+
+
 def history_batch(symbols: list[str], range_: str = "6mo", *, max_age: float = OHLCV_CACHE_TTL) -> dict[str, dict[str, Any]]:
     """History for many symbols at once: cache hits first, then ONE batched yfinance
     download for everything still missing, then per-symbol Yahoo/Stooq for whatever
@@ -335,14 +391,9 @@ def history_batch(symbols: list[str], range_: str = "6mo", *, max_age: float = O
     of HTTP requests total, not one per symbol.
     """
     symbols = [s.strip().upper() for s in symbols if s.strip()]
-    out: dict[str, dict[str, Any]] = {}
-    missing: list[str] = []
-    for sym in symbols:
-        cached = _cache_get(sym, range_, max_age=max_age)
-        if cached is not None:
-            out[sym] = {**cached, "cached": True}
-        else:
-            missing.append(sym)
+    cached = _cache_get_many(symbols, range_, max_age=max_age)
+    out: dict[str, dict[str, Any]] = {sym: {**cached[sym], "cached": True} for sym in symbols if sym in cached}
+    missing = [sym for sym in symbols if sym not in cached]
     if not missing:
         return out
 
@@ -356,6 +407,7 @@ def history_batch(symbols: list[str], range_: str = "6mo", *, max_age: float = O
     except Exception:
         data = None
 
+    fresh: dict[str, dict[str, Any]] = {}
     still_missing: list[str] = []
     if data is not None and not data.empty:
         multi = hasattr(data.columns, "levels")
@@ -385,38 +437,41 @@ def history_batch(symbols: list[str], range_: str = "6mo", *, max_age: float = O
                 if not rows:
                     still_missing.append(sym)
                     continue
-                payload = {"symbol": sym, "bars": rows[-400:], "count": len(rows), "source": "yfinance_batch"}
-                out[sym] = payload
-                _cache_put(sym, range_, payload)
+                fresh[sym] = {"symbol": sym, "bars": rows[-400:], "count": len(rows), "source": "yfinance_batch"}
             except Exception:
                 still_missing.append(sym)
     else:
         still_missing = list(missing)
 
-    for sym in still_missing:
-        single = history(sym, range_)
-        if not single.get("error"):
-            _cache_put(sym, range_, single)
-        out[sym] = single
-    return out
+    # A batch that came back empty for hundreds of names is almost always an outage or
+    # a rate limit, not hundreds of dead tickers. Hammering the single-symbol endpoints
+    # for all of them just extends the outage; cap it and report the rest as errors.
+    retry, skipped = still_missing[:FALLBACK_MAX], still_missing[FALLBACK_MAX:]
+    if retry:
+        from concurrent.futures import ThreadPoolExecutor
 
+        with ThreadPoolExecutor(max_workers=FALLBACK_WORKERS) as pool:
+            for sym, single in zip(retry, pool.map(lambda s: history(s, range_), retry)):
+                if single.get("error"):
+                    out[sym] = single
+                    continue
+                fresh[sym] = single
+    for sym in skipped:
+        out[sym] = {"error": f"{sym}: skipped per-symbol fallback (batch miss cap {FALLBACK_MAX})"}
 
-def _series(values: list[float], window: int) -> list[float | None]:
-    out: list[float | None] = []
-    for i in range(len(values)):
-        if i + 1 < window:
-            out.append(None)
-        else:
-            chunk = values[i + 1 - window : i + 1]
-            out.append(sum(chunk) / window)
+    _cache_put_many(range_, fresh)
+    out.update(fresh)
     return out
 
 
 def indicators(closes: list[float]) -> dict[str, Any]:
     if len(closes) < 15:
         return {"error": "Need at least 15 closes"}
-    sma20 = _series(closes, min(20, len(closes)))[-1]
-    sma50 = _series(closes, min(50, len(closes)))[-1] if len(closes) >= 50 else None
+    # Only the latest value is used. Building the whole SMA series first made every
+    # call O(bars x window) - and the backtest calls this once per historical bar.
+    w20 = min(20, len(closes))
+    sma20 = sum(closes[-w20:]) / w20
+    sma50 = sum(closes[-50:]) / 50 if len(closes) >= 50 else None
     rets = [(closes[i] / closes[i - 1] - 1) for i in range(1, len(closes)) if closes[i - 1]]
     vol = (sum(r * r for r in rets[-20:]) / max(1, min(20, len(rets)))) ** 0.5 if rets else 0
     # RSI 14

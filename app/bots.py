@@ -19,7 +19,7 @@ SPECS: list[tuple[str, str, int]] = [
     ("bot-06-calendar", "Sync Outlook calendar into vault/Calendar and reminders.", 1800),
     ("bot-07-upgrade", "Hunt GitHub OSS. Ingest READMEs. Do not clone stacks.", 21600),
     ("bot-08-backup", "Zip vault and SQLite mind to workspace/backups.", 604800),
-    ("bot-09-news", "Pull live feeds and flag headlines that mention watchlist tickers.", 2400),
+    ("bot-09-news", "Pull live feeds and flag headlines that mention watchlist tickers.", 300),
     ("bot-10-social-draft", "Draft one social caption for X+LinkedIn. Save via content tool. Do not publish.", 43200),
     ("bot-11-blog-draft", "Draft one blog outline into vault/Blog. WordPress draft only if keys work.", 86400),
     ("bot-12-publer", "Check Publer status/accounts if keys exist. Do not publish without confirm.", 21600),
@@ -57,9 +57,9 @@ SPECS: list[tuple[str, str, int]] = [
         "Sweep the world wires for tradeable catalysts - earnings, guidance, approvals, "
         "conflict, supply shocks - classify each by how soon the move should happen and how "
         "long it lasts, and emit market.signal so the desk reacts instead of waiting for its "
-        "next tick. Every 10 minutes, because a catalyst that reaches you an hour late is "
+        "next tick. Every 5 minutes, because a catalyst that reaches you an hour late is "
         "already in the price.",
-        600,
+        300,
     ),
     (
         "bot-25-forward-track",
@@ -83,14 +83,33 @@ SPECS: list[tuple[str, str, int]] = [
         "nothing about how or whether she trades. Runs every 30 minutes.",
         1800,
     ),
+    (
+        "bot-28-hunter",
+        "Universe hunt: screen every liquid US stock (price >= $5, $20M+ daily dollar volume) for long AND "
+        "short setups, candle-confirmed breakouts/breakdowns and coiled names loading at a 20-day extreme. "
+        "Ranked by expected payoff times what the journal has learned. Every 15 minutes; after the close the "
+        "top signals are logged to forward_tracker so every call gets graded. Finds and ranks only - no orders.",
+        900,
+    ),
+    (
+        "bot-29-journal",
+        "End-of-day study: post-mortem every newly closed signal, name the mistakes (chasing, fighting the "
+        "market, light-volume breakouts, stops in the noise), recompute what is paying and what is bleeding, "
+        "update the ranking weights the hunter uses, and write the lessons to vault/Markets/Lessons and memory.",
+        21600,
+    ),
 ]
 
 
 def seed() -> list[dict]:
-    have = {j.get("name") for j in memory.list_jobs()}
+    jobs = {j.get("name"): j for j in memory.list_jobs()}
     seeded = []
     for name, prompt, every in SPECS:
-        if name in have:
+        if name in jobs:
+            # A cadence change in SPECS used to be ignored forever once a bot had been
+            # seeded - the news and catalyst bots kept their old, slower intervals.
+            if int(jobs[name].get("every_sec") or 0) != every:
+                memory.set_job_interval(jobs[name]["id"], every)
             continue
         job = memory.add_job(name, prompt, every)
         memory.mark_job(job["id"], "seeded bot — waiting first interval")

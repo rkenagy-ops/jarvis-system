@@ -51,9 +51,10 @@ def _status(symbol):
 
 def test_a_new_signal_is_logged_with_the_real_levels(monkeypatch):
     bars = _bars([100 + i * 0.05 for i in range(90)])
-    monkeypatch.setattr(setups, "scan", lambda symbol, range_="1y": {
+    monkeypatch.setattr(setups, "detect", lambda ctx: {
         "ok": True, "found": [{"setup": "trend_pullback"}],
     })
+    monkeypatch.setattr(forward_tracker, "market_regime", lambda: {})
     monkeypatch.setattr(markets, "history", lambda symbol, range_="1y": {"bars": bars})
 
     out = forward_tracker.log_new_signals(["ZFWD1"])
@@ -65,9 +66,10 @@ def test_a_new_signal_is_logged_with_the_real_levels(monkeypatch):
 
 def test_the_same_days_signal_is_never_logged_twice(monkeypatch):
     bars = _bars([100 + i * 0.05 for i in range(90)])
-    monkeypatch.setattr(setups, "scan", lambda symbol, range_="1y": {
+    monkeypatch.setattr(setups, "detect", lambda ctx: {
         "ok": True, "found": [{"setup": "trend_pullback"}],
     })
+    monkeypatch.setattr(forward_tracker, "market_regime", lambda: {})
     monkeypatch.setattr(markets, "history", lambda symbol, range_="1y": {"bars": bars})
 
     forward_tracker.log_new_signals(["ZFWD2"])
@@ -76,7 +78,9 @@ def test_the_same_days_signal_is_never_logged_twice(monkeypatch):
 
 
 def test_no_setups_found_logs_nothing(monkeypatch):
-    monkeypatch.setattr(setups, "scan", lambda symbol, range_="1y": {"ok": True, "found": []})
+    monkeypatch.setattr(setups, "detect", lambda ctx: {"ok": True, "found": []})
+    monkeypatch.setattr(forward_tracker, "market_regime", lambda: {})
+    monkeypatch.setattr(markets, "history", lambda symbol, range_="1y": {"bars": _bars([100.0] * 90)})
     out = forward_tracker.log_new_signals(["ZFWD_NONE"])
     assert out["ok"] and out["logged"] == 0
 
