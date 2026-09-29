@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import queue
 import threading
 from collections.abc import Callable, Iterator
@@ -306,6 +307,23 @@ def _think_fallback(
     return {"text": final, "agent": agent_id, "citations": [], "calls": result.get("calls") or [], "brain": brain}
 
 
+# Local models choke on long tool lists, so Ollama only gets OLLAMA_TOOL_LIMIT of them.
+# Taking the first N in registry order cut off every trading tool, so a trading
+# question on the local brain could never reach the hunter, candles or journal.
+OLLAMA_TOOL_LIMIT = int(os.getenv("OLLAMA_TOOL_LIMIT") or 18)
+_TRADING_FIRST = ("hunter", "candles", "setups", "journal", "market", "risk", "backtest", "forward_tracker", "pnl_dashboard")
+
+
+def _ollama_tools(agent_id: str, user_text: str) -> list[dict[str, Any]]:
+    from . import router
+
+    fns = [t for t in tools.tools_for(agent_id, allow_spawn=False) if t.get("type") == "function"]
+    if agent_id == "trader" or "trader" in router.suggest(user_text):
+        rank = {name: i for i, name in enumerate(_TRADING_FIRST)}
+        fns.sort(key=lambda t: rank.get(t.get("name"), len(rank)))
+    return fns[:OLLAMA_TOOL_LIMIT]
+
+
 def _think_ollama(
     user_text: str,
     *,
@@ -320,7 +338,7 @@ def _think_ollama(
     if emit:
         emit({"type": "agent_start", "agent": agent_id})
         emit({"type": "status", "text": f"{get(agent_id).name} via Ollama"})
-    fns = [t for t in tools.tools_for(agent_id, allow_spawn=False) if t.get("type") == "function"][:18]
+    fns = _ollama_tools(agent_id, user_text)
     otools = ollama_mod.as_tools(fns)
     messages: list[dict[str, Any]] = [
         {"role": "system", "content": system[:12000]},

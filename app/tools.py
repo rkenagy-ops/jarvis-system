@@ -784,6 +784,19 @@ _MARKET_AGENTS = {"jarvis", "trader", "oracle", "analyst", "watcher"}
 _STACK_AGENTS = {"jarvis", "social", "merch", "publisher", "scheduler", "trader", "steward"}
 
 
+def roster(agent_id: str = "jarvis") -> list[dict[str, str]]:
+    """Every function tool this agent can call, with the first sentence of its description.
+
+    Built from the live registry, so a newly added tool shows up in her prompt and in
+    "what can you do" the moment it is registered - no hand-kept list to forget.
+    """
+    return [
+        {"name": t["name"], "summary": (t.get("description") or "").split(". ")[0].strip()[:140]}
+        for t in tools_for(agent_id, allow_spawn=True)
+        if t.get("type") == "function"
+    ]
+
+
 def tools_for(agent_id: str, *, allow_spawn: bool = False) -> list[dict]:
     agent = AGENTS.get(agent_id) or AGENTS["jarvis"]
     out: list[dict] = []

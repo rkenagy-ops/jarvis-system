@@ -6,7 +6,11 @@ RULES: list[tuple[tuple[str, ...], list[str]]] = [
     (("tweet", "instagram", "linkedin", "tiktok", "caption", "social"), ["social", "scribe", "scheduler"]),
     (("blog", "wordpress", "article", "newsletter"), ["publisher", "scribe"]),
     (("amazon", "asin", "listing", "sku", "product", "shopify"), ["merch", "scribe"]),
-    (("trade", "stock", "nvda", "spy", "rsi", "portfolio"), ["trader", "critic"]),
+    (
+        ("trade", "stock", "nvda", "spy", "rsi", "portfolio", "candle", "chart", "breakout", "breakdown",
+         "setup", "hunt", "hunter", "universe", "journal", "mistake", "lesson", "short", "long"),
+        ["trader", "critic"],
+    ),
     (("github", "repo", "pull request", "issue"), ["sentinel", "forge"]),
     (("code", "bug", "python", "function"), ["forge", "critic"]),
     (("vault", "remember", "obsidian", "note"), ["archivist"]),

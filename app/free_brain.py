@@ -25,12 +25,79 @@ def _tickers(text: str) -> list[str]:
     skip = {
         "I", "A", "THE", "AND", "FOR", "BUY", "SELL", "USD", "CEO", "API", "OSS", "SEC", "NWS",
         "RSI", "SMA", "WHAT", "SHOW", "GIVE", "TELL", "SCAN", "OPEN", "LIVE", "FREE",
+        "READ", "CHART", "ON", "ME", "IS", "ANY", "OF", "IN", "TO", "MY", "RADAR", "SETUP", "HOW", "DOES", "LOOK",
     }
     found = []
     for m in TICKER.findall(text.upper().replace("$", " ")):
         if m not in skip and m not in found:
             found.append(m)
     return found[:5]
+
+
+def _trading(text: str, low: str, use, emit) -> dict[str, Any] | None:
+    """The trading desk without Grok: hunter, candles, journal and setups by keyword.
+
+    Free mode is a keyword router, so a module it has no route to is invisible here no
+    matter how well it is wired into tools.py.
+    """
+    syms = _tickers(text)
+    if re.search(r"\b(hunt|hunter|universe|top (longs|shorts|picks)|best (trades|setups)|scan the market)\b", low):
+        from . import hunter
+
+        use("hunter", action="last")
+        out = hunter.last()
+        if not out.get("ok"):
+            return {"text": out.get("note") or "No hunt yet - bot-28 runs one every 15 minutes.", "calls": [], "brain": "free"}
+        rows = [f"Hunt {out['at'][:16]}Z ({out['session']}) - {out['universe']['liquid']} liquid names, {out['signals']} signals."]
+        for title, key in (("Longs", "longs"), ("Shorts", "shorts")):
+            rows.append(f"\n**{title}**")
+            rows.extend(
+                f"- {r['symbol']} {r['setup']} score {r['score']}: entry {r['entry']} stop {r['stop']} "
+                f"target {r['target']} ({r['r_multiple']}R), rvol {r['rvol']}"
+                for r in out[key][:8]
+            )
+        if out.get("loading"):
+            rows.append("\n**Loading**")
+            rows.extend(f"- {r['symbol']} {r['direction']} trigger {r['trigger']} stop {r['stop']}" for r in out["loading"][:6])
+        return {"text": "\n".join(rows), "calls": [{"name": "hunter", "arguments": {"action": "last"}}], "brain": "free"}
+
+    if re.search(r"\b(journal|mistakes?|lessons?|what (have you|did you) learn)", low):
+        from . import journal
+
+        use("journal", action="insights")
+        view = journal.insights()
+        o = view["overall"]
+        rows = [f"Closed signals: {view['closed']}."]
+        if o.get("trades"):
+            rows.append(f"Overall {o['expectancy_r']:+}R/trade, win rate {o['win_rate']}%, total {o['total_r']:+}R.")
+        rows += [f"Paying: {', '.join(view['best']) or 'nothing yet'}", f"Bleeding: {', '.join(view['worst']) or 'nothing yet'}"]
+        rows += view["rules"] + view["edges"]
+        rows += [f"- {m}: {cost}R" for m, cost in view["mistake_cost_r"].items()]
+        return {"text": "\n".join(rows), "calls": [{"name": "journal", "arguments": {"action": "insights"}}], "brain": "free"}
+
+    if syms and re.search(r"\b(candles?|chart|breakout|breakdown|radar|setups?|pattern)", low):
+        from . import candles, setups
+
+        chunks = []
+        for s in syms[:3]:
+            use("candles", action="radar", symbol=s)
+            radar = candles.radar(s)
+            read = candles.read(s)
+            scan = setups.scan(s)
+            if radar.get("error"):
+                chunks.append(f"**{s}**: {radar['error']}")
+                continue
+            pats = ", ".join(f"{p['pattern']} ({p['strength']})" for p in read.get("patterns") or []) or "none"
+            found = ", ".join(f"{f['setup']} [{f['confidence']}]" for f in scan.get("found") or []) or "none"
+            chunks.append(
+                f"**{s}** {radar['status']} ({radar['direction']}), close {radar['close']}, rvol {radar['rvol']}. "
+                f"Long trigger {radar['long_trigger']} / short trigger {radar['short_trigger']}.\n"
+                f"Candles: {pats}. Lean: {read.get('lean')}.\nSetups: {found}."
+            )
+        if emit:
+            emit({"type": "tool_result", "name": "candles", "result": chunks})
+        return {"text": "\n\n".join(chunks), "calls": [{"name": "candles", "arguments": {"symbols": syms[:3]}}], "brain": "free"}
+    return None
 
 
 def handle(user_text: str, emit=None) -> dict[str, Any]:
@@ -183,6 +250,10 @@ def handle(user_text: str, emit=None) -> dict[str, Any]:
         lines.extend([f"- [{n.get('source')}] {n.get('title')}" for n in (snap.get("news") or [])[:8]])
         return {"text": "Live feeds\n" + "\n".join(lines), "calls": [{"name": "feeds", "arguments": {}}], "brain": "free"}
 
+    trading = _trading(text, low, use, emit)
+    if trading:
+        return trading
+
     if "news" in low or "headlines" in low:
         use("news")
         n = widgets.news()
@@ -311,7 +382,9 @@ def handle(user_text: str, emit=None) -> dict[str, Any]:
     if any(w in low for w in ("time", "date", "utc")):
         return {"text": _fmt(widgets.now()), "calls": calls, "brain": "free"}
 
-    if low in {"help", "?", "what can you do", "capabilities"} or "what can you do" in low:
+    if low in {"help", "?", "what can you do", "capabilities", "tools"} or re.search(
+        r"what can you do|what tools|list (your |all )?tools|show (me )?(your |all )?tools", low
+    ):
         from . import skills as skills_mod
 
         return {"text": skills_mod.help_text() + "\n\nGrok returns automatically after credits are on the xAI team.", "calls": calls, "brain": "free"}

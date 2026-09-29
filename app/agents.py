@@ -319,7 +319,7 @@ def get(agent_id: str) -> Agent:
 
 def conductor_system(memory_block: str) -> str:
     agent = AGENTS["jarvis"]
-    return agent.system.format(owner=config.OWNER_NAME) + "\n\n" + memory_block
+    return agent.system.format(owner=config.OWNER_NAME) + "\n\n" + tool_roster("jarvis") + "\n\n" + memory_block
 
 
 def specialist_system(agent_id: str, memory_block: str) -> str:
@@ -328,5 +328,14 @@ def specialist_system(agent_id: str, memory_block: str) -> str:
     return (
         f"{header}\nYou are a specialist reporting to J.A.R.V.I.S. for {config.OWNER_NAME}.\n"
         "You cannot spawn further agents. Do the assigned task and return insight.\n\n"
+        f"{tool_roster(agent_id)}\n\n"
         f"{memory_block}"
     )
+
+
+def tool_roster(agent_id: str) -> str:
+    """Names every tool she has, so she knows to reach for them - not just the schema list."""
+    from . import tools
+
+    names = ", ".join(t["name"] for t in tools.roster(agent_id))
+    return f"Your tools (use them, do not guess): {names}."

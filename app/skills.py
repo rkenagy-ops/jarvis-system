@@ -57,6 +57,11 @@ def help_text() -> str:
     lines = ["Best of GitHub Jarvis — I can:"]
     for s in SKILLS:
         lines.append(f"- {s['id']}: {s['desc']}")
+    from . import tools
+
+    live = tools.roster("jarvis")
+    lines.append(f"\nEvery tool I can call right now ({len(live)}):")
+    lines.extend(f"- {t['name']}: {t['summary']}" for t in live)
     lines.append("Say the wake word Jarvis anywhere in a sentence. Live publish still needs a confirm token.")
     return "\n".join(lines)
 
